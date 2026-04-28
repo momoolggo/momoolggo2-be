@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 1-B — Auth 도메인 이동** (대기 중, 1-A 완료)
+**Phase 1-B-2 — WebSecurityConfiguration 리팩 + CORS 환경변수화** (대기 중, 1-B-1 완료)
 
 ---
 
@@ -54,13 +54,36 @@
 - [ ] `CorsConfigurationSource`의 `localhost:5173` 하드코딩 → 환경변수화 검토
 - [ ] mmg-common 빈을 각 서비스에서 활성화하는 방법 결정 (`scanBasePackages` vs `@Import` vs auto-configuration)
 
-### 1-B. Auth 도메인 이동
-- [ ] `application/user/*` → mmg-auth-service (Review 관련 제외)
-- [ ] `application/address/*` → mmg-auth-service
-- [ ] my_mmg_auth DB 생성 + 테이블 이전
+### 1-B. Auth 도메인 이동 (5단계로 세분)
+
+#### 1-B-1. my_mmg_auth DB 생성 + 데이터 마이그레이션
+- [x] `my_mmg_auth` schema 생성 (utf8mb4_unicode_ci)
+- [x] user, address DDL 적용 (collation 변경 외 원본 동일)
+- [x] user 15행 + address 20행 INSERT (schema 간 INSERT...SELECT)
+- [x] 검증 5종 통과 (row count, AUTO_INCREMENT, MAX PK, FK 정합성, orphan 0)
+- [x] 백업 dump (`docs/ddl/dump-*.sql`, .gitignore 차단)
+- [x] `docs/ddl/README.md` 작성 (Phase 2 재사용용)
+
+#### 1-B-2. WebSecurityConfiguration base/override 리팩토링
+- [ ] CORS origin 환경변수화 (`CORS_ALLOWED_ORIGINS`, 콤마 구분)
+- [ ] base 클래스에 공통 시큐리티 설정만 남기기
+- [ ] auth-service에 자체 SecurityConfig 추가 (도메인별 경로 매칭)
+- [ ] mmg-common 빈 활성화 검증 (`@SpringBootApplication(scanBasePackages = {...})`)
+
+#### 1-B-3. user 도메인 코드 → auth-service
+- [ ] `application/user/*` 이동 (Review 관련 제외)
 - [ ] 패키지명 변경 (`com.green.momoolggo` → `com.green.mmg.auth`)
-- [ ] auth-service 단독 기동 성공
-- [ ] 기존 `/api/user/**`, `/api/auth/**` API 응답 100% 동일 검증
+- [ ] MyBatis mapper xml 이동 + 경로 조정
+- [ ] auth-service 단독 기동 + `/api/user/**` 호출 검증
+
+#### 1-B-4. address 도메인 코드 → auth-service
+- [ ] `application/address/*` 이동
+- [ ] 패키지/import 변경
+- [ ] `/api/address/**` 호출 검증
+
+#### 1-B-5. 통합 검증
+- [ ] 회원가입/로그인 시나리오 (기존 API와 응답 100% 동일)
+- [ ] auth-service 안정 기동 확인
 - [ ] **Phase 1 완료 커밋**
 
 ---
