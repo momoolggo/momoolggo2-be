@@ -7,19 +7,19 @@
 
 ## 📍 현재 위치
 
-**Phase 0 — 멀티모듈 스켈레톤** (시작 전)
+**Phase 0-B — 5개 서비스 + Gateway** (대기 중, 0-A 완료)
 
 ---
 
 ## Phase 0 — 멀티모듈 스켈레톤
 
 ### 0-A. 루트 + 공통 모듈
-- [ ] `settings.gradle` 작성 (모듈 6개 선언)
-- [ ] 루트 `build.gradle` 작성 (subprojects 공통 설정)
-- [ ] `gradle.properties` 작성
-- [ ] `mmg-common` 모듈 생성
-- [ ] `mmg-common/build.gradle` 작성 (라이브러리, bootJar 비활성)
-- [ ] `mmg-common`만 단독 빌드 성공 확인
+- [x] `settings.gradle` 작성 (모듈 6개 선언)
+- [x] 루트 `build.gradle` 작성 (subprojects 공통 설정)
+- [x] `gradle.properties` 작성
+- [x] `mmg-common` 모듈 생성
+- [x] `mmg-common/build.gradle` 작성 (라이브러리, bootJar 비활성)
+- [x] `mmg-common`만 단독 빌드 성공 확인
 
 ### 0-B. 5개 서비스 + Gateway
 - [ ] `mmg-auth-service` 생성 + AuthApplication.java + application.yml
