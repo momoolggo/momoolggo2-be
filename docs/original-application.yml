@@ -1,0 +1,45 @@
+constants:   # 커스텀 속성
+  jwt:
+    issuer: green502@green.com # JWT 토큰 발행자 정보
+    bearer-format: JWT
+    claim-key: signedUser
+    secret-key: DeaguGreenArtAcademyClass502MsaClassFightingGoGo # 비밀 레시피(절대 공개되어서는 안 된다)ㅇㅋ?
+    access-token-cookie-name: access-token
+    access-token-cookie-path: /
+    access-token-cookie-validity-seconds: 1_296_000 # 현재
+    access-token-validity-milliseconds: 1_296_000_000 # 15분 현재
+    refresh-token-cookie-name: refresh-token
+    refresh-token-cookie-path: /api/user/reissue
+    refresh-token-cookie-validity-seconds: 1_296_000 # 15일
+    refresh-token-validity-milliseconds: 1_296_000_000 # 15일
+
+spring:
+  application:
+    name: momoolggo
+  config:
+    import: "optional:file:.env[.properties]"
+  datasource:
+    url: ${DATASOURCE_DB_URL}
+    username: ${DATASOURCE_USERNAME}
+    password: ${DATASOURCE_PASSWORD}
+  servlet: # ← 사진 이미지 최대 크기 설정
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: mappers/*.xml
+
+naver:
+  client-id: l1ytziijx9
+  client-secret: og3ooJJjUtk0Js9AHKgoNQuMCeg39M4kR390IJFY
+  map-client-id: l1ytziijx9
+  search-client-id: Irz0Q0SbBNwf1to6Rjiy
+  search-client-secret: LTSWa3axtJ
+file:
+  upload:
+    menu-path: ${MENU_UPLOAD_PATH}
+    store-path: ${STORE_UPLOAD_PATH}
