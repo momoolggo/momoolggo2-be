@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 2-C — Cart/Order/Payment 도메인 이동** (대기 중, 2-B 완료)
+**Phase 2-D — AddressSearch + MapConfig 이동** (대기 중, 2-C 완료)
 
 ---
 
@@ -137,12 +137,17 @@
 - [x] 검증 5종: GET /api/store 200 (마이그레이션 데이터 표시), /api/owner 401, /uploads 404 (정상)
 - ⚠️ cross-schema JOIN endpoint는 예상대로 SQL 에러 — Phase 4 Feign으로 해결
 
-### 2-C. Cart + Order + Payment 도메인 이동 (대기)
-- [ ] `application/cart/*` → mmg-main-service (6 endpoints)
-- [ ] `application/order/*` → mmg-main-service (6 endpoints)
-- [ ] `application/payment/*` → mmg-main-service (1 endpoint, 토스페이먼츠 연동)
-- [ ] json-simple 의존성 추가 (`com.googlecode.json-simple:json-simple:1.1.1`)
-- [ ] TOSS_SECRET_KEY 등 .env 환경변수 매핑
+### 2-C. Cart + Order + Payment 도메인 이동 ✅
+- [x] `application/cart/*` → mmg-main-service (3 java + 6 model = 9 파일, 6 endpoints)
+- [x] `application/order/*` → mmg-main-service (3 java + 7 model = 10 파일, 6 endpoints)
+- [x] `application/payment/*` → mmg-main-service (3 java + 2 model = 5 파일, 1 endpoint)
+- [x] json-simple 의존성 추가 (`com.googlecode.json-simple:json-simple:1.1.1`)
+- [x] **PaymentService SECRET_KEY 환경변수화** — `private static final String` → `@Value("${toss.secret-key}")` (CLAUDE.md §6.10 보안 위반 해소)
+- [x] application.yml에 `toss.secret-key: ${TOSS_SECRET_KEY}` 매핑
+- [x] mapper xml 3개 이동 (Cart.xml, Order.xml, payment.xml) + namespace 변경
+- [x] Order.xml의 cross-schema JOIN 2개에 TODO Phase 4 주석 추가
+- [x] 검증: cart/order/payment endpoint 모두 401 반환 (CUSTOMER 권한 차단 정상)
+- ⚠️ TOSS_SECRET_KEY .env 값은 placeholder 유지 — Phase 5 결제 본격 검증 시 학원 키로 교체
 
 ### 2-D. AddressSearch + MapConfig 이동 (대기, WebConfig는 2-B에서 처리됨)
 - [ ] `application/address/AddressSearchController/Service.java` → mmg-main-service/address

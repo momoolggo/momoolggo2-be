@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.green.mmg.main.payment.PaymentMapper">
+
+    <insert id="insertPayment" parameterType="com.green.mmg.main.payment.model.PaymentEntity">
+        INSERT INTO payment (order_id, payment_key, amount, pay_state)
+        VALUES (#{orderId}, #{paymentKey}, #{amount}, #{payState})
+    </insert>
+
+    <select id="existsByOrderId" resultType="boolean">
+        SELECT COUNT(*) > 0
+        FROM orders
+        WHERE order_id = #{orderId} and pay_state>1
+    </select>
+
+</mapper>

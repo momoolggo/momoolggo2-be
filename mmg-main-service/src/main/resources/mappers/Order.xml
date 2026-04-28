@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.green.mmg.main.order.OrderMapper">
+
+    <!-- TODO Phase 4: 호출 시 my_mmg_main.user 미존재 → SQLSyntaxError.
+         AuthFeignClient.getUserTel(userNo) 로 대체 예정. 현재 호출 시 GlobalExceptionHandler가 500 응답. -->
+    <select id="findTelByUserNo" resultType="String">
+        SELECT tel
+        FROM user
+        WHERE user_no = #{userNo}
+    </select>
+
+    <!-- TODO Phase 4: my_mmg_main.address 미존재 → AuthFeignClient.getDefaultAddress(userNo) 로 대체 예정 -->
+    <select id="findDefaultAddress" resultType="com.green.mmg.main.order.model.OrderAddressInfo">
+        SELECT address        AS address,
+               address_detail AS addressDetail
+        FROM address
+        WHERE user_no    = #{userNo}
+          AND default_ad = 1
+            LIMIT 1
+    </select>
+
+    <!-- 주문 INSERT (짧은 ID 자동 생성) -->
+    <insert id="insertOrder">
+        INSERT INTO orders
+        (order_id, user_no, store_id, request, address, address_detail,rider_request,
+         delivery_fee, amount, pay_state)
+        VALUES
+            (#{uniqueId}, #{userNo}, #{storeId}, #{request}, #{address}, #{addressDetail},#{riderRequest},
+             #{deliveryFee}, #{amount}, #{payState})
+    </insert>
+
+    <!-- 주문 상세 INSERT -->
+    <insert id="insertOrderDetail">
+        INSERT INTO order_detail
+            (order_id, menu_id, quantity, menu_name, menu_price)
+        VALUES
+            (#{uniqueId}, #{menuId}, #{quantity}, #{menuName}, #{menuPrice})
+    </insert>
+
+    <select id="findUserNoByOrderId" resultType="long">
+        SELECT user_no
+        FROM orders
+        WHERE order_id = #{orderId}
+    </select>
+
+    <delete id="deleteOrder">
+        delete from orders where order_id=#{id} and pay_state=1
+    </delete>
+
+    <select id="findByOrderId" resultType="com.green.mmg.main.order.model.Orders">
+        SELECT order_id, user_no, amount
+        FROM orders
+        WHERE order_id = #{orderId}
+    </select>
+
+    <update id="updateState">
+        update orders set pay_state=#{state} where order_id=#{orderId}
+    </update>
+
+    <!-- 주문 목록만 조회 (리뷰 존재 여부 추가) -->
+    <select id="findOrdersByUserId" >
+        SELECT
+            o.order_id      AS orderId,
+            DATE_FORMAT(o.order_time,
+                        CONCAT(MONTH(o.order_time), '월 ',
+                            DAY(o.order_time), '일(',
+                                                    ELT(DAYOFWEEK(o.order_time),'일','월','화','수','목','금','토'), ')')
+            )               AS date,
+    s.store_name    AS storeName,
+    s.store_pic   AS storeImage,
+    o.amount        AS totalPrice,
+    o.delivery_fee  AS deliveryFee,
+    o.order_state   AS orderState,
+    (SELECT COUNT(1) FROM review r WHERE r.order_id = o.order_id) AS hasReview
+        FROM orders o
+            JOIN store s ON s.store_id = o.store_id
+        WHERE o.user_no = #{userId}
+        ORDER BY o.order_time DESC
+            LIMIT #{startIdx}, #{size}
+    </select>
+
+    <!-- 해당 주문의 메뉴만 조회 -->
+    <select id="findItemsByOrderId" >
+        SELECT
+            menu_name   AS name,
+            quantity    AS count,
+        menu_price  AS price
+        FROM order_detail
+        WHERE order_id = #{orderId}
+    </select>
+
+    <select id="orderHistoryDetail">
+       <![CDATA[
+        SELECT
+            o.order_id      AS orderId,
+            DATE_FORMAT(o.order_time,
+                        CONCAT(
+                            YEAR(o.order_time), '년 ',
+                            MONTH(o.order_time), '월 ',
+                            DAY(o.order_time), '일 ',
+                                                IF(HOUR(o.order_time) < 12, '오전 ', '오후 '),
+                                                LPAD(IF(HOUR(o.order_time) % 12 = 0, 12, HOUR(o.order_time) % 12), 1, '0'), ':',
+                                                LPAD(MINUTE(o.order_time), 2, '0')
+                        )
+            )               AS date,
+        s.store_name    AS storeName,
+        s.store_pic     AS storeImage,
+        s.store_id      AS storeId,
+        o.amount        AS totalPrice,
+        o.delivery_fee  AS deliveryFee,
+        o.order_state   AS orderState
+        FROM orders o
+            JOIN store s ON s.store_id = o.store_id
+        WHERE o.order_id = #{id}
+        ]]>
+    </select>
+
+    <select id="maxHistoryPage">
+        select count(1) from orders where user_no=#{id}
+    </select>
+
+    <update id="calSumOrder">
+        update store set order_count = (select count(*) from orders where store_id = (select store_id from orders where order_id=#{id}) )
+        where store_id = (select store_id from orders where order_id=#{id})
+    </update>
+</mapper>

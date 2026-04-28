@@ -31,6 +31,10 @@ file:
     review-path: ${REVIEW_UPLOAD_PATH}
     pet-path:    ${PET_UPLOAD_PATH}
 
+# 토스페이먼츠 시크릿 키 (Phase 5에서 실제 학원 키로 교체 예정 — 현재 .env에 placeholder)
+toss:
+  secret-key: ${TOSS_SECRET_KEY}
+
 # mmg-common ConstJwt 바인딩용 (인증 검증을 위해 main도 동일 시크릿 사용)
 constants:
   jwt:
