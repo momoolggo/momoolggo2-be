@@ -25,8 +25,7 @@ public class AuthSecurityConfig {
                                 "/api/user/reissue",
                                 "/api/user/reset-pw",
                                 "/api/policy/**",
-                                "/actuator/health",
-                                "/error"   // unhandled exception → /error forward 후 시큐리티 거부 방지
+                                "/actuator/health"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

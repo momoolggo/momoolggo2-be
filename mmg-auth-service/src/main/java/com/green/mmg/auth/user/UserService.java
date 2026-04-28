@@ -4,11 +4,13 @@ import com.green.mmg.auth.address.UserAddressMapper;
 import com.green.mmg.auth.address.model.UserAddressReq;
 import com.green.mmg.auth.user.model.*;
 import com.green.mmg.common.constants.ConstJwt;
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.jwt.JwtTokenManager;
 import com.green.mmg.common.model.JwtUser;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,10 +57,10 @@ public class UserService {
     public UserSigninRes signin(UserSigninReq req, HttpServletResponse res) {
         User user = userMapper.findByUserId(req.getUserId());
         if (user == null) {
-            throw new RuntimeException("아이디 또는 비밀번호가 틀렸습니다.");
+            throw new BusinessException("아이디 또는 비밀번호가 틀렸습니다.", HttpStatus.UNAUTHORIZED);
         }
         if (!passwordEncoder.matches(req.getUserPw(), user.getUserPw())) {
-            throw new RuntimeException("아이디 또는 비밀번호가 틀렸습니다.");
+            throw new BusinessException("아이디 또는 비밀번호가 틀렸습니다.", HttpStatus.UNAUTHORIZED);
         }
         JwtUser jwtUser = new JwtUser(user.getUserNo(), user.getRole(), null, user.getName());
         jwtTokenManager.issue(res, jwtUser);

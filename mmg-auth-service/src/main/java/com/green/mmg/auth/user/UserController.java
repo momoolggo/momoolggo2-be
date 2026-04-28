@@ -3,6 +3,7 @@ package com.green.mmg.auth.user;
 import com.green.mmg.auth.user.model.*;
 import com.green.mmg.common.constants.ConstJwt;
 import com.green.mmg.common.dto.ResultResponse;
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.jwt.JwtTokenManager;
 import com.green.mmg.common.jwt.JwtTokenProvider;
 import com.green.mmg.common.model.JwtUser;
@@ -12,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -34,7 +36,7 @@ public class UserController {
     public ResultResponse<Void> checkId(@RequestParam String userId) {
         boolean available = userService.checkId(userId);
         if (!available) {
-            throw new RuntimeException("이미 사용 중인 아이디입니다.");
+            throw new BusinessException("이미 사용 중인 아이디입니다.", HttpStatus.CONFLICT);
         }
         return new ResultResponse<>("사용 가능한 아이디입니다.", null);
     }

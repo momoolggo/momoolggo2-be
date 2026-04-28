@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 2 — Main 서비스 도메인 이동** (대기 중, Phase 1 완료)
+**Phase 2 — Main 서비스 도메인 이동** (대기 중, Phase 1 + 1.5 완료)
 
 ---
 
@@ -97,10 +97,16 @@
 - [x] `CorsConfigurationSource`의 `localhost:5173` 하드코딩 → CORS env로 환경변수화 (1-B-2)
 - [x] mmg-common 빈 활성화 → `scanBasePackages` 채택 (1-B-2)
 
-#### Phase 1 후속 TODO (Phase 2 시작 전 또는 중)
-- [ ] **GlobalExceptionHandler 작성** (mmg-common): RuntimeException → 500/400/401 매핑. 현재는 `/error` permitAll로 우회
-- [ ] 테스트 사용자 정리 결정: my_mmg_auth.user user_no=18 (`test_msa_p1c`) + address_id=38 — 권한 매트릭스상 DELETE는 사용자 확인 필요
-- [ ] `JwtTokenManager.java` line 71 `com.green.greengram` 주석 잔재 정리
+## Phase 1.5 — GlobalExceptionHandler + 정리 (안전망 구축)
+- [x] `BusinessException`(베이스, status 명시 가능) + `ResourceNotFoundException`(404) 작성
+- [x] `GlobalExceptionHandler` (`@RestControllerAdvice` + `@ConditionalOnClass`) — BusinessException, MethodArgumentNotValidException, HttpMessageNotReadableException, RuntimeException, Exception 매핑
+- [x] `JsonAuthenticationEntryPoint`(401) + `JsonAccessDeniedHandler`(403) — 시큐리티 필터 단계에서 JSON 응답 (둘 다 `@ConditionalOnClass(SecurityFilterChain)`)
+- [x] BaseSecurityConfig.applyCommon에 `.exceptionHandling()` 추가 — JSON 핸들러 주입
+- [x] AuthSecurityConfig에서 `/error` permitAll 제거 (GlobalExceptionHandler가 모든 예외 가로채므로 /error 미도달)
+- [x] auth-service에서 RuntimeException 2개를 BusinessException으로 변경 (signin 401, check-id 409)
+- [x] JwtTokenManager line 71 `com.green.greengram` 주석 잔재 제거
+- [x] 테스트 사용자 정리: `my_mmg_auth.user.user_no=18` 삭제 (CASCADE로 address_id=38 자동 삭제, 사용자 명시 승인)
+- [x] 5개 에러 시나리오 검증: 401/401/409/200/400 모두 ResultResponse JSON 응답 통일
 
 ---
 
