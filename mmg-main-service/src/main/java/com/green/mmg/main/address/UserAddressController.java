@@ -1,7 +1,7 @@
-package com.green.mmg.auth.address;
+package com.green.mmg.main.address;
 
-import com.green.mmg.auth.address.model.UserAddressReq;
-import com.green.mmg.auth.address.model.UserAddressRes;
+import com.green.mmg.main.address.model.UserAddressReq;
+import com.green.mmg.main.address.model.UserAddressRes;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.model.UserPrincipal;
 import lombok.RequiredArgsConstructor;
@@ -11,13 +11,13 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/user/address")
+@RequestMapping("/api/address")
 @RequiredArgsConstructor
 public class UserAddressController {
 
     private final UserAddressService userAddressService;
 
-    // ── 주소 추가 POST /api/user/address
+    // ── 주소 추가 POST /api/address
     @PostMapping
     public ResultResponse<Void> save(@AuthenticationPrincipal UserPrincipal principal,
                                      @RequestBody UserAddressReq req) {
@@ -25,7 +25,7 @@ public class UserAddressController {
         return new ResultResponse<>("주소 추가 성공", null);
     }
 
-    // ── 주소 목록 조회 GET /api/user/address
+    // ── 주소 목록 조회 GET /api/address
     @GetMapping
     public ResultResponse<List<UserAddressRes>> findAll(
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -33,7 +33,7 @@ public class UserAddressController {
                 userAddressService.findAll(principal.getSignedUserNo()));
     }
 
-    // ── 주소 수정 PUT /api/user/address
+    // ── 주소 수정 PUT /api/address
     @PutMapping
     public ResultResponse<Void> update(@AuthenticationPrincipal UserPrincipal principal,
                                        @RequestBody UserAddressReq req) {
@@ -41,7 +41,7 @@ public class UserAddressController {
         return new ResultResponse<>("주소 수정 성공", null);
     }
 
-    // ── 주소 삭제 DELETE /api/user/address/{addressId}
+    // ── 주소 삭제 DELETE /api/address/{addressId}
     @DeleteMapping("/{addressId}")
     public ResultResponse<Void> delete(@PathVariable long addressId) {
         userAddressService.delete(addressId);

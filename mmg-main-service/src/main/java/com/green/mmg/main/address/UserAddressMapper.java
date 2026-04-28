@@ -1,7 +1,7 @@
-package com.green.mmg.auth.address;
+package com.green.mmg.main.address;
 
-import com.green.mmg.auth.address.model.UserAddressReq;
-import com.green.mmg.auth.address.model.UserAddressRes;
+import com.green.mmg.main.address.model.UserAddressReq;
+import com.green.mmg.main.address.model.UserAddressRes;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

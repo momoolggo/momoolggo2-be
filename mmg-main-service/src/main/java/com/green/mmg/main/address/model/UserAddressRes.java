@@ -1,4 +1,4 @@
-package com.green.mmg.auth.address.model;
+package com.green.mmg.main.address.model;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -9,7 +9,7 @@ public class UserAddressRes {
     private Long addressId;
     private String address;
     private String addressDetail;
-    private Double lat;
-    private Double lng;
+    private Double latitude;
+    private Double longitude;
     private Integer defaultAd;
 }

@@ -1,7 +1,7 @@
-package com.green.mmg.auth.address;
+package com.green.mmg.main.address;
 
-import com.green.mmg.auth.address.model.UserAddressReq;
-import com.green.mmg.auth.address.model.UserAddressRes;
+import com.green.mmg.main.address.model.UserAddressReq;
+import com.green.mmg.main.address.model.UserAddressRes;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
