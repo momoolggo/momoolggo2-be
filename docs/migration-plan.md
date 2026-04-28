@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 2 — Main 서비스 도메인 이동** (대기 중, Phase 1 + 1.5 완료)
+**Phase 2-B — Store/Menu/Owner 도메인 이동** (대기 중, 2-A 완료)
 
 ---
 
@@ -110,29 +110,54 @@
 
 ---
 
-## Phase 2 — Main 서비스 도메인 이동
+## Phase 2 — Main 서비스 도메인 이동 (7단계로 세분)
 
-### 2-A. 기존 도메인 이동
-- [ ] `application/store/*` → mmg-main-service
-- [ ] `application/owner/*` → mmg-main-service
-- [ ] `application/cart/*` → mmg-main-service
-- [ ] `application/order/*` → mmg-main-service
-- [ ] `application/payment/*` → mmg-main-service
-- [ ] **Review 도메인 신규 작성 (Phase 1 D1 결정으로 1-B에서 제외됨)**
-  - 원본 코드 위치: `MOMOOLGGO/application/user/UserController.java` (review 5개 엔드포인트), `UserService.java` (review 메서드 5개), `UserMapper.java`/`xml` (review 메서드 10개), `model/ReviewReq.java`/`ReviewRes.java`/`GetReviewReq.java`
-  - 새 위치: `mmg-main-service/review/`
-  - 경로는 기존 `/api/user/review/...` 유지 (API 응답 스펙 동결)
-- [ ] **AddressSearch + MapConfig 이동** (Phase 1 D2 결정으로 1-B에서 제외됨, 네이버 API 의존)
-  - 원본: `application/address/AddressSearchController/Service.java`, `MapConfigController.java`, `model/AddressSearchRes.java`
-  - 새 위치: `mmg-main-service/address/`
+### 2-A. my_mmg_main DB 생성 + 데이터 마이그레이션 ✅
+- [x] `my_mmg_main` schema 생성 (utf8mb4_unicode_ci)
+- [x] 13개 테이블 DDL 적용 (collation 변경 외 원본 동일)
+- [x] 외부 FK 5개 DROP (store, likedstore, cart, orders, review_reply → user)
+- [x] 같은 schema 내 FK 13개 보존
+- [x] 13개 테이블 432행 INSERT...SELECT (의존 순서)
+- [x] 검증 4종 통과 (row count 13/13, AUTO_INCREMENT, 외부 FK=0, 내부 FK=13)
+- [x] 백업 dump (`docs/ddl/dump-my_testmomoolggo-main-*.sql`, .gitignore 차단)
+- [x] DDL 보존 (`docs/ddl/main-schema.sql`)
+- [x] `docs/ddl/README.md` 갱신 (재사용 가능한 절차 + 결정 근거)
 
-### 2-B. DB 분리
-- [ ] my_mmg_main DB 생성 + 테이블 이전
-- [ ] auth ↔ main 사이 데이터 정합성 확인 (논리 FK)
+### 2-B. Store + Menu + Owner 도메인 이동 (대기)
+- [ ] `application/store/*` → mmg-main-service (10 endpoints)
+- [ ] `application/owner/*` → mmg-main-service (21 endpoints — 가게/메뉴/카테고리/주문 관리 + 통계 + 이미지 업로드)
+- [ ] thumbnailator 의존성 추가 (`net.coobird:thumbnailator:0.4.20`)
+- [ ] mmg-main-service에 mybatis + datasource 설정 (`MAIN_DB_URL`)
+- [ ] MainSecurityConfig 작성 (도메인별 권한 매칭)
 
-### 2-C. Rider/Admin 빈 껍데기
-- [ ] my_mmg_rider DB 생성
+### 2-C. Cart + Order + Payment 도메인 이동 (대기)
+- [ ] `application/cart/*` → mmg-main-service (6 endpoints)
+- [ ] `application/order/*` → mmg-main-service (6 endpoints)
+- [ ] `application/payment/*` → mmg-main-service (1 endpoint, 토스페이먼츠 연동)
+- [ ] json-simple 의존성 추가 (`com.googlecode.json-simple:json-simple:1.1.1`)
+- [ ] TOSS_SECRET_KEY 등 .env 환경변수 매핑
+
+### 2-D. AddressSearch + MapConfig + WebConfig 이동 (대기)
+- [ ] `application/address/AddressSearchController/Service.java` → mmg-main-service/address
+- [ ] `application/address/MapConfigController.java` → mmg-main-service/address
+- [ ] `model/AddressSearchRes.java` 이동
+- [ ] **WebConfig** 이동 (Phase 1-A에서 mmg-common 미포함 — main-service 전용 정적 리소스 핸들러)
+- [ ] 네이버 API 환경변수 매핑
+
+### 2-E. Review 도메인 신규 작성 (대기)
+- [ ] `mmg-main-service/review/` 신규 — ReviewController/Service/Mapper + xml
+- [ ] 모델: ReviewReq, ReviewRes, GetReviewReq (원본 user/model/에 있던 것 참조해서 재작성)
+- [ ] 엔드포인트 경로 `/api/user/review/...` 유지 (API 응답 스펙 동결)
+- [ ] review/review_reply 테이블은 2-A에서 이미 데이터 마이그레이션 완료
+
+### 2-F. Rider/Admin 빈 schema 생성 (대기)
+- [ ] my_mmg_rider DB 생성 (`utf8mb4_unicode_ci`)
 - [ ] my_mmg_admin DB 생성
+- [ ] (테이블은 Phase 5에서 신규 생성)
+
+### 2-G. main-service 통합 검증 (대기)
+- [ ] cross-schema 의존 없는 단순 endpoint 동작 확인 (가게 목록, 메뉴 등록 등)
+- [ ] cross-schema 의존 endpoint(주문 이력 등 6개)는 **Phase 4 Feign 도입 후 검증**으로 보류
 - [ ] **Phase 2 완료 커밋**
 
 ---
@@ -160,9 +185,15 @@
 
 ### 4-A. FeignClient 도입
 - [ ] mmg-common/feign 공통 설정
-- [ ] main → auth: 사용자 정보 조회 FeignClient
+- [ ] main → auth: 사용자 정보 조회 FeignClient (Phase 2-A에서 DROP한 5개 외부 FK + Order.xml의 address 의존을 풀기 위함)
+  - 대상 SQL: Order.xml `findTelByUserNo`, `findDefaultAddress`; Owner.xml line 137 + 372; Store.xml line 30 + 155
 - [ ] rider → main: 주문 상태 변경 FeignClient
 - [ ] admin → auth: 사용자 제재 FeignClient
+- [ ] **외부 FK 정합성 처리** (Phase 2-A에서 DROP한 5개)
+  - 사용자 탈퇴 시 main 도메인 데이터 cleanup 정책 결정
+  - Saga 패턴 또는 Outbox 패턴 검토
+  - auth-service의 사용자 탈퇴 → main-service에 cleanup 이벤트 전송
+  - Phase 5 신규 기능 설계 시 함께 결정
 
 ### 4-B. Gateway 라우팅 완성
 - [ ] 모든 API 경로 매핑

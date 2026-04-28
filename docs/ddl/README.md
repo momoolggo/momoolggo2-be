@@ -70,5 +70,90 @@ mysqldump -h 112.222.157.157 -P 5012 -u green2 -p \
 
 ### 다음 schema 마이그레이션 시 주의
 
-- **`my_mmg_main` (Phase 2)**: cart, likedstore, orders, review_reply, store 5개 테이블이 원본에서 user를 물리 FK로 참조 중. **이 5개 FK를 모두 DROP** 후 논리 FK로 전환 필요 (CLAUDE.md §3 "MSA 경계 외부 참조는 논리 FK만 사용").
 - **`my_mmg_rider` / `my_mmg_admin`**: 원본에 해당 도메인 테이블 없음 — Phase 5에서 신규 생성.
+
+---
+
+## Phase 2-A — `my_mmg_main` 마이그레이션 (완료)
+
+### 결과 요약
+
+13개 테이블, 432행 모두 무손상 복사. collation `utf8mb4_unicode_ci` 일관 적용.
+
+| 테이블 | 행수 | AUTO_INCREMENT | 비고 |
+|---|---|---|---|
+| store | 37 | 59 | — |
+| store_category | 37 | (composite PK, AI 없음) | category × store |
+| menu | 121 | 140 | — |
+| menu_category | 84 | 133 | store별 카테고리 |
+| category | 12 | 13 | 마스터 |
+| likedstore | 28 | (composite PK) | user × store |
+| cart | 1 | 115 | |
+| cart_detail | 1 | 177 | |
+| orders | 39 | 391775460588724 | ⚠️ 비즈니스 키 패턴 (timestamp) |
+| order_detail | 58 | 196 | |
+| payment | 32 | 44 | |
+| review | 12 | 46 | Phase 2-E 코드 신규 작성 |
+| review_reply | 0 | 1 | |
+
+### 외부 FK 처리 (Phase 1 D2 결정 + 사용자 Q1=A)
+
+**DROP된 FK 5개** (모두 `→ user.user_no` 참조):
+- `store.store_ibfk_1` (owner_id)
+- `likedstore.FK_likedstore_user` (user_no)
+- `cart.cart_ibfk_1` (user_no)
+- `orders.orders_ibfk_1` (user_no)
+- `review_reply.review_reply_ibfk_2` (owner_id)
+
+**보존된 내부 FK 13개**: 같은 schema 내부(store/category/menu/orders/cart/review 사이) — 그대로.
+
+> ⚠️ **TODO (Phase 4-A)**: 외부 FK 정합성 처리 — 사용자 탈퇴 시 main 도메인 데이터 cleanup. Saga 패턴 또는 Outbox 패턴 검토. auth-service의 사용자 탈퇴 → main-service에 cleanup 이벤트 전송.
+
+### 실행 절차 (재사용 가능)
+
+```bash
+# 1) 신규 schema 생성
+mysql -h 112.222.157.157 -P 5012 -u green2 -p \
+  -e "CREATE DATABASE IF NOT EXISTS my_mmg_main CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# 2) DDL 추출 (mysqldump --no-data) → utf8mb4_bin → utf8mb4_unicode_ci 변환
+mysqldump --no-data --no-tablespaces --skip-add-locks --skip-lock-tables \
+  --column-statistics=0 --default-character-set=utf8mb4 --skip-add-drop-table \
+  -h 112.222.157.157 -P 5012 -u green2 -p \
+  my_testmomoolggo store store_category menu menu_category category likedstore \
+  cart cart_detail orders order_detail payment review review_reply \
+  > /tmp/main-ddl.sql
+sed -i 's/utf8mb4_bin/utf8mb4_unicode_ci/g' /tmp/main-ddl.sql
+
+# 3) 적용 (FOREIGN_KEY_CHECKS=0 자동 포함되어 외부 user FK도 일단 import)
+mysql -h ... my_mmg_main < /tmp/main-ddl.sql
+
+# 4) 외부 FK 5개 DROP (Saga/Outbox 도입 전까지 논리 FK)
+mysql -h ... -e "
+  ALTER TABLE my_mmg_main.store        DROP FOREIGN KEY store_ibfk_1;
+  ALTER TABLE my_mmg_main.likedstore   DROP FOREIGN KEY FK_likedstore_user;
+  ALTER TABLE my_mmg_main.cart         DROP FOREIGN KEY cart_ibfk_1;
+  ALTER TABLE my_mmg_main.orders       DROP FOREIGN KEY orders_ibfk_1;
+  ALTER TABLE my_mmg_main.review_reply DROP FOREIGN KEY review_reply_ibfk_2;"
+
+# 5) 데이터 복사 (의존 순서: 마스터/leaf → 관계 자식)
+mysql -h ... -e "
+  SET FOREIGN_KEY_CHECKS=0;
+  INSERT INTO my_mmg_main.category       SELECT * FROM my_testmomoolggo.category;
+  INSERT INTO my_mmg_main.store          SELECT * FROM my_testmomoolggo.store;
+  INSERT INTO my_mmg_main.store_category SELECT * FROM my_testmomoolggo.store_category;
+  INSERT INTO my_mmg_main.menu_category  SELECT * FROM my_testmomoolggo.menu_category;
+  INSERT INTO my_mmg_main.likedstore     SELECT * FROM my_testmomoolggo.likedstore;
+  INSERT INTO my_mmg_main.menu           SELECT * FROM my_testmomoolggo.menu;
+  INSERT INTO my_mmg_main.cart           SELECT * FROM my_testmomoolggo.cart;
+  INSERT INTO my_mmg_main.orders         SELECT * FROM my_testmomoolggo.orders;
+  INSERT INTO my_mmg_main.cart_detail    SELECT * FROM my_testmomoolggo.cart_detail;
+  INSERT INTO my_mmg_main.order_detail   SELECT * FROM my_testmomoolggo.order_detail;
+  INSERT INTO my_mmg_main.payment        SELECT * FROM my_testmomoolggo.payment;
+  INSERT INTO my_mmg_main.review         SELECT * FROM my_testmomoolggo.review;
+  INSERT INTO my_mmg_main.review_reply   SELECT * FROM my_testmomoolggo.review_reply;
+  SET FOREIGN_KEY_CHECKS=1;"
+
+# 6) 검증 (row count, AUTO_INCREMENT, 외부 FK 0, 내부 FK 13)
+# 7) 백업 → docs/ddl/dump-* (gitignore)
+```
