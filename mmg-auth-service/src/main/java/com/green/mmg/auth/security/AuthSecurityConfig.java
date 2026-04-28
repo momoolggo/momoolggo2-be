@@ -26,7 +26,7 @@ public class AuthSecurityConfig {
                                 "/api/user/reset-pw",
                                 "/api/policy/**",
                                 "/actuator/health",
-                                "/api/auth/hello"   // 1-B-2 검증용 임시 (1-B-3에서 정리)
+                                "/error"   // unhandled exception → /error forward 후 시큐리티 거부 방지
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

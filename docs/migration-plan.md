@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 1-B-3 — user 도메인 코드 → auth-service** (대기 중, 1-B-2 완료)
+**Phase 2 — Main 서비스 도메인 이동** (대기 중, Phase 1 완료)
 
 ---
 
@@ -75,21 +75,32 @@
 - [x] auth-service `application.yml` constants.jwt + cors.allowed-origins 블록 추가
 - [x] auth-service 기동 + curl 검증 (`/api/auth/hello` 200, 미인증 요청 403)
 
-#### 1-B-3. user 도메인 코드 → auth-service
-- [ ] `application/user/*` 이동 (Review 관련 제외)
-- [ ] 패키지명 변경 (`com.green.momoolggo` → `com.green.mmg.auth`)
-- [ ] MyBatis mapper xml 이동 + 경로 조정
-- [ ] auth-service 단독 기동 + `/api/user/**` 호출 검증
+#### 1-B-3. user + UserAddress 도메인 코드 → auth-service (D2 결정으로 1-B-3/1-B-4 통합)
+- [x] `application/user/*` 이동 (Review 관련 D1 결정으로 완전 제외)
+- [x] `application/address/*` 중 UserAddress 부분만 이동 (AddressSearch/MapConfig는 Phase 2 main으로)
+- [x] 패키지명 변경 (`com.green.momoolggo` → `com.green.mmg.auth`)
+- [x] MyBatis mapper xml 이동 + 분리 (User.xml review 쿼리 제거, address.xml은 UserAddress만이라 그대로)
+- [x] mmg-auth-service build.gradle: `mybatis-spring-boot-starter:4.0.1`, `mysql-connector-j` 추가
+- [x] mmg-auth-service application.yml: `spring.datasource`, `mybatis.mapper-locations`
+- [x] Phase 0 임시 hello 컨트롤러 제거
+- [x] AuthSecurityConfig: hello 제거, `/error` permitAll 추가 (unhandled exception 시 시큐리티 거부 방지)
 
-#### 1-B-4. address 도메인 코드 → auth-service
-- [ ] `application/address/*` 이동
-- [ ] 패키지/import 변경
-- [ ] `/api/address/**` 호출 검증
+#### 1-B-4. auth-service 통합 검증 (1-B-3과 함께 완료)
+- [x] 회원가입 → 로그인 → JWT 인증 → 내 정보 조회 → 주소 CRUD 전 흐름 200 OK
+- [x] DB INSERT 정상 (user_no=18, address_id=38 — AUTO_INCREMENT 정상)
+- [x] 응답 형식 `ResultResponse<T>` 모놀리식과 동일
+- [x] **Phase 1 완료 커밋**
 
-#### 1-B-5. 통합 검증
-- [ ] 회원가입/로그인 시나리오 (기존 API와 응답 100% 동일)
-- [ ] auth-service 안정 기동 확인
-- [ ] **Phase 1 완료 커밋**
+#### 1-A 후속 TODO 처리
+- [x] `JwtTokenManager.java` line 71 주석 잔재는 그대로 둠 (별도 작업 시 처리)
+- [x] `WebSecurityConfiguration` base/override 패턴 리팩 — 1-B-2에서 완료
+- [x] `CorsConfigurationSource`의 `localhost:5173` 하드코딩 → CORS env로 환경변수화 (1-B-2)
+- [x] mmg-common 빈 활성화 → `scanBasePackages` 채택 (1-B-2)
+
+#### Phase 1 후속 TODO (Phase 2 시작 전 또는 중)
+- [ ] **GlobalExceptionHandler 작성** (mmg-common): RuntimeException → 500/400/401 매핑. 현재는 `/error` permitAll로 우회
+- [ ] 테스트 사용자 정리 결정: my_mmg_auth.user user_no=18 (`test_msa_p1c`) + address_id=38 — 권한 매트릭스상 DELETE는 사용자 확인 필요
+- [ ] `JwtTokenManager.java` line 71 `com.green.greengram` 주석 잔재 정리
 
 ---
 
@@ -101,7 +112,13 @@
 - [ ] `application/cart/*` → mmg-main-service
 - [ ] `application/order/*` → mmg-main-service
 - [ ] `application/payment/*` → mmg-main-service
-- [ ] Review 관련 (user/model/Review*.java) → mmg-main-service/review
+- [ ] **Review 도메인 신규 작성 (Phase 1 D1 결정으로 1-B에서 제외됨)**
+  - 원본 코드 위치: `MOMOOLGGO/application/user/UserController.java` (review 5개 엔드포인트), `UserService.java` (review 메서드 5개), `UserMapper.java`/`xml` (review 메서드 10개), `model/ReviewReq.java`/`ReviewRes.java`/`GetReviewReq.java`
+  - 새 위치: `mmg-main-service/review/`
+  - 경로는 기존 `/api/user/review/...` 유지 (API 응답 스펙 동결)
+- [ ] **AddressSearch + MapConfig 이동** (Phase 1 D2 결정으로 1-B에서 제외됨, 네이버 API 의존)
+  - 원본: `application/address/AddressSearchController/Service.java`, `MapConfigController.java`, `model/AddressSearchRes.java`
+  - 새 위치: `mmg-main-service/address/`
 
 ### 2-B. DB 분리
 - [ ] my_mmg_main DB 생성 + 테이블 이전
