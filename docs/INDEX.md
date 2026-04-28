@@ -8,6 +8,7 @@
 
 | 파일 | 설명 |
 |---|---|
+| [PROGRESS.md](PROGRESS.md) | **한 페이지 진행 스냅샷** — Phase별 상태 + 4 schemas DB 분배 + 검증 흔적 한눈에 |
 | [migration-plan.md](migration-plan.md) | MSA 전환 Phase 0~6 체크리스트 (현재 진행 위치 표시) |
 | [decisions.md](decisions.md) | 설계 의사결정 기록 (왜 그렇게 정했는지 누적) |
 | [FRONTEND_CHANGES.md](FRONTEND_CHANGES.md) | 프론트(Vue) 작업자 대상 — MSA 전환 중 발생한 API/응답 변경사항 누적 |
