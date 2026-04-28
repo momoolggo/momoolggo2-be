@@ -69,4 +69,29 @@
 
     <!-- 리뷰 SQL은 Phase 2에서 main-service의 UserMapper 또는 ReviewMapper에 신규 작성 -->
 
+    <!-- ============== Internal API (Phase 4-A) ============== -->
+
+    <!-- /internal/auth/user/{userNo} 단건 -->
+    <select id="findBriefByUserNo" resultType="com.green.mmg.common.dto.feign.UserBriefDto">
+        SELECT user_no    AS userNo,
+               name       AS name,
+               tel        AS tel,
+               ''         AS address
+        FROM user
+        WHERE user_no = #{userNo}
+    </select>
+
+    <!-- /internal/auth/users?ids=... batch -->
+    <select id="findBriefsByUserNos" resultType="com.green.mmg.common.dto.feign.UserBriefDto">
+        SELECT user_no    AS userNo,
+               name       AS name,
+               tel        AS tel,
+               ''         AS address
+        FROM user
+        WHERE user_no IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
 </mapper>

@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 3 — MyBatis → JPA 선별 마이그레이션** (대기 중, Phase 2 완료 ✅)
+**Phase 3 — MyBatis → JPA 선별 마이그레이션** (대기 중, Phase 4-A 완료 ✅)
 
 ---
 
@@ -236,17 +236,22 @@
 
 ## Phase 4 — 서비스 간 통신 인프라
 
-### 4-A. FeignClient 도입
-- [ ] mmg-common/feign 공통 설정
-- [ ] main → auth: 사용자 정보 조회 FeignClient (Phase 2-A에서 DROP한 5개 외부 FK + Order.xml의 address 의존을 풀기 위함)
-  - 대상 SQL: Order.xml `findTelByUserNo`, `findDefaultAddress`; Owner.xml line 137 + 372; Store.xml line 30 + 155
-- [ ] rider → main: 주문 상태 변경 FeignClient
-- [ ] admin → auth: 사용자 제재 FeignClient
-- [ ] **외부 FK 정합성 처리** (Phase 2-A에서 DROP한 5개)
-  - 사용자 탈퇴 시 main 도메인 데이터 cleanup 정책 결정
-  - Saga 패턴 또는 Outbox 패턴 검토
-  - auth-service의 사용자 탈퇴 → main-service에 cleanup 이벤트 전송
-  - Phase 5 신규 기능 설계 시 함께 결정
+### 4-A. FeignClient 도입 ✅ (Phase 4 진입 우선순위 변경 — 옵션 3 채택)
+- [x] mmg-common/feign/AuthFeignClient (interface) + dto/feign/UserBriefDto
+- [x] auth-service Internal Controller 4 endpoints (validate/role은 단순 응답, user/users batch/owner)
+- [x] AuthSecurityConfig `/internal/**` permitAll (Phase 4-B Gateway 차단 예정)
+- [x] main-service: openfeign implementation + @EnableFeignClients
+- [x] **5개 cross-schema SQL Feign 전환 완료**:
+  - Store.xml `findOne` (가게 상세 ownerName)
+  - Store.xml `getStoreReviews` (batch userName)
+  - Owner.xml `getOrders` (batch customerName + tel)
+  - Owner.xml `getStoreReviews` (batch userName)
+  - Order.xml `findTelByUserNo` 제거 → OrderService에서 Feign 직접 호출
+- [x] Order.xml `findDefaultAddress`는 자동 해결 (Phase 1-B-3.5 후 address가 main schema)
+- [x] N+1 회피: batch endpoint `/internal/auth/users?ids=` 활용
+- [x] 검증 통과: Internal API + 가게 상세(ownerName) + 리뷰 목록(userName batch) 정상 응답
+- ⚠️ rider → main, admin → auth Feign은 Phase 5 진입 시 (rider/admin 도메인 구현 필요)
+- ⚠️ **외부 FK 정합성 (Saga/Outbox)** — Phase 4-D 또는 Phase 6으로 분리 (write-side 정합성 별개 주제)
 
 ### 4-B. Gateway 라우팅 완성
 - [ ] 모든 API 경로 매핑

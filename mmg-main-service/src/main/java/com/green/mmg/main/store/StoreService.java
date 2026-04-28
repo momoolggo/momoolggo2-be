@@ -1,5 +1,7 @@
 package com.green.mmg.main.store;
 
+import com.green.mmg.common.dto.feign.UserBriefDto;
+import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.store.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,19 +12,26 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class StoreService {
     private final StoreMapper storeMapper;
+    private final AuthFeignClient authFeignClient;   // Phase 4-A: cross-schema user JOIN 대체
 
     public List<StoreGetRes> storeListGet(StoreGetReq req){
         return storeMapper.findAll(req);
     }
 
     public StoreOneGetRes storeOneGet(long id){
-        return storeMapper.findOne(id);
+        StoreOneGetRes res = storeMapper.findOne(id);
+        if (res != null && res.getOwnerId() != null) {
+            UserBriefDto owner = authFeignClient.getOwner(res.getOwnerId());
+            res.setOwnerName(owner.getName());
+        }
+        return res;
     }
 
     public int  getMaxPage (StoreGetReq req){
@@ -68,9 +77,20 @@ public class StoreService {
         return storeMapper.findNearby(lat, lng);
     }
 
-    //가게 리뷰 조회
+    //가게 리뷰 조회 — Phase 4-A: user JOIN 대신 Feign batch로 userName 합성
     public List<Map<String, Object>> getStoreReviews(long storeId) {
-        return storeMapper.getStoreReviews(storeId);
+        List<Map<String, Object>> rows = storeMapper.getStoreReviews(storeId);
+        if (rows.isEmpty()) return rows;
+
+        List<Long> userNos = rows.stream()
+                .map(r -> ((Number) r.get("userNo")).longValue())
+                .distinct().collect(Collectors.toList());
+        Map<Long, String> nameMap = authFeignClient.getUsers(userNos).stream()
+                .collect(Collectors.toMap(UserBriefDto::getUserNo, UserBriefDto::getName));
+
+        rows.forEach(r -> r.put("userName",
+                nameMap.getOrDefault(((Number) r.get("userNo")).longValue(), "")));
+        return rows;
     }
 
 }

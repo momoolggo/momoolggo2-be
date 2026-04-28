@@ -138,3 +138,16 @@
 | **review_reply 유지** | 이미 `my_mmg_main.review_reply`로 마이그레이션됨 + 데이터 0행 + 코드 미사용 (Phase 5에서 사장 답글 기능 신규 시 사용 예정) |
 | **owner_comment 처리** | 테이블 자체가 없으므로 DROP 작업 불필요. ERD에서 owner_comment 박스 제거 권장 (학원 ERD 작성자에게 전달 필요). 또는 review_reply의 컬럼/이름을 ERD에 맞춰 정리 (Phase 5 결정) |
 | **review 도메인** | Phase 1에서 user/에 섞여있던 review 5 endpoint + 9 SQL을 main-service.review로 분리 신규 작성. 경로 `/api/user/review/**` 유지 (api-spec 동결) |
+
+### 2026-04-28 (Phase 4-A — Feign 도입 + cross-schema JOIN 해소)
+
+| 항목 | 결정 |
+|---|---|
+| **Phase 진입 순서 변경** | 기존 Phase 3 → 4 → 5 / 신규 옵션 3: **4-A → 3 → 4-B/C → 5**. 사유: cross-schema JOIN 5개가 깨진 채 Phase 3 가면 회귀 검증 사각지대 |
+| **UserBriefDto 위치** | `mmg-common/dto/feign/` — 5개 서비스 공통 사용 |
+| **AuthFeignClient 위치** | `mmg-common/feign/` (interface) — `@EnableFeignClients(basePackages="com.green.mmg.common.feign")` |
+| **Internal API 응답에 address** | 빈 문자열 — main이 자체 user_address 조회로 채움 (Phase 1-B-3.5 ERD 준수) |
+| **Batch endpoint** | `GET /internal/auth/users?ids=1,2,3` 채택 — N+1 회피, 1회 100개 권장 |
+| **`/internal/**` 보안** | Phase 4-A: AuthSecurityConfig permitAll. Phase 4-B Gateway가 외부 차단. Phase 6 mTLS/JWT 검토 |
+| **외부 FK 정합성 (Saga/Outbox)** | Phase 4-D 또는 Phase 6으로 분리 — Phase 4-A는 read-side만, write-side 별개 |
+| **OwnerInfoDto 미작성** | 현재는 UserBriefDto 재사용 (사장도 user.name + tel만 필요). Phase 5에서 사장 추가 정보 필요 시 별도 DTO |

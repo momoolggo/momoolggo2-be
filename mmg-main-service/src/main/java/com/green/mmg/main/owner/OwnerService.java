@@ -1,6 +1,8 @@
 package com.green.mmg.main.owner;
 
 
+import com.green.mmg.common.dto.feign.UserBriefDto;
+import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.owner.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +16,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -21,6 +24,7 @@ import java.util.UUID;
 public class OwnerService {
 
     private final OwnerMapper ownerMapper;
+    private final AuthFeignClient authFeignClient;   // Phase 4-A: cross-schema customerName/tel 합성
 
     // ========== 이미지 업로드 (공통) ==========
 
@@ -100,7 +104,24 @@ public class OwnerService {
     // ========== 주문 관련 ==========
 
     public List<OwnerOrderRes> getOrders(Long storeId, Integer state, String date) {
-        return ownerMapper.getOrders(storeId, state, date);
+        List<OwnerOrderRes> orders = ownerMapper.getOrders(storeId, state, date);
+        if (orders.isEmpty()) return orders;
+
+        // Phase 4-A: customerName/tel을 Feign batch로 합성 (N+1 회피)
+        List<Long> userNos = orders.stream()
+                .map(OwnerOrderRes::getUserNo)
+                .distinct().collect(Collectors.toList());
+        Map<Long, UserBriefDto> userMap = authFeignClient.getUsers(userNos).stream()
+                .collect(Collectors.toMap(UserBriefDto::getUserNo, u -> u));
+
+        orders.forEach(o -> {
+            UserBriefDto u = userMap.get(o.getUserNo());
+            if (u != null) {
+                o.setCustomerName(u.getName());
+                o.setTel(u.getTel());
+            }
+        });
+        return orders;
     }
 
     public void updateOrderState(OwnerOrderStateReq req){

@@ -25,7 +25,8 @@ public class AuthSecurityConfig {
                                 "/api/user/reissue",
                                 "/api/user/reset-pw",
                                 "/api/policy/**",
-                                "/actuator/health"
+                                "/actuator/health",
+                                "/internal/**"   // Phase 4-A 임시 — Phase 4-B Gateway가 외부 /internal/** 차단 예정
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

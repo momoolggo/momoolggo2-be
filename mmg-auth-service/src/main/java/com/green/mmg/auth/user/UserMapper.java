@@ -1,7 +1,11 @@
 package com.green.mmg.auth.user;
 
 import com.green.mmg.auth.user.model.*;
+import com.green.mmg.common.dto.feign.UserBriefDto;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 @Mapper
 public interface UserMapper {
@@ -18,6 +22,13 @@ public interface UserMapper {
     User findByUserNo(Long userNo);
 
     int update(UserUpdateReq req);
+
+    // ===== Internal API용 (Phase 4-A) =====
+    // /internal/auth/user/{userNo}
+    UserBriefDto findBriefByUserNo(long userNo);
+
+    // /internal/auth/users?ids=...
+    List<UserBriefDto> findBriefsByUserNos(@Param("ids") List<Long> userNos);
 
     // 리뷰 메서드는 Phase 2에서 main-service에 작성
 }

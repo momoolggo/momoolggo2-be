@@ -4,15 +4,9 @@
 
 <mapper namespace="com.green.mmg.main.order.OrderMapper">
 
-    <!-- TODO Phase 4: 호출 시 my_mmg_main.user 미존재 → SQLSyntaxError.
-         AuthFeignClient.getUserTel(userNo) 로 대체 예정. 현재 호출 시 GlobalExceptionHandler가 500 응답. -->
-    <select id="findTelByUserNo" resultType="String">
-        SELECT tel
-        FROM user
-        WHERE user_no = #{userNo}
-    </select>
+    <!-- Phase 4-A: findTelByUserNo SQL 제거. OrderService에서 AuthFeignClient.getUser().getTel() 사용 -->
 
-    <!-- TODO Phase 4: my_mmg_main.address 미존재 → AuthFeignClient.getDefaultAddress(userNo) 로 대체 예정 -->
+    <!-- address는 Phase 1-B-3.5 후 my_mmg_main.address로 이동 — cross-schema 아님 ✅ -->
     <select id="findDefaultAddress" resultType="com.green.mmg.main.order.model.OrderAddressInfo">
         SELECT address        AS address,
                address_detail AS addressDetail

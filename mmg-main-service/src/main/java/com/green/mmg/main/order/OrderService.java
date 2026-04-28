@@ -1,5 +1,6 @@
 package com.green.mmg.main.order;
 
+import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.cart.CartMapper;
 import com.green.mmg.main.cart.model.Cart;
 import com.green.mmg.main.cart.model.CartItemRes;
@@ -17,6 +18,7 @@ public class OrderService {
 
     private final OrderMapper orderMapper;
     private final CartMapper  cartMapper;
+    private final AuthFeignClient authFeignClient;   // Phase 4-A: tel을 auth에서 fetch
 
     private static final int DELIVERY_FEE = 1500;
 
@@ -32,8 +34,8 @@ public class OrderService {
         // 2. 가게명 조회
         String storeName = cartMapper.findStoreNameByStoreId(cart.getStoreId());
 
-        // 3. 유저 정보 조회
-        String tel = orderMapper.findTelByUserNo(userNo);
+        // 3. 유저 정보 조회 (Phase 4-A: tel은 auth-service Feign, address는 main 자체 — Phase 1-B-3.5 후)
+        String tel = authFeignClient.getUser(userNo).getTel();
         OrderAddressInfo addr = orderMapper.findDefaultAddress(userNo);
 
         // 4. 금액 계산 (DB 가격 기준 - 프론트 금액 신뢰 안 함)

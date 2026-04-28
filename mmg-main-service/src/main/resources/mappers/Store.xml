@@ -22,12 +22,13 @@
     </select>
 
 
+    <!-- Phase 4-A: user JOIN 제거. ownerName은 StoreService에서 AuthFeignClient.getOwner()로 채움. -->
     <select id="findOne">
         SELECT
-            s.store_name, u.name as ownerName, s.business_hours, s.min_price, s.store_pic,
+            s.store_name, s.owner_id AS ownerId, s.business_hours, s.min_price, s.store_pic,
             s.holiday, s.state, s.location, s.detail_location, s.created_at, s.notice,
             s.business_number, s.store_tel, s.rating_avg, s.rating_count, s.order_count
-        FROM store s JOIN user u ON s.owner_id = u.user_no
+        FROM store s
         WHERE s.store_id = #{id}
     </select>
 
@@ -145,15 +146,15 @@
             r.rating,
             r.contents,
             r.photo,
-            u.name       AS userName,
+            o.user_no    AS userNo,
             DATE_FORMAT(r.write_at, '%Y.%m.%d') AS date,
         (SELECT GROUP_CONCAT(od.menu_name SEPARATOR ', ')
          FROM order_detail od
          WHERE od.order_id = r.order_id) AS menuName
         FROM review r
             JOIN orders o ON o.order_id = r.order_id
-            JOIN user u ON u.user_no = o.user_no
         WHERE o.store_id = #{storeId}
         ORDER BY r.write_at DESC
+        <!-- Phase 4-A: user JOIN 제거. userName은 StoreService에서 AuthFeignClient.getUsers() batch로 합성 -->
     </select>
 </mapper>

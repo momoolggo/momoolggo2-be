@@ -13,8 +13,7 @@ public interface OrderMapper {
     //주문의 state 변경
     int updateState(OrderState orderstate);
 
-    // 유저 전화번호 조회
-    String findTelByUserNo(@Param("userNo") Long userNo);
+    // Phase 4-A: findTelByUserNo는 AuthFeignClient.getUser().getTel()로 대체됨
 
     Orders findByOrderId(Long orderId);
     // 기본 배송지 조회

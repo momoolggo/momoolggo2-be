@@ -7,6 +7,7 @@ import lombok.Setter;
 @Getter
 public class StoreOneGetRes {
     private String storeName;
+    private Long ownerId;       // Phase 4-A: AuthFeignClient.getOwner() 호출용 (응답에 같이 노출됨)
     private String ownerName;
     private String businessHours;
     private int minPrice;

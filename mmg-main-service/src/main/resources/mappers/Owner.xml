@@ -120,12 +120,11 @@
     </select>
 
     <!-- 주문 목록 조회 -->
+    <!-- Phase 4-A: user JOIN 제거. customerName/tel은 OwnerService에서 Feign batch로 합성 -->
     <select id="getOrders" resultType="com.green.mmg.main.owner.model.OwnerOrderRes">
         SELECT
         o.order_id AS orderId,
         o.user_no AS userNo,
-        u.name AS customerName,
-        u.tel AS tel,
         DATE_FORMAT(o.order_time, '%H:%i') AS orderDate,
         o.amount AS totalPrice,
         o.order_state AS state,
@@ -134,7 +133,6 @@
         GROUP_CONCAT(CONCAT(od.menu_name, ' x', od.quantity) SEPARATOR ', ') AS menuList
         FROM orders o
         JOIN order_detail od ON o.order_id = od.order_id
-        JOIN user u ON o.user_no = u.user_no
         WHERE o.store_id = #{storeId}
         <if test="state != null">
             AND o.order_state = #{state}
@@ -355,21 +353,20 @@
         DELETE FROM orders WHERE order_id = #{orderId}
     </delete>
 
-    <!-- 가게 리뷰 조회 -->
+    <!-- 가게 리뷰 조회 — Phase 4-A: user JOIN 제거, OwnerService에서 Feign batch 합성 -->
     <select id="getStoreReviews" resultType="map">
         SELECT
             r.review_id  AS reviewId,
             r.rating,
             r.contents,
             r.photo,
-            u.name       AS userName,
+            o.user_no    AS userNo,
             DATE_FORMAT(r.write_at, '%Y.%m.%d') AS date,
             (SELECT GROUP_CONCAT(od.menu_name SEPARATOR ', ')
              FROM order_detail od
              WHERE od.order_id = r.order_id) AS menuName
         FROM review r
             JOIN orders o ON o.order_id = r.order_id
-            JOIN user u ON u.user_no = o.user_no
         WHERE o.store_id = #{storeId}
         ORDER BY r.write_at DESC
     </select>
