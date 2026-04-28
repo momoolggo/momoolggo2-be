@@ -7,6 +7,8 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
@@ -15,6 +17,7 @@ import java.util.Date;
 
 @Slf4j
 @Component //역할이 없는 빈등록
+@ConditionalOnClass(SecurityFilterChain.class)
 public class JwtTokenProvider {
     private final ObjectMapper objectMapper; //(내장)Jackson 라이브러리 DI받을 속성
     private final ConstJwt constJwt;

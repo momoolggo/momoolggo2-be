@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 1-B-2 — WebSecurityConfiguration 리팩 + CORS 환경변수화** (대기 중, 1-B-1 완료)
+**Phase 1-B-3 — user 도메인 코드 → auth-service** (대기 중, 1-B-2 완료)
 
 ---
 
@@ -65,10 +65,15 @@
 - [x] `docs/ddl/README.md` 작성 (Phase 2 재사용용)
 
 #### 1-B-2. WebSecurityConfiguration base/override 리팩토링
-- [ ] CORS origin 환경변수화 (`CORS_ALLOWED_ORIGINS`, 콤마 구분)
-- [ ] base 클래스에 공통 시큐리티 설정만 남기기
-- [ ] auth-service에 자체 SecurityConfig 추가 (도메인별 경로 매칭)
-- [ ] mmg-common 빈 활성화 검증 (`@SpringBootApplication(scanBasePackages = {...})`)
+- [x] CORS origin 환경변수화 (`CORS_ALLOWED_ORIGINS`, 콤마 구분, SpEL split)
+- [x] BaseSecurityConfig 신규 (`@ConditionalOnClass(SecurityFilterChain)` + `@ConditionalOnMissingBean` + `@EnableConfigurationProperties(ConstJwt)`)
+- [x] WebSecurityConfiguration 삭제
+- [x] AuthSecurityConfig 작성 (auth-service 자체 SecurityFilterChain — base.applyCommon 호출)
+- [x] mmg-common 4개 @Component(JwtTokenProvider/Manager/Filter/MyCookieUtil)에 `@ConditionalOnClass` 추가 — Gateway 등 시큐리티 미사용 서비스 보호
+- [x] 5개 서비스 Application 클래스에 `scanBasePackages` 추가 (`com.green.mmg.{svc}` + `com.green.mmg.common`)
+- [x] root build.gradle subprojects의 BootRun `workingDir = rootProject.projectDir` (멀티모듈에서 .env 로드 위해)
+- [x] auth-service `application.yml` constants.jwt + cors.allowed-origins 블록 추가
+- [x] auth-service 기동 + curl 검증 (`/api/auth/hello` 200, 미인증 요청 403)
 
 #### 1-B-3. user 도메인 코드 → auth-service
 - [ ] `application/user/*` 이동 (Review 관련 제외)

@@ -4,10 +4,13 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component //빈등록
+@ConditionalOnClass(SecurityFilterChain.class)
 public class MyCookieUtil {
     //(보안)쿠키 데이터를 담아라 Client한테 명령
     public void setCookie(HttpServletResponse res, String key, String value, int maxAge, String path) {

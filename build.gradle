@@ -48,4 +48,9 @@ subprojects {
     tasks.named('test') {
         useJUnitPlatform()
     }
+
+    // 멀티모듈에서 bootRun cwd를 루트로 고정 — 루트의 .env가 spring.config.import로 잡히게
+    tasks.withType(org.springframework.boot.gradle.tasks.run.BootRun).configureEach {
+        workingDir = rootProject.projectDir
+    }
 }
