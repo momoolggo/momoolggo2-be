@@ -68,9 +68,15 @@ mysqldump -h 112.222.157.157 -P 5012 -u green2 -p \
   my_testmomoolggo user address > docs/ddl/dump-my_testmomoolggo-auth-{ts}.sql
 ```
 
-### 다음 schema 마이그레이션 시 주의
+### Phase 2-F — `my_mmg_rider` / `my_mmg_admin` 빈 schema 생성 (완료)
 
-- **`my_mmg_rider` / `my_mmg_admin`**: 원본에 해당 도메인 테이블 없음 — Phase 5에서 신규 생성.
+```sql
+CREATE DATABASE my_mmg_rider CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE my_mmg_admin CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+- 원본 my_testmomoolggo에 rider/admin 도메인 테이블 미존재
+- Phase 5 신규 기능 구현 시 ERD 따라 신규 테이블 생성 (rider_profile, rider_cache, FAQ, penalty 등)
 
 ---
 
