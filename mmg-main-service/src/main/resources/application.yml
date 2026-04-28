@@ -35,6 +35,14 @@ file:
 toss:
   secret-key: ${TOSS_SECRET_KEY}
 
+# 네이버 API (지도/검색 — main-service만 사용, CLAUDE.md §2)
+naver:
+  client-id: ${NAVER_CLIENT_ID}
+  client-secret: ${NAVER_CLIENT_SECRET}
+  map-client-id: ${NAVER_MAP_CLIENT_ID}
+  search-client-id: ${NAVER_SEARCH_CLIENT_ID}
+  search-client-secret: ${NAVER_SEARCH_CLIENT_SECRET}
+
 # mmg-common ConstJwt 바인딩용 (인증 검증을 위해 main도 동일 시크릿 사용)
 constants:
   jwt:
