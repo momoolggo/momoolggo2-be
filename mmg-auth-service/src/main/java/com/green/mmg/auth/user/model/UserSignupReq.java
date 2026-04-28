@@ -7,7 +7,7 @@ import lombok.Setter;
 @Setter
 public class UserSignupReq {
     private String name;
-    private Long UserNo;
+    private Long userNo;   // useGeneratedKeys로 INSERT 후 자동 채워짐 (소문자 시작 필수)
     private String userId;
     private String userPw;
     private Integer gender;

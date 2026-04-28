@@ -41,11 +41,12 @@ public class UserController {
         return new ResultResponse<>("사용 가능한 아이디입니다.", null);
     }
 
-    // ── 회원가입 POST /api/user/join
+    // ── 회원가입 POST /api/user/join (옵션 D-1: BFF 패턴, 즉시 AT/RT 발급)
     @PostMapping("/join")
-    public ResultResponse<Void> signup(@RequestBody UserSignupReq req) {
-        userService.signup(req);
-        return new ResultResponse<>("회원가입 성공", null);
+    public ResultResponse<UserSigninRes> signup(@RequestBody UserSignupReq req,
+                                                HttpServletResponse res) {
+        UserSigninRes data = userService.signup(req, res);
+        return new ResultResponse<>("회원가입 성공", data);
     }
 
     // ── 로그인 POST /api/user/login

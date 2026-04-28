@@ -1,7 +1,5 @@
 package com.green.mmg.auth.user;
 
-import com.green.mmg.auth.address.UserAddressMapper;
-import com.green.mmg.auth.address.model.UserAddressReq;
 import com.green.mmg.auth.user.model.*;
 import com.green.mmg.common.constants.ConstJwt;
 import com.green.mmg.common.exception.BusinessException;
@@ -23,7 +21,6 @@ public class UserService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenManager jwtTokenManager;
-    private final UserAddressMapper userAddressMapper;
     private final ConstJwt constJwt;
 
     // ── 아이디 중복확인
@@ -31,26 +28,27 @@ public class UserService {
         return userMapper.countByUserId(userId) == 0;
     }
 
-    // ── 회원가입
+    // ── 회원가입 (옵션 D-1: BFF 패턴)
+    // 회원가입 후 즉시 AT/RT 발급. user_address 등록은 프론트가 별도 POST /api/address 호출 (main-service).
+    // UserSignupReq.address* 필드는 forward compatibility를 위해 유지하되 사용 안 함.
     @Transactional
-    public void signup(UserSignupReq req) {
+    public UserSigninRes signup(UserSignupReq req, HttpServletResponse res) {
         req.setUserPw(passwordEncoder.encode(req.getUserPw()));
         if (req.getRole() == null || req.getRole().isBlank()) {
             req.setRole("CUSTOMER");
         }
-        userMapper.signup(req);
+        userMapper.signup(req);   // useGeneratedKeys → req.userNo 자동 채워짐
 
-        // 주소가 있으면 address 테이블에도 저장
-        if (req.getAddress() != null && !req.getAddress().isBlank()) {
-            UserAddressReq addressReq = new UserAddressReq();
-            addressReq.setUserNo(req.getUserNo());
-            addressReq.setAddress(req.getAddress());
-            addressReq.setAddressDetail(req.getAddressDetail());
-            addressReq.setLat(req.getLat());
-            addressReq.setLng(req.getLng());
-            addressReq.setDefaultAd(1);
-            userAddressMapper.save(addressReq);
-        }
+        // 가입 직후 즉시 인증 (옵션 D-1) — req에 모든 정보 있으니 추가 fetch 불필요
+        long userNo = req.getUserNo();
+        String role = req.getRole();
+        String name = req.getName();
+
+        JwtUser jwtUser = new JwtUser(userNo, role, null, name);
+        jwtTokenManager.issue(res, jwtUser);
+
+        return new UserSigninRes(userNo, name, role,
+                System.currentTimeMillis() + constJwt.getAccessTokenValidityMilliseconds(), null);
     }
 
     // ── 로그인
@@ -88,5 +86,5 @@ public class UserService {
         userMapper.update(req);
     }
 
-    // ========== 리뷰 관련 메서드는 Phase 2에서 main-service에 신규 작성 ==========
+    // ========== 리뷰 관련 메서드는 Phase 2-E에서 main-service에 신규 작성 ==========
 }
