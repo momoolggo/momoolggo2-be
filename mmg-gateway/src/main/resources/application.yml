@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: mmg-gateway
+  config:
+    import: "optional:file:.env[.properties]"
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: auth-route
+              uri: http://localhost:8081
+              predicates:
+                - Path=/api/auth/**
+            - id: main-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/main/**
+            - id: rider-route
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api/rider/**
+            - id: admin-route
+              uri: http://localhost:8083
+              predicates:
+                - Path=/api/admin/**
+
+server:
+  port: 8000
