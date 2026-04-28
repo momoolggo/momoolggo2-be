@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 1 — Auth 서비스 분리** (대기 중, Phase 0 완료)
+**Phase 1-B — Auth 도메인 이동** (대기 중, 1-A 완료)
 
 ---
 
@@ -38,13 +38,21 @@
 ## Phase 1 — Auth 서비스 분리
 
 ### 1-A. mmg-common에 공통 코드 이동
-- [ ] `JwtTokenProvider`, `TokenAuthenticationFilter` → mmg-common/jwt
-- [ ] `JwtUser`, `UserPrincipal` → mmg-common/model
-- [ ] `ResultResponse` → mmg-common/dto
-- [ ] `ConstJwt` → mmg-common/constants
-- [ ] `MyCookieUtil` → mmg-common/util
-- [ ] `WebSecurityConfiguration` 베이스 → mmg-common (오버라이드 가능하게)
-- [ ] mmg-common 빌드 성공
+- [x] `JwtTokenProvider`, `JwtTokenManager`, `TokenAuthenticationFilter` → mmg-common/jwt
+- [x] `JwtUser`, `UserPrincipal` → mmg-common/model
+- [x] `ResultResponse` → mmg-common/dto
+- [x] `ConstJwt` → mmg-common/constants
+- [x] `MyCookieUtil` → mmg-common/util
+- [x] `WebSecurityConfiguration` 베이스 → mmg-common (그대로 이동, base/override 리팩은 1-B에서)
+- [x] mmg-common 빌드 성공
+- [x] 전체 빌드 성공 (6개 모듈)
+- ❌ **WebConfig는 의도적으로 미포함** — main-service 전용 (이미지 정적 리소스 핸들러), Phase 2에서 직접 이동
+
+### 1-A 후속 TODO (1-B 완료 시 일괄 처리)
+- [ ] `JwtTokenManager.java` line 71 주석 잔재 정리 (`com.green.greengram` 참조)
+- [ ] `WebSecurityConfiguration` base/override 패턴 리팩토링 (도메인별 경로 매칭이 mmg-common에 박혀있는 상태 해소)
+- [ ] `CorsConfigurationSource`의 `localhost:5173` 하드코딩 → 환경변수화 검토
+- [ ] mmg-common 빈을 각 서비스에서 활성화하는 방법 결정 (`scanBasePackages` vs `@Import` vs auto-configuration)
 
 ### 1-B. Auth 도메인 이동
 - [ ] `application/user/*` → mmg-auth-service (Review 관련 제외)
