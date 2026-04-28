@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.green.mmg.main.store.StoreMapper">
+
+    <select id="findAll">
+        SELECT s.store_id id, s.store_name name, s.min_price min,
+        s.rating_avg avg, s.rating_count sum, s.order_count count,
+        s.store_pic pic, s.state, s.created_at createdAt
+        FROM store s join store_category c on s.store_id=c.store_id
+        <where>
+            <if test="searchText != null and searchText != ''">
+                AND s.store_name LIKE CONCAT('%', #{searchText}, '%')
+            </if>
+            <if test="categoryId != null and categoryId != 0">
+                AND c.category_id = #{categoryId}
+            </if>
+        </where>
+        ORDER BY s.${sortType} ${sortOrder}
+        LIMIT #{startIdx}, #{size}
+    </select>
+
+
+    <select id="findOne">
+        SELECT
+            s.store_name, u.name as ownerName, s.business_hours, s.min_price, s.store_pic,
+            s.holiday, s.state, s.location, s.detail_location, s.created_at, s.notice,
+            s.business_number, s.store_tel, s.rating_avg, s.rating_count, s.order_count
+        FROM store s JOIN user u ON s.owner_id = u.user_no
+        WHERE s.store_id = #{id}
+    </select>
+
+    <select id="menuAll">
+        SELECT
+            m.menu_id,
+            c.category AS categoryName,
+            m.name AS menuName,
+            m.price,
+            m.menu_pic,
+            m.menu_info,
+            m.soldout                     -- 품절 상태
+        FROM menu_category c
+                 JOIN menu m ON c.category_id = m.category_id
+        WHERE c.store_id = #{id}             -- 조회하려는 매장 아이디
+        ORDER BY c.category_order ASC, m.menu_order ASC
+    </select>
+
+    <select id="getMaxPage">
+        select count(1) from store s join store_category c on c.store_id=s.store_id
+        <where>
+        <if test="searchText != null and searchText != ''">
+        AND s.store_name LIKE CONCAT('%', #{searchText}, '%')
+        </if>
+        <if test="categoryId != null and categoryId != 0">
+            AND c.category_id = #{categoryId}
+        </if>
+        </where>
+    </select>
+
+    <select id="searchStore">
+        SELECT distinct s.store_id AS id, s.store_name AS name, s.min_price min, s.rating_avg avg, s.rating_count sum, s.order_count count, s.store_pic AS pic, s.state
+        FROM store s
+                 JOIN store_category sc ON s.store_id = sc.store_id
+                 LEFT JOIN menu_category mc ON mc.store_id = s.store_id
+                 LEFT JOIN menu m ON m.category_id = mc.category_id
+                 LEFT JOIN category c ON c.category_id = sc.category_id
+        <where>
+            <if test="searchText !=null and searchText !=''">
+                ( m.name LIKE concat('%', #{searchText}, '%')
+                OR s.store_name LIKE concat('%', #{searchText}, '%')
+                OR c.category_name LIKE concat('%', #{searchText}, '%')
+                 )
+            </if>
+        </where>
+        ORDER BY
+            CASE
+            WHEN s.store_name = #{searchText} THEN 1
+            WHEN s.store_name  LIKE concat(#{searchText}, '%') THEN 2
+            WHEN s.store_name LIKE concat('%', #{searchText}, '%') THEN 3
+            ELSE 4
+            END,
+            s.order_count DESC
+    </select>
+
+    <select id="favoriteList">
+        SELECT
+            s.store_id AS id,
+            s.store_name AS name,
+            s.min_price AS min,
+            s.rating_avg AS avg,
+            s.rating_count AS sum,
+            s.order_count AS count,
+            s.store_pic AS pic,
+            s.state
+        FROM likedstore l
+            JOIN store s ON l.store_id = s.store_id
+        WHERE l.user_no = #{userNo}
+        ORDER BY l.created_at DESC
+        LIMIT #{startIdx}, #{size}
+    </select>
+
+    <select id="favoriteCount">
+        SELECT COUNT(1)
+        FROM likedstore
+        WHERE user_no = #{userNo}
+    </select>
+
+    <select id="checkWish">
+        select count(1) from likedstore where user_no= #{userNo} and store_id=#{storeId}
+    </select>
+
+    <delete id="deleteWish">
+    delete from likedstore where user_no= #{userNo} and store_id=#{storeId}
+    </delete>
+
+    <insert id="insertWish">
+ insert into likedstore set user_no=#{userNo}, store_id=#{storeId}
+    </insert>
+
+    <!-- 주변 가게 검색 (3km 이내) -->
+    <select id="findNearby" resultType="com.green.mmg.main.store.model.StoreGetRes">
+        SELECT
+            s.store_id AS id,
+            s.store_name AS name,
+            s.min_price AS min,
+        s.rating_avg AS avg,
+        s.rating_count AS sum,
+        s.state,
+        s.order_count AS count,
+        s.store_pic AS pic,
+        (6371 * ACOS(
+            COS(RADIANS(#{lat})) * COS(RADIANS(s.latitude)) *
+            COS(RADIANS(s.longitude) - RADIANS(#{lng})) +
+            SIN(RADIANS(#{lat})) * SIN(RADIANS(s.latitude))
+            )) AS distance
+        FROM store s
+        HAVING distance &lt;= 3
+        ORDER BY distance ASC
+    </select>
+
+    <select id="getStoreReviews" resultType="map">
+        SELECT
+            r.review_id  AS reviewId,
+            r.rating,
+            r.contents,
+            r.photo,
+            u.name       AS userName,
+            DATE_FORMAT(r.write_at, '%Y.%m.%d') AS date,
+        (SELECT GROUP_CONCAT(od.menu_name SEPARATOR ', ')
+         FROM order_detail od
+         WHERE od.order_id = r.order_id) AS menuName
+        FROM review r
+            JOIN orders o ON o.order_id = r.order_id
+            JOIN user u ON u.user_no = o.user_no
+        WHERE o.store_id = #{storeId}
+        ORDER BY r.write_at DESC
+    </select>
+</mapper>

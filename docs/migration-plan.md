@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 2-B — Store/Menu/Owner 도메인 이동** (대기 중, 2-A 완료)
+**Phase 2-C — Cart/Order/Payment 도메인 이동** (대기 중, 2-B 완료)
 
 ---
 
@@ -123,12 +123,19 @@
 - [x] DDL 보존 (`docs/ddl/main-schema.sql`)
 - [x] `docs/ddl/README.md` 갱신 (재사용 가능한 절차 + 결정 근거)
 
-### 2-B. Store + Menu + Owner 도메인 이동 (대기)
-- [ ] `application/store/*` → mmg-main-service (10 endpoints)
-- [ ] `application/owner/*` → mmg-main-service (21 endpoints — 가게/메뉴/카테고리/주문 관리 + 통계 + 이미지 업로드)
-- [ ] thumbnailator 의존성 추가 (`net.coobird:thumbnailator:0.4.20`)
-- [ ] mmg-main-service에 mybatis + datasource 설정 (`MAIN_DB_URL`)
-- [ ] MainSecurityConfig 작성 (도메인별 권한 매칭)
+### 2-B. Store + Owner + WebConfig 도메인 이동 ✅
+- [x] `application/store/*` → mmg-main-service (3 java + 6 model = 9 파일, 10 endpoints)
+- [x] `application/owner/*` → mmg-main-service (3 java + 11 model = 14 파일, 21 endpoints)
+- [x] **WebConfig 이동** (사용자 결정으로 2-D → 2-B로 변경) — `mmg-main-service/config/WebConfig.java`. /uploads/menu, /uploads/store, /uploads/review, /uploads/pet 핸들러
+- [x] thumbnailator 의존성 추가 (`net.coobird:thumbnailator:0.4.20`)
+- [x] mmg-main-service `build.gradle`: mybatis-spring-boot-starter, mysql-connector-j, spring-boot-starter-security
+- [x] application.yml: spring.datasource (`MAIN_DB_URL`), mybatis, multipart 10MB/20MB, file.upload paths
+- [x] MainSecurityConfig 작성 (uploads/store GET public, owner OWNER, cart/order/payment CUSTOMER, review POST/PUT/DELETE 인증)
+- [x] Store.xml + Owner.xml 이동 (namespace 변경)
+- [x] Phase 0 임시 hello 컨트롤러 제거
+- [x] mmg-common GlobalExceptionHandler에 `NoResourceFoundException` 핸들러 추가 (Spring 7.x 정적 리소스 미존재 → 404)
+- [x] 검증 5종: GET /api/store 200 (마이그레이션 데이터 표시), /api/owner 401, /uploads 404 (정상)
+- ⚠️ cross-schema JOIN endpoint는 예상대로 SQL 에러 — Phase 4 Feign으로 해결
 
 ### 2-C. Cart + Order + Payment 도메인 이동 (대기)
 - [ ] `application/cart/*` → mmg-main-service (6 endpoints)
@@ -137,11 +144,10 @@
 - [ ] json-simple 의존성 추가 (`com.googlecode.json-simple:json-simple:1.1.1`)
 - [ ] TOSS_SECRET_KEY 등 .env 환경변수 매핑
 
-### 2-D. AddressSearch + MapConfig + WebConfig 이동 (대기)
+### 2-D. AddressSearch + MapConfig 이동 (대기, WebConfig는 2-B에서 처리됨)
 - [ ] `application/address/AddressSearchController/Service.java` → mmg-main-service/address
 - [ ] `application/address/MapConfigController.java` → mmg-main-service/address
 - [ ] `model/AddressSearchRes.java` 이동
-- [ ] **WebConfig** 이동 (Phase 1-A에서 mmg-common 미포함 — main-service 전용 정적 리소스 핸들러)
 - [ ] 네이버 API 환경변수 매핑
 
 ### 2-E. Review 도메인 신규 작성 (대기)

@@ -9,6 +9,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * MSA 전 서비스 공용 예외 처리. ResultResponse 형식으로 응답 통일.
@@ -44,6 +45,13 @@ public class GlobalExceptionHandler {
         log.info("HttpMessageNotReadableException: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ResultResponse<>("요청 형식이 올바르지 않습니다.", null));
+    }
+
+    /** Spring 7.x: 정적 리소스 미존재 → 404 */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ResultResponse<Void>> handleNoResource(NoResourceFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ResultResponse<>("리소스를 찾을 수 없습니다.", null));
     }
 
     /** 그 외 RuntimeException → 500 (메시지는 그대로 — 운영에선 마스킹 검토) */
