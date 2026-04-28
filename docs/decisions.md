@@ -129,3 +129,12 @@
 | **CLAUDE.md §6.7 (API 응답 동결) 예외 처리** | join 응답 변경은 명시적 예외. 사유: MSA 분리 후 단일 트랜잭션 깨짐 → 프론트 BFF 패턴 필요. 호환성: 기존 필드 추가만 (resultData null → 객체), 프론트는 안전하게 새 필드 활용 가능 |
 | **원자성** | 약함 (1번 성공 + 2번 실패 가능). 임시 처리: 사용자에게 안내 메시지. 강화는 Phase 6 Saga 패턴 검토 |
 | **외부 FK 정합성 (사용자 탈퇴 시 cleanup)** | Phase 4-A에서 Saga/Outbox로 결정 |
+
+### 2026-04-28 (Phase 2-E — review/owner_comment 정리)
+
+| 항목 | 결정 |
+|---|---|
+| **owner_comment 테이블** | ERD에 그려져 있으나 원본/신규 DB 양쪽 모두 미존재. ERD 작성자의 미래 의도 추정 — `review_reply`와 의미 동일 (사장 답글). |
+| **review_reply 유지** | 이미 `my_mmg_main.review_reply`로 마이그레이션됨 + 데이터 0행 + 코드 미사용 (Phase 5에서 사장 답글 기능 신규 시 사용 예정) |
+| **owner_comment 처리** | 테이블 자체가 없으므로 DROP 작업 불필요. ERD에서 owner_comment 박스 제거 권장 (학원 ERD 작성자에게 전달 필요). 또는 review_reply의 컬럼/이름을 ERD에 맞춰 정리 (Phase 5 결정) |
+| **review 도메인** | Phase 1에서 user/에 섞여있던 review 5 endpoint + 9 SQL을 main-service.review로 분리 신규 작성. 경로 `/api/user/review/**` 유지 (api-spec 동결) |

@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 2-E — Review 도메인 신규 작성** (대기 중, 2-D 완료)
+**Phase 3 — MyBatis → JPA 선별 마이그레이션** (대기 중, Phase 2 완료 ✅)
 
 ---
 
@@ -188,21 +188,30 @@
 - [x] 네이버 API 환경변수 매핑 (`naver.*` 5개 키 application.yml + .env)
 - [x] 검증: GET /api/map/key 200 + NAVER_MAP_CLIENT_ID 응답
 
-### 2-E. Review 도메인 신규 작성 (대기)
-- [ ] `mmg-main-service/review/` 신규 — ReviewController/Service/Mapper + xml
-- [ ] 모델: ReviewReq, ReviewRes, GetReviewReq (원본 user/model/에 있던 것 참조해서 재작성)
-- [ ] 엔드포인트 경로 `/api/user/review/...` 유지 (API 응답 스펙 동결)
-- [ ] review/review_reply 테이블은 2-A에서 이미 데이터 마이그레이션 완료
+### 2-E. Review 도메인 신규 작성 ✅
+- [x] `mmg-main-service/review/` 신규 — ReviewController(5 endpoints) + Service(5) + Mapper(9 methods) + Review.xml(9 SQL)
+- [x] 모델: ReviewReq, ReviewRes, GetReviewReq
+- [x] 엔드포인트 경로 `/api/user/review/...` 유지 (API 응답 스펙 동결)
+- [x] BusinessException 적용 (FORBIDDEN/CONFLICT/NOT_FOUND)
+- [x] 8/9 메서드 즉시 동작. getStoreReviews(Store.xml)만 user JOIN으로 Phase 4 Feign 후 정상화
+- [x] owner_comment 테이블은 양쪽 DB 미존재 — DROP 작업 없음, decisions.md 기록
 
-### 2-F. Rider/Admin 빈 schema 생성 (대기)
-- [ ] my_mmg_rider DB 생성 (`utf8mb4_unicode_ci`)
-- [ ] my_mmg_admin DB 생성
-- [ ] (테이블은 Phase 5에서 신규 생성)
+### 2-F. Rider/Admin 빈 schema 생성 ✅
+- [x] my_mmg_rider DB 생성 (`utf8mb4_unicode_ci`)
+- [x] my_mmg_admin DB 생성 (`utf8mb4_unicode_ci`)
+- [x] 테이블은 Phase 5 신규 (rider_profile, FAQ, penalty 등)
 
-### 2-G. main-service 통합 검증 (대기)
-- [ ] cross-schema 의존 없는 단순 endpoint 동작 확인 (가게 목록, 메뉴 등록 등)
-- [ ] cross-schema 의존 endpoint(주문 이력 등 6개)는 **Phase 4 Feign 도입 후 검증**으로 보류
-- [ ] **Phase 2 완료 커밋**
+### 2-G. main-service 통합 검증 ✅
+- [x] auth + main + gateway 3개 서비스 동시 기동 검증
+- [x] BFF 회원가입 흐름: POST /api/user/join (옵션 D-1) → POST /api/address (BFF 두번째) 200/200
+- [x] 응답에 userNo + AT/RT 쿠키 자동 발급 검증
+- [x] 가게 목록 (public) 200, NAVER MapConfig (인증) 200, Review (인증) 200
+- [x] BusinessException → 401 "아이디/비번 틀렸습니다" ResultResponse 통일
+- [x] user.status 컬럼 미존재 + 검증 로직 없음 — 옵션 D-1 막힘 0 확인
+- [x] 검증 데이터 정리 (auth.user 15, main.address 20 baseline)
+- ⚠️ Gateway 라우팅 prefix(`/api/auth/**`, `/api/main/**`)는 Phase 0-B 임시 — Phase 4-B에서 실제 경로(`/api/user`, `/api/store` 등)로 정비 예정
+- ⚠️ cross-schema 의존 6개 endpoint(Store.xml/Order.xml/Owner.xml의 user JOIN)는 Phase 4 Feign 후 정상화 — 보류
+- [x] **Phase 2 완료 커밋**
 
 ---
 
