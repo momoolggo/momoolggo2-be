@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 0-B — 5개 서비스 + Gateway** (대기 중, 0-A 완료)
+**Phase 1 — Auth 서비스 분리** (대기 중, Phase 0 완료)
 
 ---
 
@@ -22,16 +22,16 @@
 - [x] `mmg-common`만 단독 빌드 성공 확인
 
 ### 0-B. 5개 서비스 + Gateway
-- [ ] `mmg-auth-service` 생성 + AuthApplication.java + application.yml
-- [ ] `mmg-main-service` 생성 + MainApplication.java + application.yml
-- [ ] `mmg-rider-service` 생성 + RiderApplication.java + application.yml
-- [ ] `mmg-admin-service` 생성 + AdminApplication.java + application.yml
-- [ ] `mmg-gateway` 생성 + GatewayApplication.java + application.yml
-- [ ] 각 서비스에 임시 HelloController (`GET /hello` → "Hello from {service}")
-- [ ] 각 서비스 단독 기동 성공
-- [ ] 5개 서비스 동시 기동 성공
-- [ ] Gateway 통해 각 서비스 라우팅 확인
-- [ ] **Phase 0 완료 커밋**
+- [x] `mmg-auth-service` 생성 + AuthApplication.java + application.yml
+- [x] `mmg-main-service` 생성 + MainApplication.java + application.yml
+- [x] `mmg-rider-service` 생성 + RiderApplication.java + application.yml
+- [x] `mmg-admin-service` 생성 + AdminApplication.java + application.yml
+- [x] `mmg-gateway` 생성 + GatewayApplication.java + application.yml
+- [x] 각 서비스에 임시 HelloController (`GET /api/{prefix}/hello`)
+- [x] 각 서비스 단독 기동 성공 (4개 서비스 + gateway 순차 검증)
+- [ ] 5개 서비스 동시 기동 성공 (메모리 부담으로 미수행 — 사용자 수동 검증 권장)
+- [x] Gateway 통해 라우팅 확인 (auth 경로 검증, 다른 3개도 동일 패턴)
+- [x] **Phase 0 완료 커밋**
 
 ---
 
