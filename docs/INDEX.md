@@ -10,6 +10,7 @@
 |---|---|
 | [migration-plan.md](migration-plan.md) | MSA 전환 Phase 0~6 체크리스트 (현재 진행 위치 표시) |
 | [decisions.md](decisions.md) | 설계 의사결정 기록 (왜 그렇게 정했는지 누적) |
+| [FRONTEND_CHANGES.md](FRONTEND_CHANGES.md) | 프론트(Vue) 작업자 대상 — MSA 전환 중 발생한 API/응답 변경사항 누적 |
 | [current-structure.txt](current-structure.txt) | 기존 모놀리식 패키지 트리 (마이그레이션 시 참조) |
 | [original-application.yml](original-application.yml) | 기존 MA의 application.yaml 백업 |
 | [original-build.gradle](original-build.gradle) | 기존 MA의 build.gradle 백업 |

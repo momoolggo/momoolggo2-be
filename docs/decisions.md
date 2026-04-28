@@ -112,4 +112,20 @@
 
 > 이전 결정을 뒤집을 때만 기록 (왜 바뀌었는지)
 
-(아직 없음)
+### 2026-04-28 (Phase 1-B-3.5 — UserAddress 위치 정정)
+
+**기존 (Phase 1-B-3)**: `user_address` (또는 `address`) 테이블 → my_mmg_auth schema
+**변경 후**: `address` 테이블 → my_mmg_main schema
+
+| 항목 | 결정 |
+|---|---|
+| **address 테이블 위치** | my_mmg_auth → **my_mmg_main** (ERD 따름, 초록 그룹 확인됨) |
+| **결정 근거** | ERD = source of truth (CLAUDE.md §6.11 신설). Phase 1-B-3 정찰에서 코드 분석만으로 잘못 판단함 |
+| **컬럼명 변경** | ERD 따라: `lat` → `latitude`, `lng` → `longitude`, `address_detail` VARCHAR(300) → VARCHAR(200) |
+| **`user_no2` 컬럼명** | ERD에 `user_no2`로 표기됐으나 다른 모든 테이블이 `user_no` 사용 → **ERD 오타로 판단**, `user_no` 유지 |
+| **URL 변경** | `/api/user/address/**` → `/api/address/**` (옵션 B 채택, 단일 책임 명확) |
+| **회원가입 흐름** | 옵션 D-1 (BFF 패턴) — 프론트가 두 API 호출 (`/api/user/join` + `/api/address`) |
+| **POST /api/user/join 응답 변경** | `null` → `{userNo, name, role, atExpiresAt, storeName}` + AT/RT HttpOnly 쿠키 발급 |
+| **CLAUDE.md §6.7 (API 응답 동결) 예외 처리** | join 응답 변경은 명시적 예외. 사유: MSA 분리 후 단일 트랜잭션 깨짐 → 프론트 BFF 패턴 필요. 호환성: 기존 필드 추가만 (resultData null → 객체), 프론트는 안전하게 새 필드 활용 가능 |
+| **원자성** | 약함 (1번 성공 + 2번 실패 가능). 임시 처리: 사용자에게 안내 메시지. 강화는 Phase 6 Saga 패턴 검토 |
+| **외부 FK 정합성 (사용자 탈퇴 시 cleanup)** | Phase 4-A에서 Saga/Outbox로 결정 |

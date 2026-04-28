@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 2-D — AddressSearch + MapConfig 이동** (대기 중, 2-C 완료)
+**Phase 2-E — Review 도메인 신규 작성** (대기 중, 2-D 완료)
 
 ---
 
@@ -91,6 +91,38 @@
 - [x] 응답 형식 `ResultResponse<T>` 모놀리식과 동일
 - [x] **Phase 1 완료 커밋**
 
+#### 1-B-3.5. UserAddress 위치 정정 (ERD 위반 수정 + Phase 2-D 통합) ✅
+> 발견: ERD에서 `address` 테이블이 **my_mmg_main** (초록 그룹)인데 Phase 1-B-3에서 my_mmg_auth로 잘못 마이그레이션됨.
+> Phase 2-D(AddressSearch + MapConfig)와 통합 진행.
+
+**컬럼명 변경 (ERD 따름)**
+- [x] `lat` → `latitude`
+- [x] `lng` → `longitude`
+- [x] `address_detail` VARCHAR(300) → VARCHAR(200) (사전 검사: max 46자, 손실 0)
+- [x] **`user_no` 유지** (ERD `user_no2`는 오타로 판단 — decisions.md 기록)
+
+**작업 항목**
+- [x] my_mmg_main.address 테이블 신규 (ERD 컬럼 매핑 적용 + 외부 FK 제외)
+- [x] my_mmg_auth.address → my_mmg_main.address 데이터 이동 (20행, AUTO_INCREMENT=39 동기화)
+- [x] **my_mmg_auth.address DROP** (사용자 승인 후, 데이터 손실 0 확인)
+- [x] auth-service UserAddress 코드 5+1 파일 → main-service 이동 (Controller/Service/Mapper + 2 model + Address.xml)
+- [x] Phase 2-D AddressSearch + MapConfig 코드 4파일 통합 이동 (네이버 API 호출용)
+- [x] URL 변경: `/api/user/address/**` → `/api/address/**` (옵션 B)
+- [x] UserService.signup 옵션 D-1 적용 — BFF 패턴, 즉시 AT/RT 발급, UserAddressMapper 호출 제거
+- [x] auth-service `address/` 패키지 + Address.xml 완전 제거
+- [x] MainSecurityConfig는 `anyRequest().authenticated()`로 자동 커버 (변경 없음)
+- [x] application.yml main-service에 `naver.*` 환경변수 매핑
+- [x] api-spec.md URL + 회원가입 응답 갱신
+- [x] decisions.md 변경 이력 섹션 추가 (ERD `user_no2` 오타, URL/컬럼/응답 변경)
+- [x] CLAUDE.md §6.11 신설 (도메인 분배 결정 우선순위 = ERD source of truth)
+- [x] FRONTEND_CHANGES.md 신규 (프론트 작업 가이드 누적용)
+- [x] 검증: BFF 회원가입 → POST /api/address → GET /api/address 5/5 통과
+- [x] 검증 후 테스트 데이터 정리 (auth.user 15행, main.address 20행 baseline 복원)
+
+#### 1-B-3.5 작업 중 발견한 fix 2개
+- UserSignupReq 필드 `Long UserNo` (대문자 'U') → `Long userNo` (소문자) — MyBatis useGeneratedKeys 매핑
+- UserService.signup에서 fetch 제거, req에서 직접 (DB 1회 절감 + role 정확 반환)
+
 #### 1-A 후속 TODO 처리
 - [x] `JwtTokenManager.java` line 71 주석 잔재는 그대로 둠 (별도 작업 시 처리)
 - [x] `WebSecurityConfiguration` base/override 패턴 리팩 — 1-B-2에서 완료
@@ -149,11 +181,12 @@
 - [x] 검증: cart/order/payment endpoint 모두 401 반환 (CUSTOMER 권한 차단 정상)
 - ⚠️ TOSS_SECRET_KEY .env 값은 placeholder 유지 — Phase 5 결제 본격 검증 시 학원 키로 교체
 
-### 2-D. AddressSearch + MapConfig 이동 (대기, WebConfig는 2-B에서 처리됨)
-- [ ] `application/address/AddressSearchController/Service.java` → mmg-main-service/address
-- [ ] `application/address/MapConfigController.java` → mmg-main-service/address
-- [ ] `model/AddressSearchRes.java` 이동
-- [ ] 네이버 API 환경변수 매핑
+### 2-D. AddressSearch + MapConfig 이동 ✅ (Phase 1-B-3.5와 통합 진행)
+- [x] `application/address/AddressSearchController/Service.java` → mmg-main-service/address
+- [x] `application/address/MapConfigController.java` → mmg-main-service/address
+- [x] `model/AddressSearchRes.java` 이동
+- [x] 네이버 API 환경변수 매핑 (`naver.*` 5개 키 application.yml + .env)
+- [x] 검증: GET /api/map/key 200 + NAVER_MAP_CLIENT_ID 응답
 
 ### 2-E. Review 도메인 신규 작성 (대기)
 - [ ] `mmg-main-service/review/` 신규 — ReviewController/Service/Mapper + xml

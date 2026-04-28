@@ -130,9 +130,25 @@
 }
 ```
 
-**Response** : `{"resultMessage":"회원가입 성공","resultData":null}`
+**Response Body** (Phase 1-B-3.5 변경 — 옵션 D-1 BFF 패턴)
+```json
+{
+  "resultMessage": "회원가입 성공",
+  "resultData": {
+    "userNo": 18,
+    "name": "string",
+    "role": "CUSTOMER|OWNER|RIDER|ADMIN",
+    "atExpiresAt": 1234567890000,
+    "storeName": null
+  }
+}
+```
+
 **HTTP** : 200 OK / 400 Bad Request
-**비고** : 사장은 사업자등록 인증, 라이더는 면허 인증 필요. 관리자 승인 후 활성화.
+**비고** :
+- AT/RT HttpOnly 쿠키 자동 발급 (회원가입 직후 즉시 인증 상태 — 옵션 D-1, decisions.md 2026-04-28 참조)
+- 회원가입 시 주소 정보(address, addressDetail, latitude, longitude)는 별도 `POST /api/address`로 전송 — 프론트가 두 번 호출하는 BFF 패턴 (FRONTEND_CHANGES.md 참조)
+- 사장은 사업자등록 인증, 라이더는 면허 인증 필요. 관리자 승인 후 활성화.
 
 ---
 
@@ -297,7 +313,7 @@
 #### 2.2.1 주소 목록 조회
 | Method | Endpoint | API ID | 인증 |
 |---|---|---|---|
-| GET | `/api/user/address` | user-address-list | O |
+| GET | `/api/address` | address-list | O |
 
 **Response**
 ```json
@@ -310,7 +326,7 @@
 #### 2.2.2 주소 추가
 | Method | Endpoint | API ID | 인증 |
 |---|---|---|---|
-| POST | `/api/user/address` | user-address-add | O |
+| POST | `/api/address` | address-add | O |
 
 **Request Body**
 ```json
@@ -325,7 +341,7 @@
 #### 2.2.3 주소 수정
 | Method | Endpoint | API ID | 인증 |
 |---|---|---|---|
-| PUT | `/api/user/address/{addressId}` | user-address-update | O |
+| PUT | `/api/address/{addressId}` | address-update | O |
 
 **Request Body**: 위와 동일
 **HTTP** : 200 OK / 404 Not Found
@@ -333,12 +349,12 @@
 #### 2.2.4 기본 주소 변경
 | Method | Endpoint | API ID | 인증 |
 |---|---|---|---|
-| PUT | `/api/user/address/{addressId}/default` | user-address-default | O |
+| PUT | `/api/address/{addressId}/default` | address-default | O |
 
 #### 2.2.5 주소 삭제
 | Method | Endpoint | API ID | 인증 |
 |---|---|---|---|
-| DELETE | `/api/user/address/{addressId}` | user-address-delete | O |
+| DELETE | `/api/address/{addressId}` | address-delete | O |
 
 #### 2.2.6 주소 검색 (네이버 API)
 | Method | Endpoint | API ID | 인증 |

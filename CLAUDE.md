@@ -280,6 +280,13 @@ rider-service, admin-service가 이 API를 Feign으로 호출.
     - `.env`는 `.gitignore` 필수, `.env.example`만 git 추적
     - 학원 공유 환경이라 키 노출 시에도 학원 외부에는 게시하지 않음
 
+11. **도메인 분배 결정 우선순위 (ERD = source of truth)**
+    - ERD가 진실의 원천. 도메인 위치(어느 schema에 갈지) 결정 시 ERD 우선 확인.
+    - 코드/테이블명 분석은 ERD 보조 자료.
+    - ERD vs 코드 충돌 시 ERD 따라감. 단, ERD 오타 의심 시 사용자 결정 받고 decisions.md에 기록.
+    - 컬럼명/타입도 ERD 기준 (단순 별칭 차이라도). Phase 2/3에서 같이 정리.
+    - **이 원칙은 Phase 1-B-3에서 user_address를 잘못 my_mmg_auth로 보낸 일을 계기로 명문화함 (Phase 1-B-3.5에서 정정).**
+
 ---
 
 ## 7. 핵심 도메인 요약
