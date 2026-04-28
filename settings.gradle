@@ -1,0 +1,10 @@
+rootProject.name = 'momoolggo'
+
+include 'mmg-common'
+
+// Phase 0-B에서 추가 예정:
+// include 'mmg-auth-service'
+// include 'mmg-main-service'
+// include 'mmg-rider-service'
+// include 'mmg-admin-service'
+// include 'mmg-gateway'
