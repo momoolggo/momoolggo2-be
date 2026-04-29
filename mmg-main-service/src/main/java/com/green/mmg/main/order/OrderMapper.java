@@ -2,47 +2,34 @@ package com.green.mmg.main.order;
 
 import com.green.mmg.main.order.model.*;
 import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
+/**
+ * Phase 3-C-1 잔존:
+ * <ul>
+ *   <li>복잡 SQL (영구): findOrdersByUserId(JOIN+DATE_FORMAT+서브쿼리), orderHistoryDetail(복잡 포맷),
+ *       calSumOrder(store cross-table UPDATE)</li>
+ *   <li>외부 도메인: findDefaultAddress(address 테이블) — Phase 3-D Address Repository 신설 시 정리</li>
+ *   <li>외부 호출 (Phase 3-C-3에서 정리): findByOrderId, findUserNoByOrderId, updateState</li>
+ * </ul>
+ *
+ * <p>제거됨: insertOrder, insertOrderDetail, deleteOrder, maxHistoryPage, findItemsByOrderId
+ * (5 SQL → JPA Repository 이전).</p>
+ */
 @Mapper
 public interface OrderMapper {
-    long findUserNoByOrderId(long orderId);
-    int deleteOrder(long id);
-    //주문의 state 변경
-    int updateState(OrderState orderstate);
 
-    // Phase 4-A: findTelByUserNo는 AuthFeignClient.getUser().getTel()로 대체됨
-
-    Orders findByOrderId(Long orderId);
-    // 기본 배송지 조회
-    OrderAddressInfo findDefaultAddress(@Param("userNo") Long userNo);
-
-    // 주문 INSERT
-    void insertOrder(@Param("uniqueId") Long uniqueId,
-                     @Param("userNo")    Long    userNo,
-                     @Param("storeId")   Long    storeId,
-                     @Param("request")   String  request,
-                     @Param("riderRequest")  String  riderRequest,
-                     @Param("address")   String  address,
-                     @Param("addressDetail") String addressDetail,
-                     @Param("deliveryFee")   Integer deliveryFee,
-                     @Param("amount")    Integer amount,
-                     @Param("payState")  Integer payState);
-
-
-    // 주문 상세 INSERT
-    void insertOrderDetail(@Param("uniqueId")    Long    uniqueId,
-                           @Param("menuId")     Long    menuId,
-                           @Param("quantity")   Integer quantity,
-                           @Param("menuName")   String  menuName,
-                           @Param("menuPrice")  Integer price);
-    List<OrderHistoryDto> findOrdersByUserId(OrderHistoryReq req);           // 주문 목록
-    List<OrderHistoryDto.OrderItemDto> findItemsByOrderId(Long orderId); // 메뉴 목록
+    // ── 복잡 SQL 영구 잔존
+    List<OrderHistoryDto> findOrdersByUserId(OrderHistoryReq req);
     OrderHistoryDto orderHistoryDetail(long id);
-    int maxHistoryPage(long id);
-
-
     int calSumOrder(long id);
+
+    // ── 외부 도메인 (address) — Phase 3-D 정리 예정
+    OrderAddressInfo findDefaultAddress(@org.apache.ibatis.annotations.Param("userNo") Long userNo);
+
+    // ── 외부 호출 (PaymentService) — Phase 3-C-3 정리 예정
+    long findUserNoByOrderId(long orderId);
+    Orders findByOrderId(Long orderId);
+    int updateState(OrderState orderstate);
 }

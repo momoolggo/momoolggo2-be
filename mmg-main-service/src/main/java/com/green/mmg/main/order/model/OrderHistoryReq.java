@@ -1,10 +1,12 @@
 package com.green.mmg.main.order.model;
 
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Getter
 @Setter
+@NoArgsConstructor   // @ModelAttribute 바인딩용 (Spring reflection)
 public class OrderHistoryReq {
     private long userId;        // 사용자 고유 번호
     private int currentPage;    // 현재 페이지 (1, 2, 3...)

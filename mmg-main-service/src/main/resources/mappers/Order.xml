@@ -4,9 +4,17 @@
 
 <mapper namespace="com.green.mmg.main.order.OrderMapper">
 
-    <!-- Phase 4-A: findTelByUserNo SQL 제거. OrderService에서 AuthFeignClient.getUser().getTel() 사용 -->
+    <!--
+      Phase 3-C-1 잔존 (7 SQL):
+      - 복잡 (영구): findOrdersByUserId, orderHistoryDetail, calSumOrder
+      - 외부 도메인 (Phase 3-D 정리): findDefaultAddress
+      - 외부 호출 (Phase 3-C-3 정리): findByOrderId, findUserNoByOrderId, updateState
 
-    <!-- address는 Phase 1-B-3.5 후 my_mmg_main.address로 이동 — cross-schema 아님 ✅ -->
+      제거 (JPA Repository로 이전):
+      - insertOrder, insertOrderDetail, deleteOrder, maxHistoryPage, findItemsByOrderId
+    -->
+
+    <!-- address는 Phase 1-B-3.5 후 my_mmg_main.address (cross-schema 아님) -->
     <select id="findDefaultAddress" resultType="com.green.mmg.main.order.model.OrderAddressInfo">
         SELECT address        AS address,
                address_detail AS addressDetail
@@ -16,33 +24,12 @@
             LIMIT 1
     </select>
 
-    <!-- 주문 INSERT (짧은 ID 자동 생성) -->
-    <insert id="insertOrder">
-        INSERT INTO orders
-        (order_id, user_no, store_id, request, address, address_detail,rider_request,
-         delivery_fee, amount, pay_state)
-        VALUES
-            (#{uniqueId}, #{userNo}, #{storeId}, #{request}, #{address}, #{addressDetail},#{riderRequest},
-             #{deliveryFee}, #{amount}, #{payState})
-    </insert>
-
-    <!-- 주문 상세 INSERT -->
-    <insert id="insertOrderDetail">
-        INSERT INTO order_detail
-            (order_id, menu_id, quantity, menu_name, menu_price)
-        VALUES
-            (#{uniqueId}, #{menuId}, #{quantity}, #{menuName}, #{menuPrice})
-    </insert>
-
+    <!-- 외부 호출 (PaymentService) — Phase 3-C-3 정리 예정 -->
     <select id="findUserNoByOrderId" resultType="long">
         SELECT user_no
         FROM orders
         WHERE order_id = #{orderId}
     </select>
-
-    <delete id="deleteOrder">
-        delete from orders where order_id=#{id} and pay_state=1
-    </delete>
 
     <select id="findByOrderId" resultType="com.green.mmg.main.order.model.Orders">
         SELECT order_id, user_no, amount
@@ -54,7 +41,7 @@
         update orders set pay_state=#{state} where order_id=#{orderId}
     </update>
 
-    <!-- 주문 목록만 조회 (리뷰 존재 여부 추가) -->
+    <!-- 복잡 SQL (영구 잔존) -->
     <select id="findOrdersByUserId" >
         SELECT
             o.order_id      AS orderId,
@@ -74,16 +61,6 @@
         WHERE o.user_no = #{userId}
         ORDER BY o.order_time DESC
             LIMIT #{startIdx}, #{size}
-    </select>
-
-    <!-- 해당 주문의 메뉴만 조회 -->
-    <select id="findItemsByOrderId" >
-        SELECT
-            menu_name   AS name,
-            quantity    AS count,
-        menu_price  AS price
-        FROM order_detail
-        WHERE order_id = #{orderId}
     </select>
 
     <select id="orderHistoryDetail">
@@ -110,10 +87,6 @@
             JOIN store s ON s.store_id = o.store_id
         WHERE o.order_id = #{id}
         ]]>
-    </select>
-
-    <select id="maxHistoryPage">
-        select count(1) from orders where user_no=#{id}
     </select>
 
     <update id="calSumOrder">
