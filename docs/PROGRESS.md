@@ -147,6 +147,19 @@
 
 ---
 
+## 테스트 백필 계획 (옵션 1 — 전체 백필 후 Phase 5)
+
+> 배경: Phase 1 리뷰에서 단위/통합 테스트 **0개** 발견 (`mmg-common`/`mmg-auth-service` 모두). CLAUDE.md §6.5 신설(2026-04-29) — 가짜 테스트 금지 + 최소 커버리지 + DoD.
+> 각 단계는 백필 → `@code-reviewer` 검증 → PASS 받아야 다음 Phase 진입.
+
+- [ ] Phase 1 백필 → `@code-reviewer` 검증 → PASS
+- [ ] Phase 2 백필 → `@code-reviewer` 검증 → PASS
+- [ ] Phase 3 백필 → `@code-reviewer` 검증 → PASS
+- [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
+- [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
+
+---
+
 ## 다음 단계
 
 **Phase 4-C (Redis)** 또는 **Phase 5 (팀원 합류 시)**.
