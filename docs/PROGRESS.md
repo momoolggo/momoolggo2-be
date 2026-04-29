@@ -154,7 +154,7 @@
 
 - [x] **Phase 1 백필 (2026-04-29)** — Critical 3건 수정 + 테스트 42개 작성, 42/42 PASS
 - [x] **Phase 2-Backfill-A (2026-04-29)** — Critical-1/2 수정 + Order/Payment 단위 테스트 13개, 34/34 PASS
-- [ ] Phase 2-Backfill-B (Order 추가 + Payment 통합 fixture 전환)
+- [x] **Phase 2-Backfill-B (2026-04-29)** — OrderService 단위 테스트 9 + Payment 통합 fixture 전환 + dead code 1건 제거, 43/43 PASS
 - [ ] Phase 2-Backfill-C (Review 403/409 + Cart 누락)
 - [ ] Phase 2-Backfill-D (Owner 핵심 + Store Feign null + AddressSearch)
 - [ ] Phase 3 백필 → `@code-reviewer` 검증 → PASS
@@ -215,6 +215,30 @@
 - `OrderServiceCalSumOrderTest.PlaceOrder.calSumOrder_calledWithCartStoreId`: orderId 아닌 **storeId(STORE_ID)** 전달 동결
 - `OrderServiceCalSumOrderTest.DeleteOrder.deleteSuccess_calSumOrderCalledWithStoreId`: findById → delete → calSumOrder(STORE_ID) 호출 순서 verify
 - `PaymentServiceTest.HappyPath.saveFails_subsequentStepsSkipped`: save 예외 시 order.payState=1 유지 + cartRepository.findByUserNo 미호출 (흐름 동결)
+
+### Phase 2-Backfill-B 결과 (2026-04-29)
+
+**dead code 정리 + OrderService 단위 테스트 + Payment fixture 전환**:
+| 항목 | 커밋 |
+|---|---|
+| OrderService.calSumOrder(long storeId) public 메서드 제거 (사용처 0건 dead code) | `de85d58` |
+| OrderService.getOrderInfo 단위 테스트 (4) — Feign+cartMapper+주소 합성 + short-circuit | `7a467f1` |
+| OrderService.getOrderHistory 단위 테스트 (2) — items 합성 N회 verify | `bb65cfe` |
+| OrderService.orderHistoryDetail + maxHistoryPage 단위 테스트 (3) | `877d316` |
+| PaymentControllerIntegrationTest fixture 패턴 전환 (학원 DB row 하드코딩 제거) | `2f6b093` |
+
+**main-service 전체 빌드/테스트 통과 (43/43)**:
+| 분류 | 케이스 수 |
+|---|---|
+| 기존 통합: UserAddress 4 / Cart 5 / Order 3 / Payment 3 (fixture로 전환됨) / Review 2 / LikedStore 4 | 21 |
+| 단위 (Phase 2-A): OrderServiceCalSumOrderTest 6 + PaymentServiceTest 7 | 13 |
+| 단위 (Phase 2-B): OrderServiceTest 9 (getOrderInfo 4 + getOrderHistory 2 + orderHistoryDetail 1 + maxHistoryPage 2) | 9 |
+| **합계** | **43** |
+
+**Phase 2-Backfill-B 핵심 검증 케이스**:
+- `OrderServiceTest.GetOrderInfo.noCart_throwsAndShortCircuits`: cart 없을 때 Feign/주소 조회 모두 미호출 (verifyNoInteractions) — 불필요한 외부 호출 동결
+- `OrderServiceTest.MaxHistoryPage.delegatesToCountByUserNo`: `verifyNoInteractions(orderMapper)` — MyBatis → JPA 전환 결과 동결 (회귀 시 즉시 검출)
+- `PaymentControllerIntegrationTest.insertOrder` 헬퍼: Phase 2-A에서 user FK는 DROP했지만 store_id FK는 살아있음 — 학원 DB 실존 store_id=21 사용으로 통합 테스트 안정화
 
 ---
 
