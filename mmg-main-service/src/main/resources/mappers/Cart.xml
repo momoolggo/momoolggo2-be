@@ -5,14 +5,10 @@
 <mapper namespace="com.green.mmg.main.cart.CartMapper">
 
     <!--
-      Phase 3-B-3 하이브리드 잔존 (3 SQL):
-      - findStoreIdByMenuId: menu → menu_category JOIN
-      - findStoreNameByStoreId: Store 도메인 경계 위반 (Phase 3-D에서 정리)
-      - findCartItems: cart_detail → menu JOIN + 응답 DTO 직접 매핑
-
-      11개 단순 CRUD + getLastCartId 1개는 CartRepository / CartDetailRepository로 이전.
-      getLastCartId 제거 사유: JPA save() 후 entity.cartId 자동 채움으로 완전 대체, 회귀 위험 0
-      (decisions.md 보존 정책 예외 등재).
+      Phase 3-C-3 정리 후 잔존 (3 SQL):
+      - findStoreIdByMenuId: menu → menu_category JOIN (영구)
+      - findStoreNameByStoreId: Store 도메인 경계 위반 (Phase 3-D 정리 예정)
+      - findCartItems: cart_detail → menu JOIN + 응답 DTO 직접 매핑 (영구)
     -->
 
     <select id="findStoreIdByMenuId" resultType="Long">
@@ -40,23 +36,5 @@
                  JOIN menu m ON cd.menu_id = m.menu_id
         WHERE cd.cart_id = #{cartId}
     </select>
-
-    <!-- 외부 호출 (Order/Payment) — Phase 3-C 정리 시 제거 예정 -->
-    <select id="findCartEntityByUserNo" resultType="com.green.mmg.main.cart.model.Cart">
-        SELECT cart_id AS cartId, user_no AS userNo, store_id AS storeId
-        FROM cart
-        WHERE user_no = #{userNo}
-        LIMIT 1
-    </select>
-
-    <delete id="deleteAllCartItems">
-        DELETE FROM cart_detail
-        WHERE cart_id = #{cartId}
-    </delete>
-
-    <delete id="deleteCart">
-        DELETE FROM cart
-        WHERE cart_id = #{cartId}
-    </delete>
 
 </mapper>

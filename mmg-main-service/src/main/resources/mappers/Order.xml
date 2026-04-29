@@ -5,13 +5,12 @@
 <mapper namespace="com.green.mmg.main.order.OrderMapper">
 
     <!--
-      Phase 3-C-1 잔존 (7 SQL):
+      Phase 3-C-3 정리 후 잔존 (4 SQL):
       - 복잡 (영구): findOrdersByUserId, orderHistoryDetail, calSumOrder
       - 외부 도메인 (Phase 3-D 정리): findDefaultAddress
-      - 외부 호출 (Phase 3-C-3 정리): findByOrderId, findUserNoByOrderId, updateState
 
-      제거 (JPA Repository로 이전):
-      - insertOrder, insertOrderDetail, deleteOrder, maxHistoryPage, findItemsByOrderId
+      Phase 3-C-3에서 외부 호출 3 SQL 제거: findByOrderId, findUserNoByOrderId, updateState
+      → PaymentService.confirmPayment가 OrderRepository.findById + dirty checking 사용
     -->
 
     <!-- address는 Phase 1-B-3.5 후 my_mmg_main.address (cross-schema 아님) -->
@@ -24,24 +23,7 @@
             LIMIT 1
     </select>
 
-    <!-- 외부 호출 (PaymentService) — Phase 3-C-3 정리 예정 -->
-    <select id="findUserNoByOrderId" resultType="long">
-        SELECT user_no
-        FROM orders
-        WHERE order_id = #{orderId}
-    </select>
-
-    <select id="findByOrderId" resultType="com.green.mmg.main.order.model.Orders">
-        SELECT order_id, user_no, amount
-        FROM orders
-        WHERE order_id = #{orderId}
-    </select>
-
-    <update id="updateState">
-        update orders set pay_state=#{state} where order_id=#{orderId}
-    </update>
-
-    <!-- 복잡 SQL (영구 잔존) -->
+    <!-- 복잡 SQL 영구 잔존 -->
     <select id="findOrdersByUserId" >
         SELECT
             o.order_id      AS orderId,
