@@ -171,3 +171,20 @@
 | **`@EnableJpaAuditing`** | 각 서비스 main 클래스에 명시 (`AuthApplication`). 서비스별 opt-in 구조 |
 | **Phase 3 분할** | 3-A: User+Address (1주) / 3-B: Payment+Cart+LikedStore (1.5주) / 3-C: Order+Review (2주) / 3-D: Store+Owner는 MyBatis 유지 (옵션 A 확정) |
 | **응답 스펙 검증 결과** | 9개 endpoint(checkId/join/login/me/getUser/updateUser/internal 단건/batch/404) 100% 동일 — birth 포맷 `"yyyy-MM-dd"`, role/rank ENUM String, dirty checking UPDATE, ResultResponse 래핑 모두 일치 |
+
+### 2026-04-29 (Phase 3-B — Payment / LikedStore / Cart 하이브리드 영구 공존 검증)
+
+| 항목 | 결정 |
+|---|---|
+| **테스트 인프라 정책** | `@SpringBootTest + MockMvc + @Transactional + @Rollback` — 학원 공유 DB 사용하되 INSERT/DELETE 자동 롤백. `SnapshotAssert` (JSONAssert STRICT, 첫 실행 자동 생성, `src/test/resources/snapshots/{name}.json`). 응답 JSON 1바이트 동결 검증 자산. Phase 3-C/D에 재사용. |
+| **하이브리드 트랜잭션 가시화 패턴** | `saveAndFlush()` 또는 `repository.flush()` — 같은 `@Transactional` 안에서 JPA INSERT/DELETE 후 후속 MyBatis SELECT가 영속성 컨텍스트의 변경을 즉시 보도록 강제. 통합 테스트(같은 트랜잭션 내 INSERT+SELECT)에서 발견 — 운영에서도 사용자가 같은 요청 내 후속 호출 시 안전 |
+| **BaseEntity 적용 결과** | Phase 3-B 4 도메인(payment/cart/cart_detail/likedstore) 모두 미적용. payment에는 `payment_time` 만 있어 의미 다름, cart/cart_detail은 audit 컬럼 부재, likedstore는 created_at만 있고 updated_at 부재. **첫 검증은 Phase 3-C `review`에서** (`write_at`→createdAt, `amended_at`→updatedAt 매핑) |
+| **LikedStore 복합 PK** | `@IdClass(LikedStoreId.class)` 채택. PK 클래스는 `Serializable + no-arg + equals/hashCode`(Lombok `@EqualsAndHashCode`). entity의 `@Id userNo`/`@Id storeId`와 동일 필드명. derived query는 `existsByUserNoAndStoreId`, `countByUserNo`처럼 entity 필드 기준 |
+| **MyBatis Mapper 보존 정책 예외** | **`Cart.xml#getLastCartId`만 제거.** 사유: `cartRepository.save()` 후 `entity.getCartId()` 자동 채움(@GeneratedValue IDENTITY)으로 완전 대체. MyBatis SELECT LAST_INSERT_ID()는 같은 connection의 마지막 AUTO_INCREMENT 의존 — JPA 표준 메커니즘이 더 안전. 회귀 위험 0 |
+| **CartMapper 외부 호출 잔존** | `findCartEntityByUserNo`, `deleteAllCartItems`, `deleteCart` 3개는 OrderService(`createOrder`)와 PaymentService(`confirmPayment`)가 외부 호출. Phase 3-C Order 전환 시 호출 측을 CartService 위임으로 변경 후 제거 예정 |
+| **CartMapper의 `findStoreNameByStoreId`** | Store 도메인 경계 위반이지만 Phase 3-B 범위 밖. Phase 3-D Store 정리 시 일괄 처리 (Q-Final-2=A) |
+| **Toss 결제 호출 (`PaymentService.confirmPayment`)** | 현재 `java.net.HttpURLConnection` 직접 사용 (RestTemplate/WebClient/Feign 아님). `@MockBean` 불가 → 통합 테스트는 검증 로직 3 케이스만(주문 부재/금액 불일치/이미 결제됨). Phase 5 TODO: **TossPaymentClient 인터페이스 추출 + RestTemplate/WebClient 전환** — JPA 영향 X, 결제 본격화와 함께 처리 |
+| **하이브리드 핵심 검증 결과** | 12 통합 테스트 (Payment 3 + LikedStore 4 + Cart 5) STRICT snapshot 비교 통과. 같은 `@Transactional` 안에서 JPA save/saveAndFlush + MyBatis JOIN/SELECT 동시 동작 확인. `@Rollback`으로 학원 DB 잔여물 0 (검증 완료). 응답 JSON 1바이트 동결 ✅ |
+| **`spring.jpa.properties.hibernate.dialect`** | `org.hibernate.dialect.MariaDBDialect` 명시 필수. 학원 MariaDB의 `INFORMATION_SCHEMA.RESERVED_WORDS` 호환성 문제로 자동감지 실패 — auth/main 모두 명시 (deprecation 경고 무시 가능) |
+| **루트 build.gradle Test 설정** | `tasks.withType(Test).workingDir = rootProject.projectDir` + `systemProperty 'project.dir'` 주입. application.yml의 `spring.config.import` `.env` 로딩 + `SnapshotAssert`가 모듈별 디렉터리에 파일 생성 |
+| **Spring Boot 4.0.3 Jackson 3.x 마이그레이션** | 패키지 변경 `com.fasterxml.jackson.databind` → `tools.jackson.databind`. `JsonMapper.builder()` 사용. SnapshotAssert + 테스트 코드 import 갱신 |

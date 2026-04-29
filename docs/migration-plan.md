@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 3-A 완료 ✅ (2026-04-29)** — Phase 3-B (Payment + Cart + LikedStore) 다음
+**Phase 3-B 완료 ✅ (2026-04-29)** — Phase 3-C (Order + Review, BaseEntity 첫 검증) 다음
 
 ---
 
@@ -234,14 +234,16 @@
 - [x] UserMapper.java + User.xml 삭제 (mybatis starter는 유지)
 - [x] 응답 스펙 검증 9/9 통과 (checkId/join/login/me/getUser/updateUser/internal 단건/batch/404)
 
-### 3-B. Payment + Cart(+CartDetail) + LikedStore (main-service)
-- [ ] mmg-main-service: spring-boot-starter-data-jpa
-- [ ] MainApplication: @EnableJpaAuditing
-- [ ] Payment entity + PaymentRepository
-- [ ] Cart + CartDetail entities (@OneToMany cascade) + CartRepository
-- [ ] LikedStore entity (BaseEntity 상속 — created_at 존재) + LikedStoreRepository
-- [ ] N+1 회피 검증 (@EntityGraph or fetch join)
-- [ ] 응답 스펙 검증
+### 3-B. Payment + Cart(+CartDetail) + LikedStore (main-service) ✅ (2026-04-29)
+- [x] mmg-main-service: spring-boot-starter-data-jpa, MariaDBDialect, validate, open-in-view=false
+- [x] MainApplication: @EnableJpaAuditing
+- [x] 테스트 인프라 자산 (Phase 3-C/D 재사용): SnapshotAssert(JSONAssert STRICT), @SpringBootTest+MockMvc+@Transactional+@Rollback, root test workingDir + project.dir property
+- [x] Phase 3-B-1 Payment: PaymentEntity @Entity (orderId String→Long, paymentTime DB DEFAULT), PaymentRepository.save, payment.xml에 existsByOrderId 잔존, 통합 테스트 3 케이스(주문 부재/금액 불일치/이미 결제됨)
+- [x] Phase 3-B-2 LikedStore: @IdClass(LikedStoreId), LikedStoreRepository(existsBy/countBy/@Modifying delete), saveAndFlush 패턴, favoriteList(JOIN+LIMIT) MyBatis 잔존, 통합 테스트 4 케이스
+- [x] Phase 3-B-3 Cart/CartDetail: 단순 CRUD 11 → JPA, JOIN 3 + 외부 호출 3 = 6 MyBatis 잔존, dirty checking 수량 합산, getLastCartId 제거(보존 정책 예외, decisions.md), 통합 테스트 5 케이스
+- [x] BaseEntity 첫 검증 — 4 도메인 모두 audit 컬럼 부재로 미적용 → Phase 3-C `review`로 이전
+- [x] 12 통합 테스트 STRICT snapshot 비교 통과 = 응답 JSON 1바이트 동결 + 하이브리드 트랜잭션 가시화 검증
+- [ ] confirmPayment 정상 흐름 (토스 호출): Phase 5 TODO TossPaymentClient 추출과 함께
 
 ### 3-C. Order + OrderDetail + Review (main-service, 중간 복잡도)
 - [ ] Order/OrderDetail entities + Repository (@Query JPQL fetch join)
