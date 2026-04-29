@@ -1,6 +1,7 @@
 package com.green.mmg.main.order;
 
 import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.address.UserAddressRepository;
 import com.green.mmg.main.cart.CartMapper;
 import com.green.mmg.main.cart.CartRepository;
 import com.green.mmg.main.cart.model.Cart;
@@ -41,6 +42,7 @@ public class OrderService {
     private final OrderDetailRepository orderDetailRepository;
     private final CartMapper cartMapper;          // findCartItems (JOIN) + findStoreNameByStoreId 잔존
     private final CartRepository cartRepository;  // Phase 3-C-3: findCartEntityByUserNo 위임
+    private final UserAddressRepository userAddressRepository;  // Phase 3-D-B: findDefaultAddress 위임
     private final AuthFeignClient authFeignClient;
 
     private static final int DELIVERY_FEE = 1500;
@@ -56,7 +58,7 @@ public class OrderService {
         String storeName = cartMapper.findStoreNameByStoreId(cart.getStoreId());
 
         String tel = authFeignClient.getUser(userNo).getTel();
-        OrderAddressInfo addr = orderMapper.findDefaultAddress(userNo);
+        OrderAddressInfo addr = userAddressRepository.findFirstDefaultByUserNo(userNo).orElse(null);
 
         int menuTotal = items.stream()
                 .mapToInt(i -> i.getPrice() * i.getQuantity())
@@ -82,7 +84,7 @@ public class OrderService {
         List<CartItemRes> items = cartMapper.findCartItems(cart.getCartId());
         if (items.isEmpty()) throw new RuntimeException("장바구니가 비어있습니다.");
 
-        OrderAddressInfo addr = orderMapper.findDefaultAddress(userNo);
+        OrderAddressInfo addr = userAddressRepository.findFirstDefaultByUserNo(userNo).orElse(null);
 
         int menuTotal = items.stream()
                 .mapToInt(i -> i.getPrice() * i.getQuantity())

@@ -6,15 +6,14 @@ import org.apache.ibatis.annotations.Mapper;
 import java.util.List;
 
 /**
- * Phase 3-C-3 정리 후 잔존 (4 SQL):
+ * Phase 3-D 정리 후 최종 잔존 (3 SQL — 모두 복잡 영구):
  * <ul>
- *   <li>복잡 영구: findOrdersByUserId(JOIN+DATE_FORMAT+서브쿼리), orderHistoryDetail(복잡 포맷),
- *       calSumOrder(store cross-table UPDATE)</li>
- *   <li>외부 도메인 (Phase 3-D 정리 예정): findDefaultAddress(address 테이블)</li>
+ *   <li>findOrdersByUserId: JOIN+DATE_FORMAT+서브쿼리(hasReview)</li>
+ *   <li>orderHistoryDetail: JOIN+복잡 DATE_FORMAT</li>
+ *   <li>calSumOrder: store cross-table UPDATE 서브쿼리 (Store 도메인 경계)</li>
  * </ul>
  *
- * <p>Phase 3-C-3에서 외부 호출 3개(findByOrderId, findUserNoByOrderId, updateState) 제거 →
- * PaymentService.confirmPayment가 OrderRepository + dirty checking 사용.</p>
+ * <p>Phase 3-D-B에서 findDefaultAddress 제거 (UserAddressRepository.findFirstDefaultByUserNo로 위임).</p>
  */
 @Mapper
 public interface OrderMapper {
@@ -22,6 +21,4 @@ public interface OrderMapper {
     List<OrderHistoryDto> findOrdersByUserId(OrderHistoryReq req);
     OrderHistoryDto orderHistoryDetail(long id);
     int calSumOrder(long id);
-
-    OrderAddressInfo findDefaultAddress(@org.apache.ibatis.annotations.Param("userNo") Long userNo);
 }

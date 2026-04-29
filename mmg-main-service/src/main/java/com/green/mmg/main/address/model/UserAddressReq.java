@@ -6,6 +6,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class UserAddressReq {
+    private Long addressId;        // Phase 3-D-B: update endpoint용 (잠재 버그 수정 — JSON body addressId 매핑)
     private Long userNo;
     private String address;        // 기본주소
     private String addressDetail;  // 상세주소

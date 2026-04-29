@@ -5,25 +5,12 @@
 <mapper namespace="com.green.mmg.main.order.OrderMapper">
 
     <!--
-      Phase 3-C-3 정리 후 잔존 (4 SQL):
-      - 복잡 (영구): findOrdersByUserId, orderHistoryDetail, calSumOrder
-      - 외부 도메인 (Phase 3-D 정리): findDefaultAddress
+      Phase 3-D 정리 후 최종 잔존 (3 SQL, 모두 복잡 영구):
+      - findOrdersByUserId, orderHistoryDetail, calSumOrder
 
-      Phase 3-C-3에서 외부 호출 3 SQL 제거: findByOrderId, findUserNoByOrderId, updateState
-      → PaymentService.confirmPayment가 OrderRepository.findById + dirty checking 사용
+      제거: findDefaultAddress (Phase 3-D-B에서 UserAddressRepository로 위임).
     -->
 
-    <!-- address는 Phase 1-B-3.5 후 my_mmg_main.address (cross-schema 아님) -->
-    <select id="findDefaultAddress" resultType="com.green.mmg.main.order.model.OrderAddressInfo">
-        SELECT address        AS address,
-               address_detail AS addressDetail
-        FROM address
-        WHERE user_no    = #{userNo}
-          AND default_ad = 1
-            LIMIT 1
-    </select>
-
-    <!-- 복잡 SQL 영구 잔존 -->
     <select id="findOrdersByUserId" >
         SELECT
             o.order_id      AS orderId,
