@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 3 — MyBatis → JPA 선별 마이그레이션** (대기 중, Phase 4-A 완료 ✅)
+**Phase 3-A 완료 ✅ (2026-04-29)** — Phase 3-B (Payment + Cart + LikedStore) 다음
 
 ---
 
@@ -215,21 +215,44 @@
 
 ---
 
-## Phase 3 — MyBatis → JPA 선별 마이그레이션
+## Phase 3 — MyBatis → JPA 선별 마이그레이션 (하이브리드 영구 공존)
 
-### 3-A. 마이그레이션 대상 분석
-- [ ] 각 Mapper의 모든 쿼리 분류 (JPA 가능 / QueryDSL / MyBatis 유지)
-- [ ] 마이그레이션 우선순위 표 작성
+> 영속성 정책 = JPA + MyBatis 영구 공존. 단순 CRUD = JPA, 복잡 쿼리 = MyBatis. mybatis starter 영구 유지.
 
-### 3-B. 단순 CRUD 우선 마이그레이션
-- [ ] auth-service: User Repository (JPA)
-- [ ] main-service: Store Repository (JPA)
-- [ ] main-service: Cart Repository (JPA)
-- [ ] (그 외 단순 도메인들)
+### 3-A. 정찰 + User 도메인 (auth-service) ✅ (2026-04-29)
+- [x] 도메인별 쿼리 복잡도 분석 (단순 39 / 중간 16 / 복잡 18)
+- [x] JPA 전환 우선순위 표 + Phase 3-A/B/C/D 분할
+- [x] mmg-common: BaseEntity (`@MappedSuperclass + AuditingEntityListener`, created_at/updated_at)
+- [x] mmg-auth-service: spring-boot-starter-data-jpa, ddl-auto=validate, MariaDBDialect, open-in-view=false
+- [x] AuthApplication: @EnableJpaAuditing
+- [x] User entity (@Entity, BaseEntity 미상속 — created_at/updated_at 컬럼 부재)
+- [x] StringDateConverter (birth: DB DATE ↔ Java String "yyyy-MM-dd")
+- [x] rank: `@Column(name = "\`rank\`")` (MariaDB 예약어)
+- [x] UserRepository (findByUserId, existsByUserId, @Query constructor expression for UserBriefDto)
+- [x] UserService 리팩토링 (Mapper → Repository, dirty checking UPDATE)
+- [x] InternalUserController Repository 전환
+- [x] UserMapper.java + User.xml 삭제 (mybatis starter는 유지)
+- [x] 응답 스펙 검증 9/9 통과 (checkId/join/login/me/getUser/updateUser/internal 단건/batch/404)
 
-### 3-C. 복잡 쿼리는 MyBatis 유지
-- [ ] OrderMapper (다중 조인, 통계) → MyBatis 유지
-- [ ] StoreMapper (검색, 필터) → 일부 QueryDSL 검토
+### 3-B. Payment + Cart(+CartDetail) + LikedStore (main-service)
+- [ ] mmg-main-service: spring-boot-starter-data-jpa
+- [ ] MainApplication: @EnableJpaAuditing
+- [ ] Payment entity + PaymentRepository
+- [ ] Cart + CartDetail entities (@OneToMany cascade) + CartRepository
+- [ ] LikedStore entity (BaseEntity 상속 — created_at 존재) + LikedStoreRepository
+- [ ] N+1 회피 검증 (@EntityGraph or fetch join)
+- [ ] 응답 스펙 검증
+
+### 3-C. Order + OrderDetail + Review (main-service, 중간 복잡도)
+- [ ] Order/OrderDetail entities + Repository (@Query JPQL fetch join)
+- [ ] orderHistoryDetail 동적 쿼리 (DATE_FORMAT) 처리 — @Query OR MyBatis 잔존
+- [ ] Review + Repository, updateStoreRating 집계 (@Modifying @Query OR MyBatis 잔존)
+- [ ] @JsonFormat: 날짜 포맷 동결 ("3월 15일(수)" 등 BFF 계약)
+- [ ] 응답 스펙 검증
+
+### 3-D. Store + Owner — MyBatis 유지 (옵션 A 확정)
+- [ ] Store/Owner는 복잡 쿼리(검색, 동적 정렬, 매출 통계) → MyBatis 표현력 우월
+- [ ] 변경 X (필요 시 Phase 5에서 QueryDSL 재평가)
 - [ ] **Phase 3 완료 커밋**
 
 ---

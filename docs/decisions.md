@@ -151,3 +151,23 @@
 | **`/internal/**` 보안** | Phase 4-A: AuthSecurityConfig permitAll. Phase 4-B Gateway가 외부 차단. Phase 6 mTLS/JWT 검토 |
 | **외부 FK 정합성 (Saga/Outbox)** | Phase 4-D 또는 Phase 6으로 분리 — Phase 4-A는 read-side만, write-side 별개 |
 | **OwnerInfoDto 미작성** | 현재는 UserBriefDto 재사용 (사장도 user.name + tel만 필요). Phase 5에서 사장 추가 정보 필요 시 별도 DTO |
+
+### 2026-04-29 (Phase 3-A — User 도메인 JPA 전환 + 하이브리드 영구 공존 정책)
+
+| 항목 | 결정 |
+|---|---|
+| **영속성 정책** | **JPA + MyBatis 하이브리드 영구 공존** — 단순 CRUD는 JPA, 복잡 쿼리(Store/Owner의 검색·정렬·집계)는 MyBatis 유지 |
+| **`mybatis-spring-boot-starter`** | **영구 유지** (제거 X) — Phase 3-D Store/Owner는 MyBatis 표현력 우월, 이후 도메인도 case-by-case |
+| **BaseEntity 위치** | `mmg-common/entity/BaseEntity.java` — `@MappedSuperclass + @EntityListeners(AuditingEntityListener)` + `created_at` / `updated_at` (LocalDateTime) |
+| **User entity BaseEntity 미상속** | user 테이블에 `created_at`/`updated_at` 컬럼 부재 → 옵션 A 채택. ALTER 회피 (DDL 변경 X), Phase 5 admin 본격 구현 시 status 등과 함께 일괄 ALTER 검토 |
+| **MyBatis가 Auditing 컬럼을 만지는 경우** | `BaseEntity.@CreatedDate/@LastModifiedDate`는 JPA에서만 자동. 같은 테이블을 MyBatis로 INSERT/UPDATE 시 SQL에 `NOW()` 명시 필요 (예: `<update> SET ..., updated_at = NOW()`) |
+| **`birth` DATE ↔ String** | 응답 스펙(`UserGetRes.birth: String`) 동결 → `StringDateConverter` (`AttributeConverter<String, LocalDate>`, `autoApply=false`) + 필드에 `@Convert` 명시. MyBatis 자동 변환과 동일 동작 검증됨 |
+| **`rank` 예약어 처리** | `@Column(name = "\`rank\`")` 백틱 명시. Hibernate가 dialect-specific 인용 처리, MariaDB 정상 동작 확인 |
+| **`gender` 타입** | DB INT NULL이지만 entity는 기존과 동일 `int` 유지. MyBatis 시절부터 0/null 구분 안 함 → JPA 전환 후 신규 INSERT는 0 (DB NULL → 0 shift, 응답에는 영향 X) |
+| **`ddl-auto`** | **`validate` 고정** (절대 update/create 금지). 학원 공유 DB → DDL 변경은 명시 SQL로만 |
+| **`open-in-view`** | `false` — Lazy proxy 트랜잭션 밖 사용 차단 (안티패턴 회피) |
+| **UserMapper.java + User.xml** | **삭제** (전 메서드 단순 CRUD → Repository 이동). MyBatis starter는 유지 (Phase 3-B 이후 복잡 쿼리 필요 시 재도입) |
+| **Internal API JPA 전환** | `findBriefByUserNo`/`findBriefsByUserNos`도 `@Query` constructor expression으로 `UserBriefDto` 직접 반환. Feign 응답 스펙 변경 X 확인 |
+| **`@EnableJpaAuditing`** | 각 서비스 main 클래스에 명시 (`AuthApplication`). 서비스별 opt-in 구조 |
+| **Phase 3 분할** | 3-A: User+Address (1주) / 3-B: Payment+Cart+LikedStore (1.5주) / 3-C: Order+Review (2주) / 3-D: Store+Owner는 MyBatis 유지 (옵션 A 확정) |
+| **응답 스펙 검증 결과** | 9개 endpoint(checkId/join/login/me/getUser/updateUser/internal 단건/batch/404) 100% 동일 — birth 포맷 `"yyyy-MM-dd"`, role/rank ENUM String, dirty checking UPDATE, ResultResponse 래핑 모두 일치 |
