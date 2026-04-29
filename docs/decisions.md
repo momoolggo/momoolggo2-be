@@ -219,3 +219,18 @@
 | **AddressSearch는 JPA 무관** | 네이버 검색 API 외부 호출 도메인. Mapper 없음, JPA 전환 대상 아님 — 검증만 |
 | **Owner.xml 24 SQL 모두 잔존** | Store/Menu/MenuCategory cross-domain SQL + 매출 통계 복잡 동적 SQL — 영구 MyBatis. Phase 5 사장 페이지 본격 진행 시 일부 QueryDSL 또는 Repository projection 재평가 |
 | **Phase 3 전체 종료** | auth-service User + main-service Payment/Cart/CartDetail/LikedStore/Order/OrderDetail/Review/UserAddress = 8 도메인 JPA 전환. Store/Owner는 MyBatis 유지. 20 통합 테스트 STRICT snapshot 통과 = JSON 1바이트 동결 검증. Phase 4-B Gateway 라우팅 정비 또는 Phase 5 진행 가능 상태 |
+
+### 2026-04-29 (Phase 4-B — Gateway 라우팅 정비 + Internal 차단 + CORS 통합)
+
+| 항목 | 결정 |
+|---|---|
+| **라우팅 매핑 — 실제 endpoint 기준** | 기존 `/api/auth/**`, `/api/main/**` 가짜 prefix 폐기. 프론트가 실제 호출하는 경로 그대로 라우팅: `/api/user/**`/`/api/policy/**`→auth, `/api/store/**`/`/api/cart/**`/`/api/order/**`/`/api/payment/**`/`/api/address/**`/`/api/owner/**`/`/uploads/**`→main, `/api/rider/**`→rider, `/api/admin/**`→admin |
+| **Prefix 충돌 해결** | `/api/user/login\|join\|...`(auth)와 `/api/user/review/**`(main)가 같은 `/api/user/` 시작. **Spring Cloud Gateway 라우트는 정의 순서대로 매칭** → `review-route`를 `auth-user-route`보다 먼저 정의. 동작 확인됨 (수동 검증 7번) |
+| **/internal/** 외부 차단** | application.yml에 `/internal/**` 라우트 정의 X + `InternalBlockController`가 명시 403 + ResultResponse 형식. 서비스 간 통신은 Gateway 우회(각 서비스 포트 직접) — Feign 영향 0. **검증**: Gateway:8000 호출 → 403 / auth:8081 직접 호출 → 200 |
+| **AuthSecurityConfig `/internal/**` permitAll 유지** | Phase 4-A 결정 그대로. Gateway가 외부 차단 담당 → 서비스 자체는 permitAll 안전. Phase 6 mTLS/service-to-service token 도입 시 강화 검토 |
+| **CORS Gateway 단일 처리** | `GatewayCorsConfig`(@Bean CorsFilter, allowedOrigins env). 각 서비스 BaseSecurityConfig CORS는 그대로 (외부 요청은 Gateway 경유 → 서비스 자체 CORS는 사실상 미사용 이중 안전). Phase 5에서 서비스 CORS 제거 검토 |
+| **JWT 검증 위치** | 각 서비스 SecurityConfig 유지 (변경 0). Gateway는 라우팅 + Internal 차단 + CORS만. JWT 토큰은 쿠키로 전파되어 Gateway 통과 후 각 서비스 TokenAuthenticationFilter가 검증 — 정상 동작 확인 (수동 검증 6번 `/api/cart/24` 200) |
+| **Spring Cloud Gateway WebMVC variant 유지** | 절대 제약 19. Reactive 미전환. `spring-cloud-starter-gateway-server-webmvc` + 표준 application.yml 라우팅 + 표준 CorsFilter. 커스텀 GatewayFilter 0 |
+| **포트 동결** | gateway 8000 / auth 8081 / main 8080 / rider 8082 / admin 8083 — 변경 0 |
+| **검증 결과** | 12/12 통과 (Gateway 경유 7 + Internal 차단 2 + 직접 호출 비교 1 + 미정의 경로 1 + CORS preflight 1). Phase 3 통합 테스트 21 회귀 100% 통과. p4b_* user cleanup 정상 (잔여 0, baseline 15 보존) |
+| **학원 데모 가능 상태 도달** | Gateway:8000 단일 진입점으로 auth+main 전 endpoint 동작. 토큰 발급(쿠키) → 다른 endpoint 호출 흐름 자동화 가능 (수동 검증 스크립트) |

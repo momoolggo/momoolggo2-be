@@ -293,10 +293,14 @@
 - ⚠️ rider → main, admin → auth Feign은 Phase 5 진입 시 (rider/admin 도메인 구현 필요)
 - ⚠️ **외부 FK 정합성 (Saga/Outbox)** — Phase 4-D 또는 Phase 6으로 분리 (write-side 정합성 별개 주제)
 
-### 4-B. Gateway 라우팅 완성
-- [ ] 모든 API 경로 매핑
-- [ ] JWT 1차 검증을 Gateway에서 처리
-- [ ] `/uploads/**` → main-service 라우팅
+### 4-B. Gateway 라우팅 정비 ✅ (2026-04-29)
+- [x] 모든 API 경로 실제 endpoint 매핑 (가짜 prefix `/api/auth/**`, `/api/main/**` 폐기)
+- [x] /api/user/review/** prefix 충돌 해결 (라우트 정의 순서)
+- [x] /uploads/** → main-service 라우팅
+- [x] /internal/** 외부 차단 — InternalBlockController 403 + ResultResponse
+- [x] CORS Gateway 단일 처리 — GatewayCorsConfig CorsFilter (env 기반)
+- [x] JWT 검증 위치는 각 서비스 SecurityConfig 유지 (Phase 1 정책 그대로) — Gateway는 라우팅+Internal+CORS만
+- [x] 12/12 수동 검증 통과 + Phase 3 21 회귀 100% + p4b_* cleanup 정상
 
 ### 4-C. Redis 도입
 - [ ] Redis 서버 구축
