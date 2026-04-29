@@ -188,3 +188,20 @@
 | **`spring.jpa.properties.hibernate.dialect`** | `org.hibernate.dialect.MariaDBDialect` 명시 필수. 학원 MariaDB의 `INFORMATION_SCHEMA.RESERVED_WORDS` 호환성 문제로 자동감지 실패 — auth/main 모두 명시 (deprecation 경고 무시 가능) |
 | **루트 build.gradle Test 설정** | `tasks.withType(Test).workingDir = rootProject.projectDir` + `systemProperty 'project.dir'` 주입. application.yml의 `spring.config.import` `.env` 로딩 + `SnapshotAssert`가 모듈별 디렉터리에 파일 생성 |
 | **Spring Boot 4.0.3 Jackson 3.x 마이그레이션** | 패키지 변경 `com.fasterxml.jackson.databind` → `tools.jackson.databind`. `JsonMapper.builder()` 사용. SnapshotAssert + 테스트 코드 import 갱신 |
+
+### 2026-04-29 (Phase 3-C — Order/OrderDetail/Review JPA + BaseEntity 첫 검증)
+
+| 항목 | 결정 |
+|---|---|
+| **🎯 BaseEntity 첫 검증 통과** | Review entity가 `@AttributeOverride`로 BaseEntity의 createdAt/updatedAt을 write_at/amended_at에 매핑. saveAndFlush 후 entity의 audit 필드가 자동 채워짐 + findById 재조회 시 보존 확인. **Phase 5 신규 도메인(펫/쿠폰/룰렛 등)에서 audit 컬럼 자유 사용 가능 + 컬럼명 다른 경우(@AttributeOverride)도 검증됨** |
+| **Orders entity Persistable<Long>** | `@Id` no `@GeneratedValue` + manual ID assign(`"39"+timestamp`) 패턴 유지를 위해 `Persistable<Long>` 구현. `isNewEntity` `@Transient` flag + `@PostLoad/@PostPersist` 콜백으로 false 전환. JPA `save()` 호출 시 merge SELECT 회피 → 직접 INSERT |
+| **OrderDetail @Query constructor expression** | `OrderHistoryDto.OrderItemDto`로 직접 매핑 → 응답 DTO 동결 + N+1 회피. `@AllArgsConstructor` 추가만으로 매핑 (응답 영향 0) |
+| **OrderHistoryReq @NoArgsConstructor 추가** | 기존 lombok `@Getter/@Setter`에 user-defined 생성자만 있어 `@ModelAttribute` reflection 바인딩 실패(400) 잠재 버그 — 통합 테스트에서 발견. 응답 0 영향, 운영 회복 |
+| **Review @AttributeOverride 패턴** | `@AttributeOverrides({@AttributeOverride(name="createdAt", column=@Column(name="write_at", updatable=false)), @AttributeOverride(name="updatedAt", column=@Column(name="amended_at"))})` — BaseEntity 컬럼명을 도메인별로 자유 변경 가능 |
+| **Review amended_at INSERT 시 채움** | JPA `@LastModifiedDate`가 INSERT 시점에도 amended_at 셋팅 (기존 MyBatis는 NULL 잔존). 응답 노출 X (ReviewRes에 미포함) → 응답 동결 OK. UPDATE는 MyBatis `updateReview`(NOW() 명시)로 처리 — JPA 영속 컨텍스트 외부 |
+| **CartMapper 외부 호출 정리 완료** | Phase 3-B-3에서 잠시 잔존시킨 3 SQL(findCartEntityByUserNo, deleteAllCartItems, deleteCart) 모두 PaymentService를 CartRepository/CartDetailRepository로 위임 후 제거. CartMapper 최종 잔존 3 (findStoreIdByMenuId, findStoreNameByStoreId, findCartItems) |
+| **OrderMapper 외부 호출 정리** | findByOrderId / findUserNoByOrderId / updateState 3개를 PaymentService.confirmPayment에서 OrderRepository.findById + dirty checking으로 전환. OrderMapper 최종 잔존 4 (findOrdersByUserId, orderHistoryDetail, calSumOrder, findDefaultAddress) |
+| **PaymentService.confirmPayment dirty checking** | `order.setPayState(2)` — 영속 entity setter만으로 UPDATE 발동. `OrderState` 클래스는 dead code (보존 정책으로 미삭제) |
+| **Address 도메인 미정리** | OrderMapper.findDefaultAddress가 address 테이블 SELECT — 도메인 경계 위반이지만 신규 기능 추가 0 정책에 따라 Address Repository 신설 보류. Phase 3-D 또는 별도 단계에서 정리 예정 |
+| **응답 동결 검증 결과** | 통합 테스트 16 (Payment 3 + LikedStore 4 + Cart 5 + Order 3 + Review 1 BaseEntity + Review 1 snapshot) — STRICT snapshot 비교 통과 = 응답 JSON 1바이트 동결. `@Rollback`으로 학원 DB 잔여 0 검증 |
+| **수동 endpoint 검증** | main-service 인증 필터(TokenAuthenticationFilter) 정책으로 대부분 401 — `/api/store/favorite/check`만 인증 없이 200 (LikedStoreRepository 정상). 핵심 검증은 통합 테스트(MockMvc — 인증 우회)로 갈음 |

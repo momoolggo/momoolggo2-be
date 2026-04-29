@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 3-B 완료 ✅ (2026-04-29)** — Phase 3-C (Order + Review, BaseEntity 첫 검증) 다음
+**Phase 3-C 완료 ✅ (2026-04-29)** — Phase 3-D (Store + Owner = MyBatis 유지, Address 정리) 또는 Phase 4-B 다음
 
 ---
 
@@ -245,16 +245,26 @@
 - [x] 12 통합 테스트 STRICT snapshot 비교 통과 = 응답 JSON 1바이트 동결 + 하이브리드 트랜잭션 가시화 검증
 - [ ] confirmPayment 정상 흐름 (토스 호출): Phase 5 TODO TossPaymentClient 추출과 함께
 
-### 3-C. Order + OrderDetail + Review (main-service, 중간 복잡도)
-- [ ] Order/OrderDetail entities + Repository (@Query JPQL fetch join)
-- [ ] orderHistoryDetail 동적 쿼리 (DATE_FORMAT) 처리 — @Query OR MyBatis 잔존
-- [ ] Review + Repository, updateStoreRating 집계 (@Modifying @Query OR MyBatis 잔존)
-- [ ] @JsonFormat: 날짜 포맷 동결 ("3월 15일(수)" 등 BFF 계약)
-- [ ] 응답 스펙 검증
+### 3-C. Order + OrderDetail + Review (main-service) ✅ (2026-04-29)
+- [x] Phase 3-C-1: Orders @Entity + Persistable<Long> (manual ID assign 패턴 유지),
+      OrderDetail @Entity, Repository 2개. OrderMapper 5 SQL 제거(insertOrder, insertOrderDetail,
+      deleteOrder, maxHistoryPage, findItemsByOrderId), 7 SQL 잔존(외부 호출 3 + 복잡 3 + 외부 도메인 1).
+      OrderDetailRepository @Query constructor expression(OrderHistoryDto.OrderItemDto). 통합 테스트 3.
+- [x] Phase 3-C-2: 🎯 BaseEntity 첫 검증 — Review @Entity extends BaseEntity +
+      @AttributeOverrides 2(write_at→createdAt, amended_at→updatedAt). saveAndFlush 후
+      audit 자동 채움 + findById 재조회 보존 통과. 9 SQL 영구 잔존(다중 테이블 UPDATE/DELETE,
+      JOIN, 집계, cross-table). 통합 테스트 2.
+- [x] Phase 3-C-3: PaymentService.confirmPayment Cart/Order MyBatis 호출 6개 → JPA 위임
+      (orderRepository.findById, dirty checking setPayState, cartRepository.findByUserNo,
+      cartDetailRepository.deleteByCartId, cartRepository.delete, order.getUserNo()).
+      CartMapper 최종 잔존 3, OrderMapper 최종 잔존 4. 회귀 0.
+- [x] OrderHistoryReq @NoArgsConstructor 추가 (잠재 버그 수정, 응답 0 영향)
+- [x] 16 통합 테스트 STRICT snapshot 통과 + 학원 DB 잔여 0 (Rollback 정상)
 
-### 3-D. Store + Owner — MyBatis 유지 (옵션 A 확정)
-- [ ] Store/Owner는 복잡 쿼리(검색, 동적 정렬, 매출 통계) → MyBatis 표현력 우월
-- [ ] 변경 X (필요 시 Phase 5에서 QueryDSL 재평가)
+### 3-D. Store + Owner — MyBatis 유지 (옵션 A 확정) + Address 정리
+- [ ] Store/Owner는 복잡 쿼리(검색, 동적 정렬, 매출 통계) → MyBatis 표현력 우월, 변경 X
+- [ ] CartMapper.findStoreNameByStoreId 정리 (Store 도메인 경계 회복)
+- [ ] OrderMapper.findDefaultAddress 정리 (Address Repository 신설 검토)
 - [ ] **Phase 3 완료 커밋**
 
 ---
