@@ -34,6 +34,7 @@ public class UserService {
     private final ConstJwt constJwt;
 
     // ── 아이디 중복확인
+    @Transactional(readOnly = true)
     public boolean checkId(String userId) {
         return !userRepository.existsByUserId(userId);
     }
@@ -62,7 +63,8 @@ public class UserService {
                 System.currentTimeMillis() + constJwt.getAccessTokenValidityMilliseconds(), null);
     }
 
-    // ── 로그인
+    // ── 로그인 (조회 + JWT 발급, DB 변경 없음)
+    @Transactional(readOnly = true)
     public UserSigninRes signin(UserSigninReq req, HttpServletResponse res) {
         User user = userRepository.findByUserId(req.getUserId())
                 .orElseThrow(() -> new BusinessException("아이디 또는 비밀번호가 틀렸습니다.", HttpStatus.UNAUTHORIZED));
@@ -92,6 +94,7 @@ public class UserService {
     }
 
     // 내 정보 조회
+    @Transactional(readOnly = true)
     public UserGetRes getUser(Long userNo) {
         User user = userRepository.findById(userNo)
                 .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
