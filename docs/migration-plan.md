@@ -7,7 +7,7 @@
 
 ## 📍 현재 위치
 
-**Phase 3-C 완료 ✅ (2026-04-29)** — Phase 3-D (Store + Owner = MyBatis 유지, Address 정리) 또는 Phase 4-B 다음
+**Phase 3 전체 완료 ✅ (2026-04-29)** — Phase 4-B (Gateway 라우팅) 또는 Phase 5 (팀원 분담) 다음
 
 ---
 
@@ -261,11 +261,16 @@
 - [x] OrderHistoryReq @NoArgsConstructor 추가 (잠재 버그 수정, 응답 0 영향)
 - [x] 16 통합 테스트 STRICT snapshot 통과 + 학원 DB 잔여 0 (Rollback 정상)
 
-### 3-D. Store + Owner — MyBatis 유지 (옵션 A 확정) + Address 정리
-- [ ] Store/Owner는 복잡 쿼리(검색, 동적 정렬, 매출 통계) → MyBatis 표현력 우월, 변경 X
-- [ ] CartMapper.findStoreNameByStoreId 정리 (Store 도메인 경계 회복)
-- [ ] OrderMapper.findDefaultAddress 정리 (Address Repository 신설 검토)
-- [ ] **Phase 3 완료 커밋**
+### 3-D. Store + Owner — MyBatis 유지 + UserAddress JPA ✅ (2026-04-29)
+- [x] UserAddress @Entity + UserAddressRepository (6 SQL 모두 JPA, dirty checking 기반 update/setDefault)
+- [x] @JdbcTypeCode(SqlTypes.NUMERIC) — DECIMAL(16,13) ↔ Double 매핑 (precision/scale 회피)
+- [x] UserAddressMapper.java + Address.xml 완전 제거 (보존 정책 예외)
+- [x] OrderMapper.findDefaultAddress 제거 → UserAddressRepository.findFirstDefaultByUserNo 위임
+- [x] OrderMapper 최종 잔존 3 (복잡 영구만)
+- [x] Store/Owner MyBatis 유지 확정 (Store 12 SQL + Owner 24 SQL — 복잡/동적/cross-table 영구)
+- [x] AddressSearch는 외부 API (JPA 무관) — 검증만
+- [x] CartMapper.findStoreNameByStoreId는 Store 도메인 경계 위반이지만 Store가 MyBatis 유지로 위치 이동 실효성 미미 → Phase 5에서 함께 검토
+- [x] **Phase 3 완료 커밋** (Phase 3-A/B/C/D = 8 도메인 JPA 전환)
 
 ---
 

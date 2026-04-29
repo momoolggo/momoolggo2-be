@@ -205,3 +205,17 @@
 | **Address 도메인 미정리** | OrderMapper.findDefaultAddress가 address 테이블 SELECT — 도메인 경계 위반이지만 신규 기능 추가 0 정책에 따라 Address Repository 신설 보류. Phase 3-D 또는 별도 단계에서 정리 예정 |
 | **응답 동결 검증 결과** | 통합 테스트 16 (Payment 3 + LikedStore 4 + Cart 5 + Order 3 + Review 1 BaseEntity + Review 1 snapshot) — STRICT snapshot 비교 통과 = 응답 JSON 1바이트 동결. `@Rollback`으로 학원 DB 잔여 0 검증 |
 | **수동 endpoint 검증** | main-service 인증 필터(TokenAuthenticationFilter) 정책으로 대부분 401 — `/api/store/favorite/check`만 인증 없이 200 (LikedStoreRepository 정상). 핵심 검증은 통합 테스트(MockMvc — 인증 우회)로 갈음 |
+
+### 2026-04-29 (Phase 3-D — UserAddress JPA + Store/Owner MyBatis 유지 확정)
+
+| 항목 | 결정 |
+|---|---|
+| **UserAddress JPA 전환 + UserAddressMapper 완전 제거** | 6 SQL 모두 단순 CRUD → `JpaRepository`. dirty checking 기반 update/setDefault 단순화 (CASE WHEN 없이 resetDefault + setter). UserAddressMapper.java + Address.xml 삭제 (보존 정책 예외 — Phase 3-A의 User Mapper 제거와 동일 패턴, 회귀 위험 0) |
+| **DECIMAL ↔ Double 매핑** | latitude/longitude DB DECIMAL(16,13) ↔ Java Double — Hibernate가 자동 매핑 시 "scale has no meaning for SQL floating point types" + 추가로 "wrong column type [decimal] but expecting [float]" 에러. **`@JdbcTypeCode(SqlTypes.NUMERIC)`** 명시로 해결. precision/scale 제거. 응답 DTO Double 동결 |
+| **OrderMapper.findDefaultAddress 위임** | `userAddressRepository.findFirstDefaultByUserNo(Long)` (@Query JPQL constructor expression for OrderAddressInfo). OrderMapper에서 SQL 제거 → 최종 잔존 3 (복잡 영구만: findOrdersByUserId, orderHistoryDetail, calSumOrder) |
+| **UserAddressReq.addressId 필드 추가** | 기존 누락된 필드 — `@PutMapping update` JSON body 매핑 잠재 버그 수정 (Phase 3-C OrderHistoryReq @NoArgsConstructor와 동일 성격, 응답 0 영향) |
+| **Store / Owner MyBatis 유지 확정** | Phase 3-A 정찰부터 결정된 옵션 A (Store=12, Owner=24 SQL — 거의 모두 복잡 JOIN/동적 매출 통계/cross-table). JPA 전환 가치 낮음, 변경 0. Phase 5 또는 별도 단계에서 QueryDSL 재평가 |
+| **CartMapper.findStoreNameByStoreId 위치 유지** | Store 도메인 경계 위반이지만 Store 자체 MyBatis 유지 → 위치 이동의 실효성 미미. CartMapper에 잔존, Phase 5 Store 본격 정리 시 함께 검토 |
+| **AddressSearch는 JPA 무관** | 네이버 검색 API 외부 호출 도메인. Mapper 없음, JPA 전환 대상 아님 — 검증만 |
+| **Owner.xml 24 SQL 모두 잔존** | Store/Menu/MenuCategory cross-domain SQL + 매출 통계 복잡 동적 SQL — 영구 MyBatis. Phase 5 사장 페이지 본격 진행 시 일부 QueryDSL 또는 Repository projection 재평가 |
+| **Phase 3 전체 종료** | auth-service User + main-service Payment/Cart/CartDetail/LikedStore/Order/OrderDetail/Review/UserAddress = 8 도메인 JPA 전환. Store/Owner는 MyBatis 유지. 20 통합 테스트 STRICT snapshot 통과 = JSON 1바이트 동결 검증. Phase 4-B Gateway 라우팅 정비 또는 Phase 5 진행 가능 상태 |
