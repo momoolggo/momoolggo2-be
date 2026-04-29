@@ -153,7 +153,10 @@
 > 각 단계는 백필 → `@code-reviewer` 검증 → PASS 받아야 다음 Phase 진입.
 
 - [x] **Phase 1 백필 (2026-04-29)** — Critical 3건 수정 + 테스트 42개 작성, 42/42 PASS
-- [ ] Phase 2 백필 → `@code-reviewer` 검증 → PASS
+- [x] **Phase 2-Backfill-A (2026-04-29)** — Critical-1/2 수정 + Order/Payment 단위 테스트 13개, 34/34 PASS
+- [ ] Phase 2-Backfill-B (Order 추가 + Payment 통합 fixture 전환)
+- [ ] Phase 2-Backfill-C (Review 403/409 + Cart 누락)
+- [ ] Phase 2-Backfill-D (Owner 핵심 + Store Feign null + AddressSearch)
 - [ ] Phase 3 백필 → `@code-reviewer` 검증 → PASS
 - [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
 - [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
@@ -187,6 +190,31 @@
 **Step 1-A·1-B 수정 검증 핵심 케이스**:
 - `Reissue.rtExpired_propagatesJwtException` (Service) + `Reissue.rtExpired_returns401_notFiveHundred` (Controller): RT 만료 시 500 아닌 **401** 응답 동결
 - `UpdateUser.genderZero_actuallyChanges` (Service) + `UpdateUser.genderOmitted_isNull` (Controller): gender Integer 타입 — 0 명시와 미전송 구분 동결
+
+### Phase 2-Backfill-A 결과 (2026-04-29)
+
+**Critical 코드 수정**:
+| 항목 | 커밋 |
+|---|---|
+| Critical-1: `calSumOrder` 파라미터 orderId → storeId (deleteOrder 후 서브쿼리 empty 버그) — Order.xml + OrderMapper + OrderService(placeOrder/deleteOrder) + OrderController | `6d75c61` |
+| Critical-2: `confirmPayment` 흐름 재구성 (주문검증 → 토스호출 → 결제저장 → 주문상태 → 장바구니정리) + `callTossConfirm` protected 추출 | `6565841` |
+| order-delete-not-found.json 임시 문자열 `"ㅇㅇ"` → `null` | `6e1aa68` |
+
+**테스트 작성 — 13개 / 0 failures / 0 errors**:
+| 모듈/클래스 | 케이스 수 | 커밋 |
+|---|---|---|
+| `mmg-main-service` OrderServiceCalSumOrderTest (placeOrder 3 + deleteOrder 3) | **6** | `e500e60` |
+| `mmg-main-service` PaymentServiceTest (OrderValidation 3 + TossCall 1 + HappyPath 3, Spy 패턴) | **7** | `c3f24d5` |
+
+**main-service 전체 빌드/테스트 통과 (34/34)**:
+- 기존 통합: UserAddress 4 / Cart 5 / Order 3 / Payment 3 / Review 2 / LikedStore 4 = 21
+- 신규 단위: 13
+- 합계 34 — 0 failures / 0 errors / `:mmg-main-service:build` SUCCESSFUL
+
+**Step 1-B/2-B 수정 검증 핵심 케이스**:
+- `OrderServiceCalSumOrderTest.PlaceOrder.calSumOrder_calledWithCartStoreId`: orderId 아닌 **storeId(STORE_ID)** 전달 동결
+- `OrderServiceCalSumOrderTest.DeleteOrder.deleteSuccess_calSumOrderCalledWithStoreId`: findById → delete → calSumOrder(STORE_ID) 호출 순서 verify
+- `PaymentServiceTest.HappyPath.saveFails_subsequentStepsSkipped`: save 예외 시 order.payState=1 유지 + cartRepository.findByUserNo 미호출 (흐름 동결)
 
 ---
 
