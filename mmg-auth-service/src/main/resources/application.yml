@@ -19,6 +19,18 @@ mybatis:
     map-underscore-to-camel-case: true
   mapper-locations: classpath:mappers/*.xml
 
+# JPA + MyBatis 하이브리드 (Phase 3-A) — 단순 CRUD는 JPA, 복잡 쿼리는 MyBatis 영구 공존
+spring.jpa:
+  hibernate:
+    ddl-auto: validate          # ⚠️ validate 외 값 절대 금지 (스키마 변경 X)
+    naming.physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+  open-in-view: false           # Lazy proxy 트랜잭션 밖 사용 차단
+  properties:
+    hibernate:
+      dialect: org.hibernate.dialect.MariaDBDialect
+      format_sql: true
+  show-sql: true
+
 # mmg-common ConstJwt 바인딩용 — 시크릿/만료는 .env에서 주입
 constants:
   jwt:
