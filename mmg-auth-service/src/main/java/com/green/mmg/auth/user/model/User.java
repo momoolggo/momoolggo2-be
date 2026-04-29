@@ -1,23 +1,60 @@
 package com.green.mmg.auth.user.model;
 
+import jakarta.persistence.*;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-// DB의 user 테이블과 1:1로 대응되는 엔티티 클래스
-// MyBatis가 SELECT 결과를 이 객체에 자동으로 담아줌
-// ⚠️ userPw(암호화된 비밀번호)가 있어서 절대 프론트에 직접 반환하면 안 됨
+/**
+ * user 테이블 엔티티 (my_mmg_auth.user).
+ *
+ * <p>BaseEntity 상속 X — user 테이블에 created_at/updated_at 컬럼 미존재 (Phase 3-A 정찰 결과).
+ * Auditing 적용은 Phase 3-B의 likedstore/store부터.</p>
+ *
+ * <p>⚠️ userPw(BCrypt) 필드 응답 노출 절대 금지.</p>
+ */
+@Entity
+@Table(name = "user")
 @Getter
 @Setter
+@NoArgsConstructor
 public class User {
-    private long   userNo;   // PK (DB: user_no)
-    private String userId;   // 로그인 아이디 (DB: user_id)
-    private String userPw;   // BCrypt로 암호화된 비밀번호 (DB: user_pw)
-    private String role;     // 권한 (DB: role)
-    private String name;     // 이름 (DB: name)
-    private String birth;    // 생년월일 (DB: birth)
-    private int    gender;   // 성별 (DB: gender)
-    private int    green;    // 친환경점수 (DB: green)
-    private int    kind;     // 주문 온도 (DB: kind)
-    private String rank;     // 멤버등급 (DB: rank)
-    private String tel;      // 휴대폰번호 (DB: tel)
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "user_no")
+    private long userNo;
+
+    @Column(name = "user_id", length = 20, unique = true)
+    private String userId;
+
+    @Column(name = "user_pw", length = 1000)
+    private String userPw;
+
+    @Column(name = "role", columnDefinition = "ENUM('CUSTOMER','OWNER','RIDER','ADMIN')")
+    private String role;
+
+    @Column(name = "name", length = 10)
+    private String name;
+
+    /** DB DATE ↔ Java String("yyyy-MM-dd") — 응답 스펙 동결 */
+    @Convert(converter = StringDateConverter.class)
+    @Column(name = "birth")
+    private String birth;
+
+    @Column(name = "gender")
+    private int gender;
+
+    @Column(name = "green")
+    private int green;
+
+    @Column(name = "kind")
+    private int kind;
+
+    /** rank: MariaDB 예약어 → 백틱 처리 */
+    @Column(name = "`rank`", columnDefinition = "ENUM('BRONZE','SILVER','GOLD','VIP','VVIP')")
+    private String rank;
+
+    @Column(name = "tel", length = 20)
+    private String tel;
 }
