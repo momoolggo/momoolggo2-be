@@ -4,7 +4,10 @@ import com.green.mmg.auth.user.model.*;
 import com.green.mmg.common.constants.ConstJwt;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.jwt.JwtTokenManager;
+import com.green.mmg.common.jwt.JwtTokenProvider;
 import com.green.mmg.common.model.JwtUser;
+import com.green.mmg.common.util.MyCookieUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +29,8 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenManager jwtTokenManager;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final MyCookieUtil myCookieUtil;
     private final ConstJwt constJwt;
 
     // ── 아이디 중복확인
@@ -73,6 +78,17 @@ public class UserService {
     // ── 로그아웃
     public void signout(HttpServletResponse res) {
         jwtTokenManager.signOut(res);
+    }
+
+    // ── AT 재발급 (RT 검증 후 새 AT만 발급, RT는 그대로)
+    // RT 부재 → BusinessException(401) / RT 만료·위변조 → JwtException → GlobalExceptionHandler가 401로 응답
+    public void reissue(HttpServletRequest req, HttpServletResponse res) {
+        String refreshToken = myCookieUtil.getValue(req, constJwt.getRefreshTokenCookieName());
+        if (refreshToken == null) {
+            throw new BusinessException("리프레시 토큰이 없습니다.", HttpStatus.UNAUTHORIZED);
+        }
+        JwtUser jwtUser = jwtTokenProvider.getJwtUserFromToken(refreshToken);
+        jwtTokenManager.setAccessTokenInCookie(res, jwtUser);
     }
 
     // 내 정보 조회

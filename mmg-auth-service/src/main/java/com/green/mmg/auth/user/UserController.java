@@ -1,20 +1,14 @@
 package com.green.mmg.auth.user;
 
 import com.green.mmg.auth.user.model.*;
-import com.green.mmg.common.constants.ConstJwt;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.exception.BusinessException;
-import com.green.mmg.common.jwt.JwtTokenManager;
-import com.green.mmg.common.jwt.JwtTokenProvider;
-import com.green.mmg.common.model.JwtUser;
 import com.green.mmg.common.model.UserPrincipal;
-import com.green.mmg.common.util.MyCookieUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,10 +19,6 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
-    private final MyCookieUtil myCookieUtil;
-    private final ConstJwt constJwt;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final JwtTokenManager jwtTokenManager;
 
 
     // ── 아이디 중복확인 GET /api/user/check-id?userId=xxx
@@ -96,20 +86,9 @@ public class UserController {
     }
 
     @PostMapping("/reissue")
-    public ResponseEntity<?> reissue(HttpServletRequest req, HttpServletResponse res) {
-        // RT 쿠키에서 꺼내기
-        String refreshToken = myCookieUtil.getValue(req, constJwt.getRefreshTokenCookieName());
-        if (refreshToken == null) {
-            return ResponseEntity.status(401).body(new ResultResponse<>("RT 없음", null));
-        }
-
-        // RT 검증 & JwtUser 추출
-        JwtUser jwtUser = jwtTokenProvider.getJwtUserFromToken(refreshToken);
-
-        // 새 AT만 발급 (RT는 그대로)
-        jwtTokenManager.setAccessTokenInCookie(res, jwtUser);
-
-        return ResponseEntity.ok(new ResultResponse<>("AT 재발급 성공", null));
+    public ResultResponse<Void> reissue(HttpServletRequest req, HttpServletResponse res) {
+        userService.reissue(req, res);
+        return new ResultResponse<>("AT 재발급 성공", null);
     }
 
     // 리뷰 엔드포인트는 Phase 2에서 main-service에 작성
