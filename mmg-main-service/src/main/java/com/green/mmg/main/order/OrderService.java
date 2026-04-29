@@ -116,12 +116,23 @@ public class OrderService {
             detail.setMenuPrice(item.getPrice());
             orderDetailRepository.save(detail);
         }
+
+        // 가게 누적 주문 수(store.order_count) 갱신 — 같은 트랜잭션 내 처리
+        orderMapper.calSumOrder(cart.getStoreId());
         return uniqueId;
     }
 
     @Transactional
-    public int deleteOrder(long id) {
-        return orderRepository.deleteByOrderIdAndPayStateUnpaid(id);
+    public int deleteOrder(long orderId) {
+        // 삭제 전 storeId 확보 — orders row가 삭제된 후엔 storeId 도출 불가
+        Long storeId = orderRepository.findById(orderId)
+                .map(Orders::getStoreId)
+                .orElse(null);
+        int affected = orderRepository.deleteByOrderIdAndPayStateUnpaid(orderId);
+        if (affected > 0 && storeId != null) {
+            orderMapper.calSumOrder(storeId);
+        }
+        return affected;
     }
 
     public List<OrderHistoryDto> getOrderHistory(OrderHistoryReq req) {
@@ -146,7 +157,11 @@ public class OrderService {
         return (int) orderRepository.countByUserNo(id);
     }
 
-    public int calSumOrder(long id) {
-        return orderMapper.calSumOrder(id);  // store 테이블 cross-table UPDATE — 영구 잔존
+    /**
+     * Phase 2-Backfill-A: 파라미터 orderId → storeId.
+     * placeOrder/deleteOrder 트랜잭션 내부에서 직접 호출하므로 외부 노출 메서드 유지는 회귀 호환용.
+     */
+    public int calSumOrder(long storeId) {
+        return orderMapper.calSumOrder(storeId);  // store 테이블 cross-table UPDATE — 영구 잔존
     }
 }

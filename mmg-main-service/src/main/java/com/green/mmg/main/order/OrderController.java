@@ -30,20 +30,19 @@ public class OrderController {
         return ResponseEntity.ok(Map.of("resultData", res));
     }
 
-    // 주문 확정
+    // 주문 확정 — calSumOrder는 OrderService.placeOrder 내부에서 호출 (트랜잭션 일체화)
     @PostMapping
     public ResponseEntity<?> placeOrder(@AuthenticationPrincipal UserPrincipal principal,
             @RequestBody OrderReqDto dto) {
         long orderId = orderService.placeOrder(principal.getSignedUserNo(), dto);
-        orderService.calSumOrder(orderId);
         return ResponseEntity.ok(Map.of("result", "success","orderId", orderId));
     }
 
+    // 삭제 — calSumOrder는 OrderService.deleteOrder 내부에서 처리 (storeId 사전 확보 후 호출)
     @DeleteMapping("/{id}")
     public ResultResponse<?> deleteOrder(@PathVariable  long id){
-        int result= orderService.deleteOrder(id);
-        orderService.calSumOrder(id);
-        return new ResultResponse<>(result==1 ? "삭제성공": "삭제실패", "ㅇㅇ");
+        int result = orderService.deleteOrder(id);
+        return new ResultResponse<>(result==1 ? "삭제성공": "삭제실패", null);
     }
 
     //주문내역
