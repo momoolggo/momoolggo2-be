@@ -8,6 +8,8 @@ import com.green.mmg.main.cart.CartRepository;
 import com.green.mmg.main.cart.model.Cart;
 import com.green.mmg.main.cart.model.CartItemRes;
 import com.green.mmg.main.order.model.OrderAddressInfo;
+import com.green.mmg.main.order.model.OrderHistoryDto;
+import com.green.mmg.main.order.model.OrderHistoryReq;
 import com.green.mmg.main.order.model.OrderInfoRes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -151,6 +153,61 @@ class OrderServiceTest {
 
             verifyNoInteractions(authFeignClient);
             verifyNoInteractions(userAddressRepository);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("getOrderHistory — 주문 내역 (orderMapper + items 합성)")
+    class GetOrderHistory {
+
+        @Test
+        @DisplayName("주문 N개 → 각 주문에 OrderItemDto 합성 (findItemsByOrderId N회 호출)")
+        void historyAssembledWithItems() {
+            OrderHistoryReq req = new OrderHistoryReq(USER_NO, 1, 10);
+
+            OrderHistoryDto o1 = new OrderHistoryDto();
+            o1.setOrderId(391_000_001L);
+            o1.setStoreName("가게A");
+            OrderHistoryDto o2 = new OrderHistoryDto();
+            o2.setOrderId(391_000_002L);
+            o2.setStoreName("가게B");
+            when(orderMapper.findOrdersByUserId(req)).thenReturn(List.of(o1, o2));
+
+            List<OrderHistoryDto.OrderItemDto> items1 = List.of(
+                    new OrderHistoryDto.OrderItemDto("피자", 2, 15000));
+            List<OrderHistoryDto.OrderItemDto> items2 = List.of(
+                    new OrderHistoryDto.OrderItemDto("치킨", 1, 18000),
+                    new OrderHistoryDto.OrderItemDto("콜라", 1, 2000));
+            when(orderDetailRepository.findItemsByOrderId(391_000_001L)).thenReturn(items1);
+            when(orderDetailRepository.findItemsByOrderId(391_000_002L)).thenReturn(items2);
+
+            List<OrderHistoryDto> result = orderService.getOrderHistory(req);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).getItems()).hasSize(1);
+            assertThat(result.get(0).getItems().get(0).getName()).isEqualTo("피자");
+            assertThat(result.get(0).getItems().get(0).getCount()).isEqualTo(2);
+            assertThat(result.get(0).getItems().get(0).getPrice()).isEqualTo(15000);
+            assertThat(result.get(1).getItems()).hasSize(2);
+            assertThat(result.get(1).getItems().get(0).getName()).isEqualTo("치킨");
+
+            // findItemsByOrderId가 주문 수만큼 호출 (현재 구현 — N+1 의도된 분리, JPQL constructor expression)
+            verify(orderDetailRepository).findItemsByOrderId(391_000_001L);
+            verify(orderDetailRepository).findItemsByOrderId(391_000_002L);
+            verify(orderDetailRepository, times(2)).findItemsByOrderId(anyLong());
+        }
+
+        @Test
+        @DisplayName("주문 0개 → orderDetailRepository 호출 0 + 빈 리스트 반환")
+        void noOrders_emptyListReturned() {
+            OrderHistoryReq req = new OrderHistoryReq(USER_NO, 1, 10);
+            when(orderMapper.findOrdersByUserId(req)).thenReturn(List.of());
+
+            List<OrderHistoryDto> result = orderService.getOrderHistory(req);
+
+            assertThat(result).isEmpty();
+            verify(orderDetailRepository, never()).findItemsByOrderId(anyLong());
         }
     }
 }
