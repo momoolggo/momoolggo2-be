@@ -53,4 +53,11 @@ subprojects {
     tasks.withType(org.springframework.boot.gradle.tasks.run.BootRun).configureEach {
         workingDir = rootProject.projectDir
     }
+
+    // 통합 테스트도 루트 cwd 기준 (application.yml의 spring.config.import .env 로드 위해).
+    // SnapshotAssert가 모듈 디렉터리 기준으로 파일 쓰도록 system property 주입.
+    tasks.withType(Test).configureEach {
+        workingDir = rootProject.projectDir
+        systemProperty 'project.dir', project.projectDir.absolutePath
+    }
 }

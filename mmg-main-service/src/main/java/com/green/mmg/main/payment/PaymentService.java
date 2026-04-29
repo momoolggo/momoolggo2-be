@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PaymentService {
 
     private final PaymentMapper paymentMapper;
+    private final PaymentRepository paymentRepository;  // Phase 3-B: insertPayment → save()
     private final CartMapper cartMapper;
     private final OrderMapper orderMapper;
 
@@ -110,10 +111,10 @@ public class PaymentService {
         orderState.setOrderId(orderId);
         PaymentEntity payment = new PaymentEntity();
         orderMapper.updateState(orderState);
-        payment.setOrderId(req.getOrderId());
+        payment.setOrderId(orderId);  // Phase 3-B: String → Long 타입 정합 (PaymentEntity.orderId: Long)
         payment.setPaymentKey(req.getPaymentKey());
         payment.setAmount(req.getAmount());
         payment.setPayState(req.getPayState());
-        paymentMapper.insertPayment(payment);
+        paymentRepository.save(payment);  // Phase 3-B: MyBatis insertPayment → JPA save (paymentTime은 DB DEFAULT)
     }
 }
