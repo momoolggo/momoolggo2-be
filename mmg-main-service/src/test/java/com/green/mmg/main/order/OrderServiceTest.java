@@ -210,4 +210,63 @@ class OrderServiceTest {
             verify(orderDetailRepository, never()).findItemsByOrderId(anyLong());
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("orderHistoryDetail — 주문 상세")
+    class OrderHistoryDetailNested {
+
+        @Test
+        @DisplayName("orderMapper 결과에 items 합성 후 반환")
+        void detail_assembledWithItems() {
+            long orderId = 391_000_001L;
+            OrderHistoryDto dto = new OrderHistoryDto();
+            dto.setOrderId(orderId);
+            dto.setStoreName("가게A");
+            dto.setStoreId(STORE_ID);
+            when(orderMapper.orderHistoryDetail(orderId)).thenReturn(dto);
+
+            List<OrderHistoryDto.OrderItemDto> items = List.of(
+                    new OrderHistoryDto.OrderItemDto("피자", 1, 15000),
+                    new OrderHistoryDto.OrderItemDto("콜라", 2, 2000));
+            when(orderDetailRepository.findItemsByOrderId(orderId)).thenReturn(items);
+
+            OrderHistoryDto result = orderService.orderHistoryDetail(orderId);
+
+            assertThat(result.getOrderId()).isEqualTo(orderId);
+            assertThat(result.getStoreName()).isEqualTo("가게A");
+            assertThat(result.getItems()).hasSize(2);
+            assertThat(result.getItems().get(0).getName()).isEqualTo("피자");
+            assertThat(result.getItems().get(1).getCount()).isEqualTo(2);
+            verify(orderDetailRepository).findItemsByOrderId(orderId);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("maxHistoryPage — 주문 내역 최대 페이지")
+    class MaxHistoryPage {
+
+        @Test
+        @DisplayName("orderRepository.countByUserNo를 int로 캐스팅 반환 (응답 동결: int)")
+        void delegatesToCountByUserNo() {
+            when(orderRepository.countByUserNo(USER_NO)).thenReturn(7L);
+
+            int result = orderService.maxHistoryPage(USER_NO);
+
+            assertThat(result).isEqualTo(7);
+            verify(orderRepository).countByUserNo(USER_NO);
+            verifyNoInteractions(orderMapper);  // MyBatis 호출 0 — JPA로 전환됨 동결
+        }
+
+        @Test
+        @DisplayName("count=0 → 0 반환 (NullPointerException 없음)")
+        void zeroCount_returnsZero() {
+            when(orderRepository.countByUserNo(USER_NO)).thenReturn(0L);
+
+            int result = orderService.maxHistoryPage(USER_NO);
+
+            assertThat(result).isZero();
+        }
+    }
 }
