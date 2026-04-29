@@ -152,11 +152,41 @@
 > 배경: Phase 1 리뷰에서 단위/통합 테스트 **0개** 발견 (`mmg-common`/`mmg-auth-service` 모두). CLAUDE.md §6.5 신설(2026-04-29) — 가짜 테스트 금지 + 최소 커버리지 + DoD.
 > 각 단계는 백필 → `@code-reviewer` 검증 → PASS 받아야 다음 Phase 진입.
 
-- [ ] Phase 1 백필 → `@code-reviewer` 검증 → PASS
+- [x] **Phase 1 백필 (2026-04-29)** — Critical 3건 수정 + 테스트 42개 작성, 42/42 PASS
 - [ ] Phase 2 백필 → `@code-reviewer` 검증 → PASS
 - [ ] Phase 3 백필 → `@code-reviewer` 검증 → PASS
 - [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
 - [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
+
+### Phase 1 백필 결과 (2026-04-29)
+
+**Critical 버그 수정 (Step 1)**:
+| 항목 | 커밋 |
+|---|---|
+| Step 1-A: reissue JwtException → 401 + 레이어 정리 (Controller→Service 위임, GlobalExceptionHandler에 @ExceptionHandler(JwtException) 추가) | `550e824` |
+| Step 1-B: UserUpdateReq.gender `int` → `Integer` (미전송과 0 구분) | `3b06047` |
+| Step 1-C: 조회 메서드 `@Transactional(readOnly=true)` (checkId/signin/getUser) | `3e28474` |
+
+**테스트 작성 (Step 2) — 42개 / 0 failures / 0 errors**:
+| 모듈/클래스 | 케이스 수 | 커밋 |
+|---|---|---|
+| `mmg-common` JwtTokenProviderTest (Generate 3 + Verify 5) | **8** | `803182f` |
+| `mmg-auth-service` UserServiceTest (Mockito 단위, 7개 Nested 도메인) | **20** | `3519872` |
+| `mmg-auth-service` UserControllerTest (standalone, 8개 Nested 엔드포인트) | **14** | `61d6b4d` |
+
+**테스트 인프라**:
+- `mmg-common`/`mmg-auth-service` 둘 다 `spring-boot-starter-test` + `useJUnitPlatform()` 추가
+- `mmg-common` test에 starter-web/security 노출 (production이 compileOnly로 잡은 Jackson 3 / SecurityFilterChain을 test에서 사용)
+- `mmg-auth-service` test에 spring-security-test 추가
+
+**검증 방식 (CLAUDE.md §6.5 준수)**:
+- assertNotNull 단독 사용 0건
+- 반환값 / 예외 타입+메시지+status / Mockito verify(호출/미호출) / ArgumentCaptor(저장된 User 필드)
+- 학원 공유 DB 의존 0 — Service는 Mock, Controller는 standaloneSetup. 실 DB 영향 없음.
+
+**Step 1-A·1-B 수정 검증 핵심 케이스**:
+- `Reissue.rtExpired_propagatesJwtException` (Service) + `Reissue.rtExpired_returns401_notFiveHundred` (Controller): RT 만료 시 500 아닌 **401** 응답 동결
+- `UpdateUser.genderZero_actuallyChanges` (Service) + `UpdateUser.genderOmitted_isNull` (Controller): gender Integer 타입 — 0 명시와 미전송 구분 동결
 
 ---
 
