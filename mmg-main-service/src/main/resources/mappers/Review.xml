@@ -4,10 +4,8 @@
 
 <mapper namespace="com.green.mmg.main.review.ReviewMapper">
 
-    <!-- 리뷰 등록 -->
-    <insert id="postReview">
-        INSERT INTO review SET order_id=#{orderId}, rating=#{rating}, contents=#{text}, photo=#{image}
-    </insert>
+    <!-- Phase 3-C-2: postReview는 ReviewRepository.saveAndFlush로 대체 (BaseEntity Auditing 검증).
+         아래 9 SQL은 영구 잔존 (다중 테이블 UPDATE/DELETE, JOIN, 집계, cross-table). -->
 
     <!-- 리뷰 작성 권한 확인 -->
     <select id="checkReviewWriter">

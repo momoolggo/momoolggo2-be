@@ -12,7 +12,7 @@ import java.util.Map;
 @Mapper
 public interface ReviewMapper {
 
-    int postReview(ReviewReq req);
+    // postReview는 ReviewRepository.saveAndFlush로 대체 (Phase 3-C-2 BaseEntity 첫 검증)
 
     long checkReviewWriter(ReviewReq req);
 
