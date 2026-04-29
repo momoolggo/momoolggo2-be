@@ -156,12 +156,4 @@ public class OrderService {
         // 응답 동결: 기존 OrderMapper.maxHistoryPage가 int 반환 → 동일 타입 유지
         return (int) orderRepository.countByUserNo(id);
     }
-
-    /**
-     * Phase 2-Backfill-A: 파라미터 orderId → storeId.
-     * placeOrder/deleteOrder 트랜잭션 내부에서 직접 호출하므로 외부 노출 메서드 유지는 회귀 호환용.
-     */
-    public int calSumOrder(long storeId) {
-        return orderMapper.calSumOrder(storeId);  // store 테이블 cross-table UPDATE — 영구 잔존
-    }
 }
