@@ -23,6 +23,17 @@ mybatis:
     map-underscore-to-camel-case: true
   mapper-locations: classpath:mappers/*.xml
 
+# JPA + MyBatis 하이브리드 (Phase 3-B) — 단순 CRUD는 JPA, JOIN/집계는 MyBatis 영구 공존
+spring.jpa:
+  hibernate:
+    ddl-auto: validate          # ⚠️ validate 외 값 절대 금지 (스키마 변경 X)
+    naming.physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+  open-in-view: false
+  properties:
+    hibernate:
+      format_sql: true
+  show-sql: true
+
 # 이미지 업로드 (main-service 단독 책임 — CLAUDE.md §5)
 file:
   upload:
