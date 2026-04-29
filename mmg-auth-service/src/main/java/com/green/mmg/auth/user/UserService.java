@@ -105,7 +105,7 @@ public class UserService {
                 .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         if (req.getName() != null && !req.getName().isBlank())  user.setName(req.getName());
         if (req.getTel() != null && !req.getTel().isBlank())    user.setTel(req.getTel());
-        if (req.getGender() != 0)                                user.setGender(req.getGender());
+        if (req.getGender() != null)                             user.setGender(req.getGender());
         if (req.getBirth() != null && !req.getBirth().isBlank()) user.setBirth(req.getBirth());
         if (req.getUserPw() != null && !req.getUserPw().isBlank())
             user.setUserPw(passwordEncoder.encode(req.getUserPw()));
