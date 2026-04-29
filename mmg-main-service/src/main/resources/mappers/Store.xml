@@ -101,23 +101,8 @@
         LIMIT #{startIdx}, #{size}
     </select>
 
-    <select id="favoriteCount">
-        SELECT COUNT(1)
-        FROM likedstore
-        WHERE user_no = #{userNo}
-    </select>
-
-    <select id="checkWish">
-        select count(1) from likedstore where user_no= #{userNo} and store_id=#{storeId}
-    </select>
-
-    <delete id="deleteWish">
-    delete from likedstore where user_no= #{userNo} and store_id=#{storeId}
-    </delete>
-
-    <insert id="insertWish">
- insert into likedstore set user_no=#{userNo}, store_id=#{storeId}
-    </insert>
+    <!-- Phase 3-B-2: favoriteCount / checkWish / deleteWish / insertWish 4개 SQL은 LikedStoreRepository로 이전.
+         favoriteList(JOIN+LIMIT)만 잔존. -->
 
     <!-- 주변 가게 검색 (3km 이내) -->
     <select id="findNearby" resultType="com.green.mmg.main.store.model.StoreGetRes">

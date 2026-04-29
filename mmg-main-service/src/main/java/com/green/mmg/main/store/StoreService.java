@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class StoreService {
     private final StoreMapper storeMapper;
+    private final LikedStoreRepository likedStoreRepository;  // Phase 3-B-2: 단순 CRUD
     private final AuthFeignClient authFeignClient;   // Phase 4-A: cross-schema user JOIN 대체
 
     public List<StoreGetRes> storeListGet(StoreGetReq req){
@@ -42,23 +43,29 @@ public class StoreService {
 
     @Transactional
     public boolean wishToggle(FavoriteToggleReq req){
-        int check =storeMapper.checkWish(req);
-        System.out.println("dd"+req.getStoreId());
-        System.out.println(req.getUserNo());
-        if(check>0){storeMapper.deleteWish(req); return false;}
-        else{storeMapper.insertWish(req); return true;}
+        // Phase 3-B-2: MyBatis 4 SQL → JPA Repository
+        boolean liked = likedStoreRepository.existsByUserNoAndStoreId(req.getUserNo(), req.getStoreId());
+        if (liked) {
+            likedStoreRepository.deleteByUserNoAndStoreId(req.getUserNo(), req.getStoreId());
+            return false;
+        } else {
+            // saveAndFlush: 같은 트랜잭션 내 후속 MyBatis SELECT(favoriteList JOIN)에 즉시 가시화
+            likedStoreRepository.saveAndFlush(new com.green.mmg.main.store.model.LikedStore(
+                    req.getUserNo(), req.getStoreId(), null));
+            return true;
+        }
     }
 
     public boolean checkWish(FavoriteToggleReq req){
-        return storeMapper.checkWish(req)>0;
+        return likedStoreRepository.existsByUserNoAndStoreId(req.getUserNo(), req.getStoreId());
     }
 
     public Map<String, Object> getWishListResponse(StoreFavoriteReq req) {
         Map<String, Object> response = new HashMap<>();
-        // 1. 찜 목록 리스트 가져오기 (LIMIT 적용됨)
+        // 1. 찜 목록 리스트 (JOIN+LIMIT) — MyBatis 잔존 (하이브리드 공존)
         List<StoreGetRes> list = storeMapper.favoriteList(req);
-        // 2. 전체 찜 개수 가져오기 (LIMIT 없음)
-        int totalCount = storeMapper.favoriteCount(req.getUserNo());
+        // 2. 전체 찜 개수 — JPA Repository
+        int totalCount = (int) likedStoreRepository.countByUserNo(req.getUserNo());
 
         response.put("list", list);
         response.put("totalCount", totalCount);

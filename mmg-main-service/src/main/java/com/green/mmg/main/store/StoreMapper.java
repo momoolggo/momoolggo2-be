@@ -14,11 +14,10 @@ public interface StoreMapper {
     StoreOneGetRes findOne(long id);
     List<MenuGetRes> menuAll(long id);
     int getMaxPage(StoreGetReq req);
-    List<StoreGetRes> favoriteList( StoreFavoriteReq req);
-    int favoriteCount(long id);
-    int checkWish(FavoriteToggleReq req);
-    int deleteWish(FavoriteToggleReq req);
-    int insertWish(FavoriteToggleReq req);
+
+    /** Phase 3-B-2: JOIN+LIMIT 잔존 (LikedStoreRepository와 공존). favoriteCount/checkWish/insertWish/deleteWish는 JPA로 이동. */
+    List<StoreGetRes> favoriteList(StoreFavoriteReq req);
+
     List<StoreGetRes> searchStore(@Param("searchText") String searchText);
     List<StoreGetRes> findNearby(@Param("lat") double lat, @Param("lng") double lng);
 
