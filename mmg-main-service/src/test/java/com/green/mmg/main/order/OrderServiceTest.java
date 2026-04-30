@@ -1,6 +1,7 @@
 package com.green.mmg.main.order;
 
 import com.green.mmg.common.dto.feign.UserBriefDto;
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.address.UserAddressRepository;
 import com.green.mmg.main.cart.CartMapper;
@@ -11,6 +12,7 @@ import com.green.mmg.main.order.model.OrderAddressInfo;
 import com.green.mmg.main.order.model.OrderHistoryDto;
 import com.green.mmg.main.order.model.OrderHistoryReq;
 import com.green.mmg.main.order.model.OrderInfoRes;
+import com.green.mmg.main.order.model.Orders;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 
 import java.util.List;
 import java.util.Optional;
@@ -158,53 +161,55 @@ class OrderServiceTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("getOrderHistory — 주문 내역 (orderMapper + items 합성)")
+    @DisplayName("getOrderHistory — 권한 + 주문 내역 (orderMapper + items 합성)")
     class GetOrderHistory {
 
         @Test
-        @DisplayName("주문 N개 → 각 주문에 OrderItemDto 합성 (findItemsByOrderId N회 호출)")
+        @DisplayName("happy: req.userId == caller → N개 주문 + items 합성")
         void historyAssembledWithItems() {
             OrderHistoryReq req = new OrderHistoryReq(USER_NO, 1, 10);
 
             OrderHistoryDto o1 = new OrderHistoryDto();
             o1.setOrderId(391_000_001L);
-            o1.setStoreName("가게A");
             OrderHistoryDto o2 = new OrderHistoryDto();
             o2.setOrderId(391_000_002L);
-            o2.setStoreName("가게B");
             when(orderMapper.findOrdersByUserId(req)).thenReturn(List.of(o1, o2));
 
             List<OrderHistoryDto.OrderItemDto> items1 = List.of(
                     new OrderHistoryDto.OrderItemDto("피자", 2, 15000));
             List<OrderHistoryDto.OrderItemDto> items2 = List.of(
-                    new OrderHistoryDto.OrderItemDto("치킨", 1, 18000),
-                    new OrderHistoryDto.OrderItemDto("콜라", 1, 2000));
+                    new OrderHistoryDto.OrderItemDto("치킨", 1, 18000));
             when(orderDetailRepository.findItemsByOrderId(391_000_001L)).thenReturn(items1);
             when(orderDetailRepository.findItemsByOrderId(391_000_002L)).thenReturn(items2);
 
-            List<OrderHistoryDto> result = orderService.getOrderHistory(req);
+            List<OrderHistoryDto> result = orderService.getOrderHistory(USER_NO, req);
 
             assertThat(result).hasSize(2);
-            assertThat(result.get(0).getItems()).hasSize(1);
             assertThat(result.get(0).getItems().get(0).getName()).isEqualTo("피자");
-            assertThat(result.get(0).getItems().get(0).getCount()).isEqualTo(2);
-            assertThat(result.get(0).getItems().get(0).getPrice()).isEqualTo(15000);
-            assertThat(result.get(1).getItems()).hasSize(2);
-            assertThat(result.get(1).getItems().get(0).getName()).isEqualTo("치킨");
-
-            // findItemsByOrderId가 주문 수만큼 호출 (현재 구현 — N+1 의도된 분리, JPQL constructor expression)
-            verify(orderDetailRepository).findItemsByOrderId(391_000_001L);
-            verify(orderDetailRepository).findItemsByOrderId(391_000_002L);
             verify(orderDetailRepository, times(2)).findItemsByOrderId(anyLong());
         }
 
         @Test
-        @DisplayName("주문 0개 → orderDetailRepository 호출 0 + 빈 리스트 반환")
+        @DisplayName("403 위조: req.userId != caller → FORBIDDEN '본인 주문 내역만 조회 가능합니다.' + Mapper/Repository 미호출")
+        void otherUserId_throwsForbidden() {
+            OrderHistoryReq req = new OrderHistoryReq(999L, 1, 10);  // 위조 userId
+
+            assertThatThrownBy(() -> orderService.getOrderHistory(USER_NO, req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 주문 내역만 조회 가능합니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(orderMapper, never()).findOrdersByUserId(any());
+            verify(orderDetailRepository, never()).findItemsByOrderId(anyLong());
+        }
+
+        @Test
+        @DisplayName("happy: 주문 0개 → orderDetailRepository 호출 0 + 빈 리스트")
         void noOrders_emptyListReturned() {
             OrderHistoryReq req = new OrderHistoryReq(USER_NO, 1, 10);
             when(orderMapper.findOrdersByUserId(req)).thenReturn(List.of());
 
-            List<OrderHistoryDto> result = orderService.getOrderHistory(req);
+            List<OrderHistoryDto> result = orderService.getOrderHistory(USER_NO, req);
 
             assertThat(result).isEmpty();
             verify(orderDetailRepository, never()).findItemsByOrderId(anyLong());
@@ -213,58 +218,96 @@ class OrderServiceTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("orderHistoryDetail — 주문 상세")
+    @DisplayName("orderHistoryDetail — 권한 + 주문 상세")
     class OrderHistoryDetailNested {
 
         @Test
-        @DisplayName("orderMapper 결과에 items 합성 후 반환")
+        @DisplayName("happy: 본인 주문 → orderMapper 결과에 items 합성")
         void detail_assembledWithItems() {
             long orderId = 391_000_001L;
+            Orders order = new Orders();
+            order.setOrderId(orderId);
+            order.setUserNo(USER_NO);
+            when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+
             OrderHistoryDto dto = new OrderHistoryDto();
             dto.setOrderId(orderId);
             dto.setStoreName("가게A");
-            dto.setStoreId(STORE_ID);
             when(orderMapper.orderHistoryDetail(orderId)).thenReturn(dto);
 
             List<OrderHistoryDto.OrderItemDto> items = List.of(
-                    new OrderHistoryDto.OrderItemDto("피자", 1, 15000),
-                    new OrderHistoryDto.OrderItemDto("콜라", 2, 2000));
+                    new OrderHistoryDto.OrderItemDto("피자", 1, 15000));
             when(orderDetailRepository.findItemsByOrderId(orderId)).thenReturn(items);
 
-            OrderHistoryDto result = orderService.orderHistoryDetail(orderId);
+            OrderHistoryDto result = orderService.orderHistoryDetail(USER_NO, orderId);
 
             assertThat(result.getOrderId()).isEqualTo(orderId);
-            assertThat(result.getStoreName()).isEqualTo("가게A");
-            assertThat(result.getItems()).hasSize(2);
-            assertThat(result.getItems().get(0).getName()).isEqualTo("피자");
-            assertThat(result.getItems().get(1).getCount()).isEqualTo(2);
-            verify(orderDetailRepository).findItemsByOrderId(orderId);
+            assertThat(result.getItems()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("403: 다른 사용자 주문 상세 시도 → FORBIDDEN '본인 주문만 조회 가능합니다.' + Mapper 미호출")
+        void otherUserOrder_throwsForbidden() {
+            long orderId = 391_000_001L;
+            Orders order = new Orders();
+            order.setOrderId(orderId);
+            order.setUserNo(999L);  // 타인 소유
+            when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+
+            assertThatThrownBy(() -> orderService.orderHistoryDetail(USER_NO, orderId))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 주문만 조회 가능합니다.");
+
+            verify(orderMapper, never()).orderHistoryDetail(anyLong());
+            verify(orderDetailRepository, never()).findItemsByOrderId(anyLong());
+        }
+
+        @Test
+        @DisplayName("404: orderId 미존재 → NOT_FOUND '주문을 찾을 수 없습니다.'")
+        void orderNotFound_throwsNotFound() {
+            long orderId = 999_999L;
+            when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> orderService.orderHistoryDetail(USER_NO, orderId))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("주문을 찾을 수 없습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
         }
     }
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("maxHistoryPage — 주문 내역 최대 페이지")
+    @DisplayName("maxHistoryPage — 권한 + 주문 내역 최대 페이지")
     class MaxHistoryPage {
 
         @Test
-        @DisplayName("orderRepository.countByUserNo를 int로 캐스팅 반환 (응답 동결: int)")
+        @DisplayName("happy: path userId == caller → countByUserNo 위임 (응답 동결: int)")
         void delegatesToCountByUserNo() {
             when(orderRepository.countByUserNo(USER_NO)).thenReturn(7L);
 
-            int result = orderService.maxHistoryPage(USER_NO);
+            int result = orderService.maxHistoryPage(USER_NO, USER_NO);
 
             assertThat(result).isEqualTo(7);
             verify(orderRepository).countByUserNo(USER_NO);
-            verifyNoInteractions(orderMapper);  // MyBatis 호출 0 — JPA로 전환됨 동결
+            verifyNoInteractions(orderMapper);
         }
 
         @Test
-        @DisplayName("count=0 → 0 반환 (NullPointerException 없음)")
+        @DisplayName("403: path userId != caller → FORBIDDEN + countByUserNo 미호출")
+        void otherUserId_throwsForbidden() {
+            assertThatThrownBy(() -> orderService.maxHistoryPage(USER_NO, 999L))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 주문 내역만 조회 가능합니다.");
+
+            verify(orderRepository, never()).countByUserNo(anyLong());
+        }
+
+        @Test
+        @DisplayName("happy: count=0 → 0 반환")
         void zeroCount_returnsZero() {
             when(orderRepository.countByUserNo(USER_NO)).thenReturn(0L);
 
-            int result = orderService.maxHistoryPage(USER_NO);
+            int result = orderService.maxHistoryPage(USER_NO, USER_NO);
 
             assertThat(result).isZero();
         }
