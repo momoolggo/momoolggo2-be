@@ -139,15 +139,17 @@ public class OwnerService {
         ownerMapper.deleteOrder(orderId);
     }
 
-    // ========== 메뉴 관련 ==========
+    // ========== 메뉴 관련 (D-bis 그룹 ㄷ: 권한 분기 추가) ==========
 
-    public OwnerMenuRes registerMenu(OwnerMenuRegReq dto){
+    public OwnerMenuRes registerMenu(long callerOwnerNo, OwnerMenuRegReq dto){
+        verifyStoreOwner(callerOwnerNo, dto.getStoreId());
         ownerMapper.registerMenu(dto);
         return ownerMapper.getMenuById(dto.getMenuId());
     }
 
     @Transactional
-    public OwnerMenuRes updateMenu(OwnerMenuUpdateReq dto){
+    public OwnerMenuRes updateMenu(long callerOwnerNo, OwnerMenuUpdateReq dto){
+        verifyMenuOwner(callerOwnerNo, dto.getMenuId());
         int result = ownerMapper.updateMenu(dto);
         if (result == 0) {
             throw new RuntimeException("메뉴 수정 실패: 해당 메뉴를 찾을 수 없음");
@@ -156,7 +158,8 @@ public class OwnerService {
     }
 
     @Transactional
-    public Long deleteMenu(Long menuId){
+    public Long deleteMenu(long callerOwnerNo, Long menuId){
+        verifyMenuOwner(callerOwnerNo, menuId);
         int result = ownerMapper.deleteMenu(menuId);
         if (result == 0) {
             throw new RuntimeException("메뉴 삭제 실패: 해당 메뉴를 찾을 수 없음");
@@ -164,7 +167,8 @@ public class OwnerService {
         return menuId;
     }
 
-    public List<OwnerMenuRes> getMenusByStoreId(Long storeId) {
+    public List<OwnerMenuRes> getMenusByStoreId(long callerOwnerNo, Long storeId) {
+        verifyStoreOwner(callerOwnerNo, storeId);
         return ownerMapper.getMenusByStoreId(storeId);
     }
 

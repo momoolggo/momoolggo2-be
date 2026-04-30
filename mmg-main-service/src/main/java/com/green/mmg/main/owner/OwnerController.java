@@ -104,26 +104,30 @@ public class OwnerController {
     // ========== 메뉴 관련 ==========
 
     @PostMapping("/menu")
-    public ResultResponse<OwnerMenuRes> registerMenu(@RequestBody OwnerMenuRegReq dto){
-        OwnerMenuRes result = ownerService.registerMenu(dto);
+    public ResultResponse<OwnerMenuRes> registerMenu(@AuthenticationPrincipal UserPrincipal principal,
+                                                     @RequestBody OwnerMenuRegReq dto){
+        OwnerMenuRes result = ownerService.registerMenu(principal.getSignedUserNo(), dto);
         return new ResultResponse<>("메뉴가 등록 되었습니다", result);
     }
 
     @PutMapping("/menu")
-    public ResultResponse<OwnerMenuRes> updateMenu(@RequestBody OwnerMenuUpdateReq dto){
-        OwnerMenuRes updateMenu = ownerService.updateMenu(dto);
+    public ResultResponse<OwnerMenuRes> updateMenu(@AuthenticationPrincipal UserPrincipal principal,
+                                                   @RequestBody OwnerMenuUpdateReq dto){
+        OwnerMenuRes updateMenu = ownerService.updateMenu(principal.getSignedUserNo(), dto);
         return new ResultResponse<>("메뉴가 수정되었습니다.", updateMenu);
     }
 
     @DeleteMapping("/menu/{menu_id}")
-    public ResultResponse<Long> deleteMenu(@PathVariable("menu_id") Long menuId){
-        Long deleteId = ownerService.deleteMenu(menuId);
+    public ResultResponse<Long> deleteMenu(@AuthenticationPrincipal UserPrincipal principal,
+                                           @PathVariable("menu_id") Long menuId){
+        Long deleteId = ownerService.deleteMenu(principal.getSignedUserNo(), menuId);
         return new ResultResponse<>("메뉴가 삭제되었습니다.", deleteId);
     }
 
     @GetMapping("/menu")
-    public ResultResponse<List<OwnerMenuRes>> getMenus(@RequestParam Long storeId) {
-        List<OwnerMenuRes> list = ownerService.getMenusByStoreId(storeId);
+    public ResultResponse<List<OwnerMenuRes>> getMenus(@AuthenticationPrincipal UserPrincipal principal,
+                                                       @RequestParam Long storeId) {
+        List<OwnerMenuRes> list = ownerService.getMenusByStoreId(principal.getSignedUserNo(), storeId);
         return new ResultResponse<>("메뉴 조회 성공", list);
     }
 
