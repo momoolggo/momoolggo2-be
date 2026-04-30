@@ -174,18 +174,20 @@ public class OwnerController {
 
     @GetMapping("/sales/stats")
     public ResultResponse<OwnerSalesStatsRes> getSalesStats(
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam Long storeId,
             @RequestParam String period) {
-        OwnerSalesStatsRes stats = ownerService.getSalesStats(storeId, period);
+        OwnerSalesStatsRes stats = ownerService.getSalesStats(principal.getSignedUserNo(), storeId, period);
         return new ResultResponse<>("매출 통계 조회 성공", stats);
     }
 
     // ranking도 동일하게
     @GetMapping("/sales/ranking")
     public ResultResponse<List<OwnerSalesRankingRes>> getSalesRanking(
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam Long storeId,
             @RequestParam String period) {
-        List<OwnerSalesRankingRes> ranking = ownerService.getSalesRanking(storeId, period);
+        List<OwnerSalesRankingRes> ranking = ownerService.getSalesRanking(principal.getSignedUserNo(), storeId, period);
         return new ResultResponse<>("매출 순위 조회 성공", ranking);
     }
 }

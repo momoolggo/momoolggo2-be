@@ -172,13 +172,15 @@ public class OwnerService {
         return ownerMapper.getMenusByStoreId(storeId);
     }
 
-    // ========== 매출 관련 ==========
+    // ========== 매출 관련 (D-bis 그룹 ㄹ: 권한 분기 추가) ==========
 
-    public OwnerSalesStatsRes getSalesStats(long storeId, String period) {
+    public OwnerSalesStatsRes getSalesStats(long callerOwnerNo, long storeId, String period) {
+        verifyStoreOwner(callerOwnerNo, storeId);
         return ownerMapper.getSalesStats(storeId, period);
     }
 
-    public List<OwnerSalesRankingRes> getSalesRanking(long storeId, String period) {
+    public List<OwnerSalesRankingRes> getSalesRanking(long callerOwnerNo, long storeId, String period) {
+        verifyStoreOwner(callerOwnerNo, storeId);
         return ownerMapper.getSalesRanking(storeId, period);
     }
 
