@@ -1,6 +1,7 @@
 package com.green.mmg.main.owner;
 
 import com.green.mmg.common.dto.feign.UserBriefDto;
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.owner.model.OwnerMenuRegReq;
 import com.green.mmg.main.owner.model.OwnerMenuRes;
@@ -20,6 +21,7 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -362,6 +364,148 @@ class OwnerServiceTest {
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining("메뉴 삭제 실패")
                     .hasMessageContaining("해당 메뉴를 찾을 수 없음");
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // Phase 2-Backfill-D-bis 그룹 ㅁ: 카테고리 권한 분기
+    // ═════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("getCategoriesByStoreId — verifyStoreOwner")
+    class GetCategoriesByStoreId {
+
+        @Test
+        @DisplayName("happy: 본인 가게 → ownerMapper.getCategoriesByStoreId 위임")
+        void happyPath_delegates() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
+            when(ownerMapper.getCategoriesByStoreId(STORE_ID)).thenReturn(List.of(java.util.Map.of("id", 1)));
+
+            List<java.util.Map<String, Object>> result = ownerService.getCategoriesByStoreId(USER_ID, STORE_ID);
+
+            assertThat(result).hasSize(1);
+            verify(ownerMapper).getCategoriesByStoreId(STORE_ID);
+        }
+
+        @Test
+        @DisplayName("403: 다른 점주 가게 → FORBIDDEN '본인 가게만 접근 가능합니다.' + 후속 미호출")
+        void otherOwner_throwsForbidden() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID + 1);  // 타인 소유
+
+            assertThatThrownBy(() -> ownerService.getCategoriesByStoreId(USER_ID, STORE_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게만 접근 가능합니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(ownerMapper, never()).getCategoriesByStoreId(anyLong());
+        }
+
+        @Test
+        @DisplayName("404: storeId 미존재 → NOT_FOUND '가게를 찾을 수 없습니다.'")
+        void storeNotFound_throwsNotFound() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(null);
+
+            assertThatThrownBy(() -> ownerService.getCategoriesByStoreId(USER_ID, STORE_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("가게를 찾을 수 없습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("addCategory — verifyStoreOwner")
+    class AddCategory {
+
+        @Test
+        @DisplayName("happy: 본인 가게 → addCategory 위임")
+        void happyPath_delegates() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
+
+            ownerService.addCategory(USER_ID, STORE_ID, "사이드");
+
+            verify(ownerMapper).addCategory(STORE_ID, "사이드");
+        }
+
+        @Test
+        @DisplayName("403: 다른 점주 → addCategory 미호출")
+        void otherOwner_throwsForbiddenAndShortCircuits() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.addCategory(USER_ID, STORE_ID, "x"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).addCategory(anyLong(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("updateCategory — verifyCategoryOwner")
+    class UpdateCategory {
+
+        private static final long CATEGORY_ID = 333L;
+
+        @Test
+        @DisplayName("happy: 본인 카테고리 → updateCategory 위임")
+        void happyPath_delegates() {
+            when(ownerMapper.findStoreOwnerByCategoryId(CATEGORY_ID)).thenReturn(USER_ID);
+
+            ownerService.updateCategory(USER_ID, CATEGORY_ID, "변경");
+
+            verify(ownerMapper).updateCategory(CATEGORY_ID, "변경");
+        }
+
+        @Test
+        @DisplayName("403: 다른 점주의 카테고리 → FORBIDDEN '본인 가게의 카테고리만 접근 가능합니다.' + 미호출")
+        void otherOwnerCategory_throwsForbidden() {
+            when(ownerMapper.findStoreOwnerByCategoryId(CATEGORY_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.updateCategory(USER_ID, CATEGORY_ID, "x"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게의 카테고리만 접근 가능합니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(ownerMapper, never()).updateCategory(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("404: categoryId 미존재 → NOT_FOUND '카테고리를 찾을 수 없습니다.'")
+        void categoryNotFound_throwsNotFound() {
+            when(ownerMapper.findStoreOwnerByCategoryId(CATEGORY_ID)).thenReturn(null);
+
+            assertThatThrownBy(() -> ownerService.updateCategory(USER_ID, CATEGORY_ID, "x"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("카테고리를 찾을 수 없습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("deleteCategory — verifyCategoryOwner")
+    class DeleteCategory {
+
+        private static final long CATEGORY_ID = 333L;
+
+        @Test
+        @DisplayName("happy: 본인 카테고리 → deleteCategory 위임")
+        void happyPath_delegates() {
+            when(ownerMapper.findStoreOwnerByCategoryId(CATEGORY_ID)).thenReturn(USER_ID);
+
+            ownerService.deleteCategory(USER_ID, CATEGORY_ID);
+
+            verify(ownerMapper).deleteCategory(CATEGORY_ID);
+        }
+
+        @Test
+        @DisplayName("403: 다른 점주의 카테고리 → FORBIDDEN + 미호출")
+        void otherOwnerCategory_throwsForbiddenAndShortCircuits() {
+            when(ownerMapper.findStoreOwnerByCategoryId(CATEGORY_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.deleteCategory(USER_ID, CATEGORY_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게의 카테고리만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).deleteCategory(anyLong());
         }
     }
 
