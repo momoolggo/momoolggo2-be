@@ -224,21 +224,25 @@ public class OwnerService {
         }
     }
 
-    // ========== 카테고리 관련 ==========
+    // ========== 카테고리 관련 (D-bis 그룹 ㅁ: 권한 분기 추가) ==========
 
-    public List<Map<String, Object>> getCategoriesByStoreId(Long storeId) {
+    public List<Map<String, Object>> getCategoriesByStoreId(long callerOwnerNo, Long storeId) {
+        verifyStoreOwner(callerOwnerNo, storeId);
         return ownerMapper.getCategoriesByStoreId(storeId);
     }
 
-    public void addCategory(Long storeId, String category) {
+    public void addCategory(long callerOwnerNo, Long storeId, String category) {
+        verifyStoreOwner(callerOwnerNo, storeId);
         ownerMapper.addCategory(storeId, category);
     }
 
-    public void updateCategory(Long categoryId, String category) {
+    public void updateCategory(long callerOwnerNo, Long categoryId, String category) {
+        verifyCategoryOwner(callerOwnerNo, categoryId);
         ownerMapper.updateCategory(categoryId, category);
     }
 
-    public void deleteCategory(Long categoryId) {
+    public void deleteCategory(long callerOwnerNo, Long categoryId) {
+        verifyCategoryOwner(callerOwnerNo, categoryId);
         ownerMapper.deleteCategory(categoryId);
     }
 }

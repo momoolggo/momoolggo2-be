@@ -137,25 +137,32 @@ public class OwnerController {
     // ========== 카테고리 관련 ==========
 
     @GetMapping("/category")
-    public ResultResponse<List<Map<String, Object>>> getCategories(@RequestParam Long storeId) {
-        return new ResultResponse<>("카테고리 조회 성공", ownerService.getCategoriesByStoreId(storeId));
+    public ResultResponse<List<Map<String, Object>>> getCategories(@AuthenticationPrincipal UserPrincipal principal,
+                                                                   @RequestParam Long storeId) {
+        return new ResultResponse<>("카테고리 조회 성공",
+                ownerService.getCategoriesByStoreId(principal.getSignedUserNo(), storeId));
     }
 
     @PostMapping("/category")
-    public ResultResponse<Void> addCategory(@RequestBody Map<String, Object> body) {
-        ownerService.addCategory(Long.valueOf(body.get("storeId").toString()), body.get("category").toString());
+    public ResultResponse<Void> addCategory(@AuthenticationPrincipal UserPrincipal principal,
+                                            @RequestBody Map<String, Object> body) {
+        ownerService.addCategory(principal.getSignedUserNo(),
+                Long.valueOf(body.get("storeId").toString()), body.get("category").toString());
         return new ResultResponse<>("카테고리 추가 성공", null);
     }
 
     @PutMapping("/category")
-    public ResultResponse<Void> updateCategory(@RequestBody Map<String, Object> body) {
-        ownerService.updateCategory(Long.valueOf(body.get("categoryId").toString()), body.get("category").toString());
+    public ResultResponse<Void> updateCategory(@AuthenticationPrincipal UserPrincipal principal,
+                                               @RequestBody Map<String, Object> body) {
+        ownerService.updateCategory(principal.getSignedUserNo(),
+                Long.valueOf(body.get("categoryId").toString()), body.get("category").toString());
         return new ResultResponse<>("카테고리 수정 성공", null);
     }
 
     @DeleteMapping("/category/{categoryId}")
-    public ResultResponse<Void> deleteCategory(@PathVariable Long categoryId) {
-        ownerService.deleteCategory(categoryId);
+    public ResultResponse<Void> deleteCategory(@AuthenticationPrincipal UserPrincipal principal,
+                                               @PathVariable Long categoryId) {
+        ownerService.deleteCategory(principal.getSignedUserNo(), categoryId);
         return new ResultResponse<>("카테고리 삭제 성공", null);
     }
 
