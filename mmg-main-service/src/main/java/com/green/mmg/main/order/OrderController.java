@@ -40,8 +40,9 @@ public class OrderController {
 
     // 삭제 — calSumOrder는 OrderService.deleteOrder 내부에서 처리 (storeId 사전 확보 후 호출)
     @DeleteMapping("/{id}")
-    public ResultResponse<?> deleteOrder(@PathVariable  long id){
-        int result = orderService.deleteOrder(id);
+    public ResultResponse<?> deleteOrder(@AuthenticationPrincipal UserPrincipal principal,
+                                         @PathVariable long id){
+        int result = orderService.deleteOrder(principal.getSignedUserNo(), id);
         return new ResultResponse<>(result==1 ? "삭제성공": "삭제실패", null);
     }
 

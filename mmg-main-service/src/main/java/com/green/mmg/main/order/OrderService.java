@@ -1,5 +1,6 @@
 package com.green.mmg.main.order;
 
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.address.UserAddressRepository;
 import com.green.mmg.main.cart.CartMapper;
@@ -8,6 +9,7 @@ import com.green.mmg.main.cart.model.Cart;
 import com.green.mmg.main.cart.model.CartItemRes;
 import com.green.mmg.main.order.model.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -123,11 +125,15 @@ public class OrderService {
     }
 
     @Transactional
-    public int deleteOrder(long orderId) {
-        // 삭제 전 storeId 확보 — orders row가 삭제된 후엔 storeId 도출 불가
-        Long storeId = orderRepository.findById(orderId)
-                .map(Orders::getStoreId)
-                .orElse(null);
+    public int deleteOrder(long callerUserNo, long orderId) {
+        // 삭제 전 order 조회: storeId 확보 + 소유자 검증 (Phase 3-Backfill-A-1: 보안)
+        // 미존재 orderId는 기존 동작 유지 (return 0 → "삭제실패") — 응답 스펙 동결
+        Orders order = orderRepository.findById(orderId).orElse(null);
+        if (order == null) return 0;
+        if (order.getUserNo() == null || order.getUserNo() != callerUserNo) {
+            throw new BusinessException("본인 주문만 삭제할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
+        Long storeId = order.getStoreId();
         int affected = orderRepository.deleteByOrderIdAndPayStateUnpaid(orderId);
         if (affected > 0 && storeId != null) {
             orderMapper.calSumOrder(storeId);
