@@ -40,9 +40,16 @@ public class StoreController {
         List<MenuGetRes> result= storeService.menuListGet(id);
         return new ResultResponse<>("", result);
     }
-    @GetMapping("/searchstore") // 메뉴 가게 검색
+    @GetMapping("/searchstore") // 메뉴와 가게 검색
     public ResultResponse<?> StoreSearchList(@RequestParam ("search_text") String searchText){
         List<StoreGetRes> result = storeService.storeSearchList(searchText);
+        return new ResultResponse<>("", result);
+    }
+
+    @GetMapping("/{storeid}/menu/search")// 가게 내에서 특정 메뉴 검색
+    public ResultResponse<?> menuSearchInStore(@PathVariable long storeId,
+            @RequestParam ("search_text") String searchText ){
+        List<MenuGetRes> result = storeService.menuSearchInStore(storeId, searchText);
         return new ResultResponse<>("", result);
     }
 

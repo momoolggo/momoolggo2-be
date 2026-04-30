@@ -84,6 +84,33 @@
             s.order_count DESC
     </select>
 
+<select id="menuSearchInStore" resultType="com.green.mmg.main.store.model.MenuGetRes">
+    SELECT distinct
+        s.store_id AS id, m.menu_id, m.name AS menuName, m.price, mc.category_name AS categoryName,
+        m.menu_pic, m.menu_info, m.soldout
+    FROM store s
+        JOIN  menu_category mc ON mc.store_id = s.store_id
+        LEFT JOIN menu m ON m.category_id = mc.category_id
+    <where>
+        s.store_id = #{storeId}
+        <if test="searchText !=null and searchText !=''">
+            AND
+            ( m.name LIKE concat('%', #{searchText}, '%')
+            OR mc.category_name LIKE concat('%', #{searchText}, '%')
+            )
+        </if>
+    </where>
+    ORDER BY
+    CASE
+    WHEN m.name = #{searchText} THEN 1
+    WHEN mc.category_name  LIKE concat(#{searchText}, '%') THEN 2
+    ELSE 3
+    END,
+    s.order_count DESC
+
+</select>
+
+
     <select id="favoriteList">
         SELECT
             s.store_id AS id,

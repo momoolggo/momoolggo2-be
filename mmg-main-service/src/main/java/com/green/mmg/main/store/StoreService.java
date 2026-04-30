@@ -80,6 +80,13 @@ public class StoreService {
         return storeMapper.searchStore(searchText);
     }
 
+    public List<MenuGetRes> menuSearchInStore(long storeId, String searchText) {
+        if(  searchText == null || searchText.trim().isEmpty()) {
+            return List.of();
+        }
+        return storeMapper.menuSearchInStore(storeId,searchText);
+    }
+
     public List<StoreGetRes> findNearbyStores(double lat, double lng) {
         return storeMapper.findNearby(lat, lng);
     }
