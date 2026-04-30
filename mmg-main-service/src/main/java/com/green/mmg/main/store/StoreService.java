@@ -47,7 +47,11 @@ public class StoreService {
     public List<MenuGetRes> menuListGet(long id){ return storeMapper.menuAll(id);}
 
     @Transactional
-    public boolean wishToggle(FavoriteToggleReq req){
+    public boolean wishToggle(long callerUserNo, FavoriteToggleReq req){
+        // Phase 3-Backfill-A-2: dto.userNo 위조 방지 (옵션 B — 불일치 시 FORBIDDEN throw)
+        if (req.getUserNo() != callerUserNo) {
+            throw new BusinessException("자신의 계정으로만 찜할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
         // Phase 3-B-2: MyBatis 4 SQL → JPA Repository
         boolean liked = likedStoreRepository.existsByUserNoAndStoreId(req.getUserNo(), req.getStoreId());
         if (liked) {
@@ -61,11 +65,17 @@ public class StoreService {
         }
     }
 
-    public boolean checkWish(FavoriteToggleReq req){
+    public boolean checkWish(long callerUserNo, FavoriteToggleReq req){
+        if (req.getUserNo() != callerUserNo) {
+            throw new BusinessException("자신의 계정으로만 조회할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
         return likedStoreRepository.existsByUserNoAndStoreId(req.getUserNo(), req.getStoreId());
     }
 
-    public Map<String, Object> getWishListResponse(StoreFavoriteReq req) {
+    public Map<String, Object> getWishListResponse(long callerUserNo, StoreFavoriteReq req) {
+        if (req.getUserNo() != callerUserNo) {
+            throw new BusinessException("본인 찜 목록만 조회 가능합니다.", HttpStatus.FORBIDDEN);
+        }
         Map<String, Object> response = new HashMap<>();
         // 1. 찜 목록 리스트 (JOIN+LIMIT) — MyBatis 잔존 (하이브리드 공존)
         List<StoreGetRes> list = storeMapper.favoriteList(req);

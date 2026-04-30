@@ -1,12 +1,17 @@
 package com.green.mmg.main.store;
 
+import com.green.mmg.common.model.JwtUser;
+import com.green.mmg.common.model.UserPrincipal;
 import com.green.mmg.main.support.SnapshotAssert;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -52,6 +57,17 @@ class LikedStoreControllerIntegrationTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+
+        // Phase 3-Backfill-A-2: wishToggle/checkWish/wishListGet에 dto.userNo 위조 방지 추가에 따라 principal 직접 주입
+        UserPrincipal principal = new UserPrincipal(
+                new JwtUser(TEST_USER_NO, "CUSTOMER", "ACTIVE", "테스트사용자"));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test

@@ -2,8 +2,10 @@ package com.green.mmg.main.store;
 
 import com.green.mmg.main.store.model.*;
 import com.green.mmg.common.dto.ResultResponse;
+import com.green.mmg.common.model.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -47,21 +49,23 @@ public class StoreController {
     }
 
     @GetMapping("/favorite/check") //가게찜여부 확인
-    public ResultResponse<?> wishCheck(@ModelAttribute FavoriteToggleReq req){
-        boolean result = storeService.checkWish(req);
+    public ResultResponse<?> wishCheck(@AuthenticationPrincipal UserPrincipal principal,
+                                       @ModelAttribute FavoriteToggleReq req){
+        boolean result = storeService.checkWish(principal.getSignedUserNo(), req);
         return new ResultResponse<>("",result);
     }
 
     @PostMapping("favorite")  //가게찜 토글
-    public ResultResponse<?> wishToggle(@RequestBody FavoriteToggleReq req){
-        System.out.println("qfqdqweq"+req.getUserNo());
-        boolean result = storeService.wishToggle(req);
-      return new ResultResponse<>("",result);
+    public ResultResponse<?> wishToggle(@AuthenticationPrincipal UserPrincipal principal,
+                                        @RequestBody FavoriteToggleReq req){
+        boolean result = storeService.wishToggle(principal.getSignedUserNo(), req);
+        return new ResultResponse<>("",result);
     }
 
     @GetMapping("/favorite") //찜한 가게 목록
-    public ResultResponse<?> wishListGet(@ModelAttribute StoreFavoriteReq req) {
-        Map<String, Object> result = storeService.getWishListResponse(req);
+    public ResultResponse<?> wishListGet(@AuthenticationPrincipal UserPrincipal principal,
+                                         @ModelAttribute StoreFavoriteReq req) {
+        Map<String, Object> result = storeService.getWishListResponse(principal.getSignedUserNo(), req);
 
         return new ResultResponse<>("찜 목록 조회 성공", result);
     }
