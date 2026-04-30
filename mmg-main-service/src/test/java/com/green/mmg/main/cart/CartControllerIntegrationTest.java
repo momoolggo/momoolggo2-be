@@ -1,12 +1,17 @@
 package com.green.mmg.main.cart;
 
+import com.green.mmg.common.model.JwtUser;
+import com.green.mmg.common.model.UserPrincipal;
 import com.green.mmg.main.support.SnapshotAssert;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -24,17 +29,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 /**
  * Phase 3-B-3 검증: Cart 도메인 JPA 전환 + 하이브리드 영구 공존 핵심 시나리오.
+ * Phase 2-Backfill-D Step D-3: principal 주입 추가 (Controller가 @AuthenticationPrincipal 사용).
  *
- * <p>같은 @Transactional 안에서:
- * <ul>
- *   <li>JPA save(Cart) + JPA save(CartDetail) — Repository</li>
- *   <li>MyBatis findStoreIdByMenuId(JOIN) — 메뉴→매장 lookup</li>
- *   <li>MyBatis findCartItems(JOIN) — 응답 조립</li>
- *   <li>MyBatis findStoreNameByStoreId — store_name lookup (Phase 3-D 정리 예정)</li>
- * </ul>
- * 동시 동작 + saveAndFlush로 즉시 가시화 + 응답 스펙 1바이트 동결 확인.</p>
- *
- * <p>학원 공유 DB + @Transactional + @Rollback (INSERT 영향 0).</p>
+ * <p>SecurityContextHolder에 principal 직접 주입 — webAppContextSetup이 Filter chain
+ * 자동 적용 안 함을 이용. {@code @AfterEach}에서 컨텍스트 정리.</p>
  */
 @SpringBootTest
 @Transactional
@@ -50,13 +48,24 @@ class CartControllerIntegrationTest {
     private static final long TEST_USER_NO = 99999L;
 
     /** 사전 조회: store 21에 속한 메뉴, 다른 store(22)에 속한 메뉴 */
-    private static final long MENU_STORE_21 = 17L;     // 숨은집 피자 (store 21)
+    private static final long MENU_STORE_21 = 17L;       // 숨은집 피자 (store 21)
     private static final long MENU_STORE_21_OTHER = 18L; // 갈릭 미트 피자 (store 21)
-    private static final long MENU_STORE_22 = 23L;     // 다른 매장
+    private static final long MENU_STORE_22 = 23L;       // 다른 매장
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+
+        // Controller가 @AuthenticationPrincipal UserPrincipal 받으므로 SecurityContextHolder에 직접 주입
+        UserPrincipal principal = new UserPrincipal(
+                new JwtUser(TEST_USER_NO, "CUSTOMER", "ACTIVE", "테스트사용자"));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
