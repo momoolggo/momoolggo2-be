@@ -157,6 +157,23 @@ class OrderServiceTest {
             verifyNoInteractions(authFeignClient);
             verifyNoInteractions(userAddressRepository);
         }
+
+        @Test
+        @DisplayName("Feign null → BusinessException NOT_FOUND '사용자 정보를 찾을 수 없습니다.' (storeOneGet 패턴 전파)")
+        void feignNull_throwsNotFound() {
+            when(cartRepository.findByUserNo(USER_NO)).thenReturn(Optional.of(cart));
+            when(cartMapper.findCartItems(CART_ID)).thenReturn(cartItems);
+            when(cartMapper.findStoreNameByStoreId(STORE_ID)).thenReturn("가게");
+            when(authFeignClient.getUser(USER_NO)).thenReturn(null);
+
+            assertThatThrownBy(() -> orderService.getOrderInfo(USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("사용자 정보를 찾을 수 없습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+            // setOwnerName/setTel 미실행 + 후속 주소 조회 미발생 동결
+            verifyNoInteractions(userAddressRepository);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────

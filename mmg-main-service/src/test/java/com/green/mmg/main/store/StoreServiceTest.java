@@ -201,6 +201,51 @@ class StoreServiceTest {
     }
 
     @Nested
+    @DisplayName("getStoreReviews — Feign batch null 처리 (A-4 패턴 전파)")
+    class GetStoreReviews {
+
+        @Test
+        @DisplayName("happy: rows 있음 + Feign 정상 → userName 합성")
+        void happyPath_assemblesUserName() {
+            java.util.Map<String, Object> row1 = new java.util.HashMap<>();
+            row1.put("reviewId", 100L);
+            row1.put("userNo", 42L);
+            when(storeMapper.getStoreReviews(STORE_ID)).thenReturn(List.of(row1));
+            when(authFeignClient.getUsers(any())).thenReturn(List.of(
+                    new UserBriefDto(42L, "준하", "010-1111", "")));
+
+            List<java.util.Map<String, Object>> result = storeService.getStoreReviews(STORE_ID);
+
+            assertThat(result.get(0).get("userName")).isEqualTo("준하");
+        }
+
+        @Test
+        @DisplayName("rows 빈 리스트 → Feign 미호출 (early return)")
+        void emptyRows_skipsFeign() {
+            when(storeMapper.getStoreReviews(STORE_ID)).thenReturn(List.of());
+
+            List<java.util.Map<String, Object>> result = storeService.getStoreReviews(STORE_ID);
+
+            assertThat(result).isEmpty();
+            verifyNoInteractions(authFeignClient);
+        }
+
+        @Test
+        @DisplayName("Feign null → 빈 Map → 모든 row의 userName=빈 문자열 (NPE 차단)")
+        void feignNull_userNamesAreBlank() {
+            java.util.Map<String, Object> row1 = new java.util.HashMap<>();
+            row1.put("reviewId", 100L);
+            row1.put("userNo", 42L);
+            when(storeMapper.getStoreReviews(STORE_ID)).thenReturn(List.of(row1));
+            when(authFeignClient.getUsers(any())).thenReturn(null);
+
+            List<java.util.Map<String, Object>> result = storeService.getStoreReviews(STORE_ID);
+
+            assertThat(result.get(0).get("userName")).isEqualTo("");
+        }
+    }
+
+    @Nested
     @DisplayName("getWishListResponse — dto.userNo 위조 방지")
     class GetWishListResponse {
 
