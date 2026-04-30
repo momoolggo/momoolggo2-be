@@ -1,19 +1,30 @@
 package com.green.mmg.main.owner;
 
+import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.owner.model.OwnerOrderRes;
 import com.green.mmg.main.owner.model.OwnerStoreRegReq;
 import com.green.mmg.main.owner.model.OwnerStoreUpdateReq;
+import feign.FeignException;
+import feign.Request;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
@@ -137,6 +148,94 @@ class OwnerServiceTest {
     }
 
     // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("getOrders — Feign batch + 응답 합성 (N+1 회피)")
+    class GetOrders {
+
+        @Test
+        @DisplayName("happy: 중복 userNo 제거(distinct) batch 호출 + customerName/tel 합성")
+        void happyPath_batchedFeignAndAssembled() {
+            OwnerOrderRes o1 = newOrder(391_000_001L, 100L);
+            OwnerOrderRes o2 = newOrder(391_000_002L, 100L);  // 중복 user
+            OwnerOrderRes o3 = newOrder(391_000_003L, 200L);
+            when(ownerMapper.getOrders(STORE_ID, 1, "2026-04-30"))
+                    .thenReturn(List.of(o1, o2, o3));
+            when(authFeignClient.getUsers(anyList())).thenReturn(List.of(
+                    new UserBriefDto(100L, "준하", "010-1111", ""),
+                    new UserBriefDto(200L, "민수", "010-2222", "")
+            ));
+
+            List<OwnerOrderRes> result = ownerService.getOrders(STORE_ID, 1, "2026-04-30");
+
+            // distinct userNos가 batch로 전달됐는지 동결
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<Long>> captor = ArgumentCaptor.forClass(List.class);
+            verify(authFeignClient).getUsers(captor.capture());
+            assertThat(captor.getValue()).containsExactlyInAnyOrder(100L, 200L);  // 중복 제거
+
+            // 합성된 customerName/tel 동결
+            assertThat(result.get(0).getCustomerName()).isEqualTo("준하");
+            assertThat(result.get(0).getTel()).isEqualTo("010-1111");
+            assertThat(result.get(1).getCustomerName()).isEqualTo("준하");  // 같은 user 합성
+            assertThat(result.get(2).getCustomerName()).isEqualTo("민수");
+            assertThat(result.get(2).getTel()).isEqualTo("010-2222");
+        }
+
+        @Test
+        @DisplayName("orders 빈 리스트 → Feign 미호출 (early return 동결)")
+        void emptyOrders_skipsFeign() {
+            when(ownerMapper.getOrders(STORE_ID, null, null)).thenReturn(List.of());
+
+            List<OwnerOrderRes> result = ownerService.getOrders(STORE_ID, null, null);
+
+            assertThat(result).isEmpty();
+            verifyNoInteractions(authFeignClient);
+        }
+
+        @Test
+        @DisplayName("Feign 응답에 없는 userNo → if (u != null) 분기 → customerName/tel 미설정 (현재 동작 동결)")
+        void userMissingFromFeign_keepsNullFields() {
+            OwnerOrderRes o1 = newOrder(391_000_001L, 100L);
+            OwnerOrderRes o2 = newOrder(391_000_002L, 999L);  // Feign 응답에 없음
+            when(ownerMapper.getOrders(STORE_ID, null, null)).thenReturn(List.of(o1, o2));
+            // batch 응답에 user 100만 포함, 999는 누락
+            when(authFeignClient.getUsers(anyList())).thenReturn(List.of(
+                    new UserBriefDto(100L, "준하", "010-1111", "")
+            ));
+
+            List<OwnerOrderRes> result = ownerService.getOrders(STORE_ID, null, null);
+
+            assertThat(result.get(0).getCustomerName()).isEqualTo("준하");
+            assertThat(result.get(0).getTel()).isEqualTo("010-1111");
+            assertThat(result.get(1).getCustomerName()).isNull();  // 미설정 동결
+            assertThat(result.get(1).getTel()).isNull();
+        }
+
+        @Test
+        @DisplayName("Feign 예외 → 호출자에게 그대로 propagate (try-catch 없음 동결)")
+        void feignException_propagates() {
+            OwnerOrderRes o1 = newOrder(391_000_001L, 100L);
+            when(ownerMapper.getOrders(STORE_ID, null, null)).thenReturn(List.of(o1));
+            when(authFeignClient.getUsers(anyList())).thenThrow(
+                    new FeignException.ServiceUnavailable(
+                            "auth down",
+                            Request.create(Request.HttpMethod.GET, "/internal/auth/users",
+                                    new HashMap<>(), null, StandardCharsets.UTF_8, null),
+                            null, null));
+
+            assertThatThrownBy(() -> ownerService.getOrders(STORE_ID, null, null))
+                    .isInstanceOf(FeignException.class);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    private static OwnerOrderRes newOrder(long orderId, long userNo) {
+        OwnerOrderRes o = new OwnerOrderRes();
+        o.setOrderId(orderId);
+        o.setUserNo(userNo);
+        return o;
+    }
+
     private static OwnerStoreRegReq newRegReq(long userId, long categoryId, String name) {
         OwnerStoreRegReq dto = new OwnerStoreRegReq();
         dto.setUserId(userId);
