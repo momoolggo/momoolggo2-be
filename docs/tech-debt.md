@@ -41,6 +41,7 @@
 | **CartService 권한 분기 추가 (cartItem 소유자 검증)** | 2026-04-30 | `CartService.updateCartItem(Long cartItemId, int quantity)` / `deleteCartItem(Long cartItemId)` — `userNo` 파라미터 부재 | `userNo` 파라미터 추가 → `cartDetailRepository.findById` 후 `cart.userNo == 호출자 userNo` 검증 → 불일치 시 `BusinessException FORBIDDEN` |
 | **UserAddressService.delete 권한 분기 추가 (userNo 파라미터, JWT principal)** | 2026-04-30 | `UserAddressService.delete(long addressId)` — `userNo` 파라미터 부재로 다른 사용자 주소 삭제 가능 | `delete(long userNo, long addressId)` 시그니처 변경 → `findById` 후 `address.userNo == 호출자 userNo` 검증 → 불일치 시 `BusinessException FORBIDDEN` |
 | **컨트롤러 시그니처 변경 + 프론트 영향 점검** | 2026-04-30 | `CartController` / `UserAddressController` | `@AuthenticationPrincipal UserPrincipal` 사용 강제 → 컨트롤러 메서드 시그니처 변경 가능 → 프론트(`momoolggo-fe`)의 cart/address 호출부 회귀 점검 필요 |
+| **CartService UPDATE 회로 통합 테스트 추가 (권한 분기 추가와 함께, JPA dirty checking 검증)** | 2026-04-30 | `CartService.updateCartItem` — `CartServiceTest` Mockito 단위는 영속성 컨텍스트가 없어 dirty checking 실제 UPDATE 발행을 검증 못함 | Phase 2-Backfill-D — 권한 분기 추가 작업 시 `@SpringBootTest + @Transactional + @Rollback`으로 cartItem fixture INSERT → updateCartItem → flush → DB row의 quantity 갱신 확인하는 통합 테스트 1건 추가 |
 
 > **현재 동작 동결 테스트**: `CartServiceTest`(13 케이스)와 `UserAddressServiceTest.Delete`(2 케이스)는 권한 분기 부재를 명시적으로 동결한 상태. D 단계에서 권한 분기 추가 시 해당 테스트 갱신 + 403 케이스 신규 추가 필요.
 
