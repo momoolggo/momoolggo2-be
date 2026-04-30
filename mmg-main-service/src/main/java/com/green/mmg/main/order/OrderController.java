@@ -48,20 +48,22 @@ public class OrderController {
 
     //주문내역
     @GetMapping("/history")
-    public ResponseEntity<List<OrderHistoryDto>> getOrderHistory(@ModelAttribute OrderHistoryReq req) {
-        return ResponseEntity.ok(orderService.getOrderHistory(req));
+    public ResponseEntity<List<OrderHistoryDto>> getOrderHistory(@AuthenticationPrincipal UserPrincipal principal,
+                                                                  @ModelAttribute OrderHistoryReq req) {
+        return ResponseEntity.ok(orderService.getOrderHistory(principal.getSignedUserNo(), req));
     }
 
     //주문상세
     @GetMapping("/history/{id}")
-    public ResponseEntity<OrderHistoryDto> orderHistoryDetail(@PathVariable long id){
-        return ResponseEntity.ok(orderService.orderHistoryDetail(id));
+    public ResponseEntity<OrderHistoryDto> orderHistoryDetail(@AuthenticationPrincipal UserPrincipal principal,
+                                                              @PathVariable long id){
+        return ResponseEntity.ok(orderService.orderHistoryDetail(principal.getSignedUserNo(), id));
     }
     //주무내역 맥스페이지
     @GetMapping("/history/max/{id}")
-    public ResultResponse<?> maxHistoryPage(@PathVariable long id){
-        int result = orderService.maxHistoryPage(id);
-        System.out.println(result);
+    public ResultResponse<?> maxHistoryPage(@AuthenticationPrincipal UserPrincipal principal,
+                                            @PathVariable long id){
+        int result = orderService.maxHistoryPage(principal.getSignedUserNo(), id);
         return new ResultResponse<>("조회성공",result);
     }
 

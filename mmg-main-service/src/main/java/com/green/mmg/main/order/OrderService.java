@@ -141,7 +141,11 @@ public class OrderService {
         return affected;
     }
 
-    public List<OrderHistoryDto> getOrderHistory(OrderHistoryReq req) {
+    public List<OrderHistoryDto> getOrderHistory(long callerUserNo, OrderHistoryReq req) {
+        // Phase 3-Backfill-A-3: req.userId 위조 방지 (옵션 B — 명시적 403 throw)
+        if (req.getUserId() != callerUserNo) {
+            throw new BusinessException("본인 주문 내역만 조회 가능합니다.", HttpStatus.FORBIDDEN);
+        }
         // 복잡 SQL (DATE_FORMAT + 서브쿼리 hasReview) — MyBatis 영구 잔존
         List<OrderHistoryDto> orders = orderMapper.findOrdersByUserId(req);
 
@@ -152,14 +156,24 @@ public class OrderService {
         return orders;
     }
 
-    public OrderHistoryDto orderHistoryDetail(long id) {
-        OrderHistoryDto result = orderMapper.orderHistoryDetail(id);  // 복잡 DATE_FORMAT — 잔존
-        result.setItems(orderDetailRepository.findItemsByOrderId(id));
+    public OrderHistoryDto orderHistoryDetail(long callerUserNo, long orderId) {
+        // Phase 3-Backfill-A-3: 본인 주문 검증
+        Orders order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (order.getUserNo() == null || order.getUserNo() != callerUserNo) {
+            throw new BusinessException("본인 주문만 조회 가능합니다.", HttpStatus.FORBIDDEN);
+        }
+        OrderHistoryDto result = orderMapper.orderHistoryDetail(orderId);  // 복잡 DATE_FORMAT — 잔존
+        result.setItems(orderDetailRepository.findItemsByOrderId(orderId));
         return result;
     }
 
-    public int maxHistoryPage(long id) {
+    public int maxHistoryPage(long callerUserNo, long userId) {
+        // Phase 3-Backfill-A-3: path userId 위조 방지 (옵션 B)
+        if (userId != callerUserNo) {
+            throw new BusinessException("본인 주문 내역만 조회 가능합니다.", HttpStatus.FORBIDDEN);
+        }
         // 응답 동결: 기존 OrderMapper.maxHistoryPage가 int 반환 → 동일 타입 유지
-        return (int) orderRepository.countByUserNo(id);
+        return (int) orderRepository.countByUserNo(userId);
     }
 }
