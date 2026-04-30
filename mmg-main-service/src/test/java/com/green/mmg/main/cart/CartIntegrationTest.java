@@ -3,6 +3,8 @@ package com.green.mmg.main.cart;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.cart.model.Cart;
 import com.green.mmg.main.cart.model.CartDetail;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,7 @@ class CartIntegrationTest {
     @Autowired private CartService cartService;
     @Autowired private CartRepository cartRepository;
     @Autowired private CartDetailRepository cartDetailRepository;
+    @PersistenceContext private EntityManager entityManager;
 
     private static final long OWNER_USER_NO = 99999L;
     private static final long OTHER_USER_NO = 11111L;
@@ -61,18 +64,19 @@ class CartIntegrationTest {
     }
 
     @Test
-    @DisplayName("updateCartItem 본인 → JPA dirty checking으로 DB quantity 실제 갱신 (Warning 1 해소)")
+    @DisplayName("updateCartItem 본인 → JPA dirty checking으로 DB quantity 실제 갱신 (1차 캐시 우회 검증)")
     void update_byOwner_actuallyPersistsToDb() {
         cartService.updateCartItem(OWNER_USER_NO, fixtureCartItemId, 7);
 
-        // dirty checking 결과를 DB로 flush (영속성 컨텍스트가 같은 트랜잭션 내라 commit 전이지만 flush로 SQL 발행 검증)
-        cartDetailRepository.flush();
+        // 1차 캐시 우회: flush()로 dirty checking UPDATE SQL 강제 발행 + clear()로 영속성 컨텍스트 초기화
+        // 그 후 findById는 DB에서 실제 SELECT 발행 → "영속성 컨텍스트 상태 검증"이 아닌 "DB row 검증"으로 격상
+        entityManager.flush();
+        entityManager.clear();
 
-        // 영속성 컨텍스트 비우고 재조회 — JPA 1차 캐시 무효화로 실제 DB row 검증
-        cartDetailRepository.findById(fixtureCartItemId).ifPresent(persisted ->
-                assertThat(persisted.getQuantity())
-                        .as("dirty checking으로 quantity 7로 갱신")
-                        .isEqualTo(7));
+        CartDetail persisted = cartDetailRepository.findById(fixtureCartItemId).orElseThrow();
+        assertThat(persisted.getQuantity())
+                .as("DB SELECT 결과 quantity 7 — dirty checking이 실제 UPDATE SQL을 발행했음을 동결")
+                .isEqualTo(7);
     }
 
     @Test
