@@ -81,27 +81,30 @@ public class OwnerController {
 
     @GetMapping("/order")
     public ResultResponse<List<OwnerOrderRes>> getOrders(
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam Long store_id,
             @RequestParam(required = false) Integer state,
             @RequestParam(required = false) String date) {
         log.info("주문 조회 요청: store_id = {}, state = {}, date = {}", store_id, state, date);
-        List<OwnerOrderRes> list = ownerService.getOrders(store_id, state, date);
+        List<OwnerOrderRes> list = ownerService.getOrders(principal.getSignedUserNo(), store_id, state, date);
         return new ResultResponse<>(String.format("%d건의 주문을 조회합니다.", list.size()), list);
     }
 
     @PutMapping("/order/{order_id}")
-    public ResultResponse<Void> putOrderState(@PathVariable Long order_id,
+    public ResultResponse<Void> putOrderState(@AuthenticationPrincipal UserPrincipal principal,
+                                              @PathVariable Long order_id,
                                               @RequestBody OwnerOrderStateReq req){
         log.info("주문 상태 요청: order_id = {}, state = {}", order_id, req.getOrderState());
         req.setOrderId(order_id);
-        ownerService.updateOrderState(req);
+        ownerService.updateOrderState(principal.getSignedUserNo(), req);
         return new ResultResponse<>("주문 상태 수정 성공", null);
     }
 
     @DeleteMapping("/order/{order_id}")
-    public ResultResponse<Void> deleteOrder(@PathVariable Long order_id){
+    public ResultResponse<Void> deleteOrder(@AuthenticationPrincipal UserPrincipal principal,
+                                            @PathVariable Long order_id){
         log.info("주문 삭제 요청: order_id = {}", order_id);
-        ownerService.deleteOrder(order_id);
+        ownerService.deleteOrder(principal.getSignedUserNo(), order_id);
         return new ResultResponse<>("주문 삭제 성공", null);
     }
 

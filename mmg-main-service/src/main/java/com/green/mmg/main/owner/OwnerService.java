@@ -118,9 +118,10 @@ public class OwnerService {
         return ownerMapper.getMyStores(callerOwnerNo);
     }
 
-    // ========== 주문 관련 ==========
+    // ========== 주문 관련 (D-bis 그룹 ㄴ: 권한 분기 추가) ==========
 
-    public List<OwnerOrderRes> getOrders(Long storeId, Integer state, String date) {
+    public List<OwnerOrderRes> getOrders(long callerOwnerNo, Long storeId, Integer state, String date) {
+        verifyStoreOwner(callerOwnerNo, storeId);
         List<OwnerOrderRes> orders = ownerMapper.getOrders(storeId, state, date);
         if (orders.isEmpty()) return orders;
 
@@ -141,7 +142,8 @@ public class OwnerService {
         return orders;
     }
 
-    public void updateOrderState(OwnerOrderStateReq req){
+    public void updateOrderState(long callerOwnerNo, OwnerOrderStateReq req){
+        verifyOrderOwner(callerOwnerNo, req.getOrderId());
         int result = ownerMapper.updateOrderState(req);
         if (result == 0){
             throw new RuntimeException("주문 상태 변경 실패: 주문을 찾을 수 없습니다.");
@@ -149,7 +151,8 @@ public class OwnerService {
     }
 
     @Transactional
-    public void deleteOrder(Long orderId){
+    public void deleteOrder(long callerOwnerNo, Long orderId){
+        verifyOrderOwner(callerOwnerNo, orderId);
         ownerMapper.deleteOrderDetail(orderId);
         ownerMapper.deleteOrder(orderId);
     }
