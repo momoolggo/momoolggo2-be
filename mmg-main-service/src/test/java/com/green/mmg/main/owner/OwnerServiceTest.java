@@ -282,55 +282,98 @@ class OwnerServiceTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("registerMenu — 등록 후 getMenuById로 결과 조립")
+    @DisplayName("registerMenu — verifyStoreOwner + 등록 + getMenuById 조립")
     class RegisterMenu {
 
         @Test
-        @DisplayName("happy: registerMenu → getMenuById(dto.menuId) 순차 호출 후 결과 반환")
+        @DisplayName("happy: 본인 가게 → registerMenu → getMenuById (InOrder 동결)")
         void happyPath_registerThenFetch() {
             OwnerMenuRegReq dto = newMenuRegReq(MENU_ID, STORE_ID, "피자", 15000);
             OwnerMenuRes registered = newMenuRes(MENU_ID, "피자");
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
             when(ownerMapper.getMenuById(MENU_ID)).thenReturn(registered);
 
-            OwnerMenuRes result = ownerService.registerMenu(dto);
+            OwnerMenuRes result = ownerService.registerMenu(USER_ID, dto);
 
             assertThat(result).isSameAs(registered);
-            assertThat(result.getMenuId()).isEqualTo(MENU_ID);
-
             InOrder inOrder = inOrder(ownerMapper);
+            inOrder.verify(ownerMapper).findStoreOwnerByStoreId(STORE_ID);
             inOrder.verify(ownerMapper).registerMenu(dto);
             inOrder.verify(ownerMapper).getMenuById(MENU_ID);
+        }
+
+        @Test
+        @DisplayName("403: 다른 점주 가게에 메뉴 등록 시도 → FORBIDDEN + registerMenu/getMenuById 미호출")
+        void otherOwner_throwsForbiddenAndShortCircuits() {
+            OwnerMenuRegReq dto = newMenuRegReq(MENU_ID, STORE_ID, "피자", 15000);
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.registerMenu(USER_ID, dto))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).registerMenu(any());
+            verify(ownerMapper, never()).getMenuById(anyLong());
         }
     }
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("updateMenu — @Transactional, result 검증 후 getMenuById")
+    @DisplayName("updateMenu — @Transactional, verifyMenuOwner → result 검증 → getMenuById")
     class UpdateMenu {
 
         @Test
-        @DisplayName("happy: result>0 → getMenuById 호출 후 결과 반환 (InOrder)")
+        @DisplayName("happy: 본인 메뉴 → updateMenu → getMenuById (InOrder 동결)")
         void happyPath_updatesThenFetches() {
             OwnerMenuUpdateReq dto = newMenuUpdateReq(MENU_ID, "변경된 메뉴", 18000);
             OwnerMenuRes updated = newMenuRes(MENU_ID, "변경된 메뉴");
+            when(ownerMapper.findStoreOwnerByMenuId(MENU_ID)).thenReturn(USER_ID);
             when(ownerMapper.updateMenu(dto)).thenReturn(1);
             when(ownerMapper.getMenuById(MENU_ID)).thenReturn(updated);
 
-            OwnerMenuRes result = ownerService.updateMenu(dto);
+            OwnerMenuRes result = ownerService.updateMenu(USER_ID, dto);
 
             assertThat(result).isSameAs(updated);
             InOrder inOrder = inOrder(ownerMapper);
+            inOrder.verify(ownerMapper).findStoreOwnerByMenuId(MENU_ID);
             inOrder.verify(ownerMapper).updateMenu(dto);
             inOrder.verify(ownerMapper).getMenuById(MENU_ID);
         }
 
         @Test
-        @DisplayName("실패: result==0 → RuntimeException '메뉴 수정 실패' + getMenuById 미호출")
+        @DisplayName("403: 다른 점주 메뉴 수정 시도 → FORBIDDEN '본인 가게의 메뉴만 접근 가능합니다.' + updateMenu 미호출")
+        void otherOwnerMenu_throwsForbiddenAndShortCircuits() {
+            OwnerMenuUpdateReq dto = newMenuUpdateReq(MENU_ID, "x", 1);
+            when(ownerMapper.findStoreOwnerByMenuId(MENU_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.updateMenu(USER_ID, dto))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게의 메뉴만 접근 가능합니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(ownerMapper, never()).updateMenu(any());
+        }
+
+        @Test
+        @DisplayName("404: menuId 미존재 → NOT_FOUND '메뉴를 찾을 수 없습니다.'")
+        void menuNotFound_throwsNotFound() {
+            OwnerMenuUpdateReq dto = newMenuUpdateReq(MENU_ID, "x", 1);
+            when(ownerMapper.findStoreOwnerByMenuId(MENU_ID)).thenReturn(null);
+
+            assertThatThrownBy(() -> ownerService.updateMenu(USER_ID, dto))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("메뉴를 찾을 수 없습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("실패: 권한 통과 + result==0 → RuntimeException '메뉴 수정 실패' + getMenuById 미호출")
         void updateFails_throwsAndShortCircuits() {
             OwnerMenuUpdateReq dto = newMenuUpdateReq(MENU_ID, "x", 1);
+            when(ownerMapper.findStoreOwnerByMenuId(MENU_ID)).thenReturn(USER_ID);
             when(ownerMapper.updateMenu(dto)).thenReturn(0);
 
-            assertThatThrownBy(() -> ownerService.updateMenu(dto))
+            assertThatThrownBy(() -> ownerService.updateMenu(USER_ID, dto))
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining("메뉴 수정 실패")
                     .hasMessageContaining("해당 메뉴를 찾을 수 없음");
@@ -341,29 +384,72 @@ class OwnerServiceTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("deleteMenu — @Transactional, 성공 시 menuId 반환")
+    @DisplayName("deleteMenu — @Transactional, verifyMenuOwner → menuId 반환")
     class DeleteMenu {
 
         @Test
-        @DisplayName("happy: result>0 → 입력 menuId 그대로 반환 (응답 동결)")
+        @DisplayName("happy: 본인 메뉴 → deleteMenu → menuId 반환")
         void happyPath_returnsMenuId() {
+            when(ownerMapper.findStoreOwnerByMenuId(MENU_ID)).thenReturn(USER_ID);
             when(ownerMapper.deleteMenu(MENU_ID)).thenReturn(1);
 
-            Long result = ownerService.deleteMenu(MENU_ID);
+            Long result = ownerService.deleteMenu(USER_ID, MENU_ID);
 
             assertThat(result).isEqualTo(MENU_ID);
             verify(ownerMapper).deleteMenu(MENU_ID);
         }
 
         @Test
-        @DisplayName("실패: result==0 → RuntimeException '메뉴 삭제 실패: 해당 메뉴를 찾을 수 없음'")
+        @DisplayName("403: 다른 점주 메뉴 삭제 시도 → FORBIDDEN + deleteMenu 미호출")
+        void otherOwnerMenu_throwsForbiddenAndShortCircuits() {
+            when(ownerMapper.findStoreOwnerByMenuId(MENU_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.deleteMenu(USER_ID, MENU_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게의 메뉴만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).deleteMenu(anyLong());
+        }
+
+        @Test
+        @DisplayName("실패: 권한 통과 + result==0 → RuntimeException '메뉴 삭제 실패'")
         void deleteFails_throws() {
+            when(ownerMapper.findStoreOwnerByMenuId(MENU_ID)).thenReturn(USER_ID);
             when(ownerMapper.deleteMenu(MENU_ID)).thenReturn(0);
 
-            assertThatThrownBy(() -> ownerService.deleteMenu(MENU_ID))
+            assertThatThrownBy(() -> ownerService.deleteMenu(USER_ID, MENU_ID))
                     .isInstanceOf(RuntimeException.class)
-                    .hasMessageContaining("메뉴 삭제 실패")
-                    .hasMessageContaining("해당 메뉴를 찾을 수 없음");
+                    .hasMessageContaining("메뉴 삭제 실패");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("getMenusByStoreId — verifyStoreOwner")
+    class GetMenusByStoreId {
+
+        @Test
+        @DisplayName("happy: 본인 가게 → getMenusByStoreId 위임")
+        void happyPath_delegates() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
+            when(ownerMapper.getMenusByStoreId(STORE_ID)).thenReturn(List.of(newMenuRes(MENU_ID, "피자")));
+
+            List<OwnerMenuRes> result = ownerService.getMenusByStoreId(USER_ID, STORE_ID);
+
+            assertThat(result).hasSize(1);
+            verify(ownerMapper).getMenusByStoreId(STORE_ID);
+        }
+
+        @Test
+        @DisplayName("403: 다른 점주 가게 → FORBIDDEN + getMenusByStoreId 미호출")
+        void otherOwner_throwsForbidden() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.getMenusByStoreId(USER_ID, STORE_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).getMenusByStoreId(anyLong());
         }
     }
 
