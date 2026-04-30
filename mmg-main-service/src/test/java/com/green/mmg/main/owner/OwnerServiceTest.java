@@ -8,6 +8,8 @@ import com.green.mmg.main.owner.model.OwnerMenuRes;
 import com.green.mmg.main.owner.model.OwnerMenuUpdateReq;
 import com.green.mmg.main.owner.model.OwnerOrderRes;
 import com.green.mmg.main.owner.model.OwnerOrderStateReq;
+import com.green.mmg.main.owner.model.OwnerSalesStatsRes;
+import com.green.mmg.main.owner.model.OwnerSalesRankingRes;
 import com.green.mmg.main.owner.model.OwnerStoreRegReq;
 import com.green.mmg.main.owner.model.OwnerStoreUpdateReq;
 import feign.FeignException;
@@ -450,6 +452,69 @@ class OwnerServiceTest {
                     .hasMessage("본인 가게만 접근 가능합니다.");
 
             verify(ownerMapper, never()).getMenusByStoreId(anyLong());
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // Phase 2-Backfill-D-bis 그룹 ㄹ: 매출 권한 분기
+    // ═════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("getSalesStats — verifyStoreOwner")
+    class GetSalesStats {
+
+        @Test
+        @DisplayName("happy: 본인 가게 → getSalesStats 위임")
+        void happyPath_delegates() {
+            OwnerSalesStatsRes stats = new OwnerSalesStatsRes();
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
+            when(ownerMapper.getSalesStats(STORE_ID, "month")).thenReturn(stats);
+
+            OwnerSalesStatsRes result = ownerService.getSalesStats(USER_ID, STORE_ID, "month");
+
+            assertThat(result).isSameAs(stats);
+            verify(ownerMapper).getSalesStats(STORE_ID, "month");
+        }
+
+        @Test
+        @DisplayName("403: 다른 점주 가게 → FORBIDDEN + getSalesStats 미호출")
+        void otherOwner_throwsForbidden() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.getSalesStats(USER_ID, STORE_ID, "month"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).getSalesStats(anyLong(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("getSalesRanking — verifyStoreOwner")
+    class GetSalesRanking {
+
+        @Test
+        @DisplayName("happy: 본인 가게 → getSalesRanking 위임")
+        void happyPath_delegates() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
+            when(ownerMapper.getSalesRanking(STORE_ID, "week")).thenReturn(List.of());
+
+            List<OwnerSalesRankingRes> result = ownerService.getSalesRanking(USER_ID, STORE_ID, "week");
+
+            assertThat(result).isEmpty();
+            verify(ownerMapper).getSalesRanking(STORE_ID, "week");
+        }
+
+        @Test
+        @DisplayName("403: 다른 점주 가게 → FORBIDDEN + getSalesRanking 미호출")
+        void otherOwner_throwsForbidden() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.getSalesRanking(USER_ID, STORE_ID, "week"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).getSalesRanking(anyLong(), any());
         }
     }
 
