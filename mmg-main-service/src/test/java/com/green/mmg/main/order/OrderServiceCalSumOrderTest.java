@@ -1,6 +1,7 @@
 package com.green.mmg.main.order;
 
 import com.green.mmg.common.dto.feign.UserBriefDto;
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.address.UserAddressRepository;
 import com.green.mmg.main.cart.CartMapper;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 
 import java.util.List;
 import java.util.Optional;
@@ -24,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -132,23 +135,27 @@ class OrderServiceCalSumOrderTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("deleteOrder")
+    @DisplayName("deleteOrder — 권한 검증 + storeId 확보 + calSumOrder")
     class DeleteOrder {
 
+        private static final long USER_NO = 100L;
+        private static final long OTHER_USER_NO = 999L;
+
         @Test
-        @DisplayName("삭제 성공(affected=1) → calSumOrder가 미리 확보한 storeId로 호출")
+        @DisplayName("happy: 본인 주문 삭제(affected=1) → calSumOrder가 미리 확보한 storeId로 호출")
         void deleteSuccess_calSumOrderCalledWithStoreId() {
             long orderId = 39_175L;
             Orders order = new Orders();
             order.setOrderId(orderId);
+            order.setUserNo(USER_NO);
             order.setStoreId(STORE_ID);
             when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
             when(orderRepository.deleteByOrderIdAndPayStateUnpaid(orderId)).thenReturn(1);
 
-            int affected = orderService.deleteOrder(orderId);
+            int affected = orderService.deleteOrder(USER_NO, orderId);
 
             assertThat(affected).isEqualTo(1);
-            // ★ 호출 순서: storeId 확보 → 삭제 → calSumOrder
+            // ★ 호출 순서: findById(권한 + storeId 확보) → 삭제 → calSumOrder
             verify(orderRepository).findById(orderId);
             verify(orderRepository).deleteByOrderIdAndPayStateUnpaid(orderId);
             verify(orderMapper).calSumOrder(STORE_ID);  // ★ orderId 아닌 storeId
@@ -156,31 +163,51 @@ class OrderServiceCalSumOrderTest {
         }
 
         @Test
-        @DisplayName("삭제 0건(이미 결제됨 등) → calSumOrder 미호출")
+        @DisplayName("403: 다른 사용자 주문 삭제 시도 → FORBIDDEN '본인 주문만 삭제할 수 있습니다.' + 삭제 미호출")
+        void otherUserOrder_throwsForbiddenAndShortCircuits() {
+            long orderId = 39_175L;
+            Orders order = new Orders();
+            order.setOrderId(orderId);
+            order.setUserNo(OTHER_USER_NO);  // 타인 소유
+            order.setStoreId(STORE_ID);
+            when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+
+            assertThatThrownBy(() -> orderService.deleteOrder(USER_NO, orderId))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 주문만 삭제할 수 있습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(orderRepository, never()).deleteByOrderIdAndPayStateUnpaid(anyLong());
+            verify(orderMapper, never()).calSumOrder(anyLong());
+        }
+
+        @Test
+        @DisplayName("happy: 권한 통과 + 삭제 0건(이미 결제됨) → calSumOrder 미호출")
         void deleteZero_calSumOrderNotCalled() {
             long orderId = 39_175L;
             Orders order = new Orders();
             order.setOrderId(orderId);
+            order.setUserNo(USER_NO);
             order.setStoreId(STORE_ID);
             when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
             when(orderRepository.deleteByOrderIdAndPayStateUnpaid(orderId)).thenReturn(0);
 
-            int affected = orderService.deleteOrder(orderId);
+            int affected = orderService.deleteOrder(USER_NO, orderId);
 
             assertThat(affected).isZero();
             verify(orderMapper, never()).calSumOrder(anyLong());
         }
 
         @Test
-        @DisplayName("주문 미존재 → 삭제 0건 + calSumOrder 미호출 (이전 버그 핵심: row 삭제 후 store_id 도출 불가)")
-        void orderNotFound_calSumOrderNotCalled() {
+        @DisplayName("주문 미존재 → return 0 (응답 스펙 동결: '삭제실패' 200 유지) + 삭제/calSumOrder 미호출")
+        void orderNotFound_returnsZeroAndShortCircuits() {
             long orderId = 99_999L;
             when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
-            when(orderRepository.deleteByOrderIdAndPayStateUnpaid(orderId)).thenReturn(0);
 
-            int affected = orderService.deleteOrder(orderId);
+            int affected = orderService.deleteOrder(USER_NO, orderId);
 
             assertThat(affected).isZero();
+            verify(orderRepository, never()).deleteByOrderIdAndPayStateUnpaid(anyLong());
             verify(orderMapper, never()).calSumOrder(anyLong());
         }
     }
