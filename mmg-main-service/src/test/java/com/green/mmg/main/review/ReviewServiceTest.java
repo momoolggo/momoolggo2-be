@@ -1,8 +1,10 @@
 package com.green.mmg.main.review;
 
 import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.main.review.model.GetReviewReq;
 import com.green.mmg.main.review.model.Review;
 import com.green.mmg.main.review.model.ReviewReq;
+import com.green.mmg.main.review.model.ReviewRes;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -98,6 +104,95 @@ class ReviewServiceTest {
 
             verify(reviewMapper, never()).findStoreIdByOrderId(anyLong());
             verify(reviewMapper, never()).updateStoreRating(anyLong());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("getReviews — 페이징 응답 조립")
+    class GetReviews {
+
+        @Test
+        @DisplayName("happy: list + totalCount + totalPages(올림) + currentPage 모두 동결")
+        void happyPath_assemblesPagingResponse() {
+            GetReviewReq req = new GetReviewReq();
+            req.setUserNo(USER_NO);
+            req.setCurrentPage(2);
+            req.setSize(5);
+
+            ReviewRes r1 = new ReviewRes();
+            r1.setReviewId(101L);
+            ReviewRes r2 = new ReviewRes();
+            r2.setReviewId(102L);
+            when(reviewMapper.countReviews(USER_NO)).thenReturn(7);   // totalPages = ceil(7/5) = 2
+            when(reviewMapper.getReviews(req)).thenReturn(List.of(r1, r2));
+
+            Map<String, Object> result = reviewService.getReviews(req);
+
+            assertThat(result.get("totalCount")).isEqualTo(7);
+            assertThat(result.get("totalPages")).isEqualTo(2);
+            assertThat(result.get("currentPage")).isEqualTo(2);
+            @SuppressWarnings("unchecked")
+            List<ReviewRes> list = (List<ReviewRes>) result.get("list");
+            assertThat(list).hasSize(2);
+            assertThat(list.get(0).getReviewId()).isEqualTo(101L);
+            assertThat(list.get(1).getReviewId()).isEqualTo(102L);
+
+            verify(reviewMapper).countReviews(USER_NO);
+            verify(reviewMapper).getReviews(req);
+            verifyNoMoreInteractions(reviewMapper);
+            verifyNoInteractions(reviewRepository);
+        }
+
+        @Test
+        @DisplayName("count=0 → totalPages=0 + 빈 list (NPE 없음)")
+        void zeroCount_returnsZeroPages() {
+            GetReviewReq req = new GetReviewReq();
+            req.setUserNo(USER_NO);
+            when(reviewMapper.countReviews(USER_NO)).thenReturn(0);
+            when(reviewMapper.getReviews(req)).thenReturn(List.of());
+
+            Map<String, Object> result = reviewService.getReviews(req);
+
+            assertThat(result.get("totalCount")).isEqualTo(0);
+            assertThat(result.get("totalPages")).isEqualTo(0);
+            assertThat(((List<?>) result.get("list"))).isEmpty();
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("getReviewById — 단건 조회")
+    class GetReviewById {
+
+        @Test
+        @DisplayName("happy: Mapper Map 그대로 반환")
+        void happyPath_returnsMap() {
+            Map<String, Object> raw = new HashMap<>();
+            raw.put("reviewId", REVIEW_ID);
+            raw.put("rating", 4);
+            raw.put("contents", "괜찮음");
+            when(reviewMapper.getReviewById(REVIEW_ID)).thenReturn(raw);
+
+            Map<String, Object> result = reviewService.getReviewById(REVIEW_ID);
+
+            assertThat(result).isSameAs(raw);
+            assertThat(result.get("reviewId")).isEqualTo(REVIEW_ID);
+            assertThat(result.get("rating")).isEqualTo(4);
+            assertThat(result.get("contents")).isEqualTo("괜찮음");
+            verify(reviewMapper).getReviewById(REVIEW_ID);
+            verifyNoMoreInteractions(reviewMapper);
+        }
+
+        @Test
+        @DisplayName("404: null → BusinessException NOT_FOUND '리뷰를 찾을 수 없습니다.'")
+        void notFound_throwsNotFound() {
+            when(reviewMapper.getReviewById(REVIEW_ID)).thenReturn(null);
+
+            assertThatThrownBy(() -> reviewService.getReviewById(REVIEW_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("리뷰를 찾을 수 없습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
         }
     }
 
