@@ -61,9 +61,13 @@ public class OwnerService {
         }
     }
 
-    // ========== 가게 관련 ==========
+    // ========== 가게 관련 (D-bis 그룹 ㄱ: 권한 분기 + dto.userId 위조 방지) ==========
 
-    public void registerStore(OwnerStoreRegReq dto){
+    public void registerStore(long callerOwnerNo, OwnerStoreRegReq dto){
+        // dto.userId 위조 방지: 옵션 B — 불일치 시 403 throw (강제 덮어쓰기 대신 명시적 거부)
+        if (dto.getUserId() != callerOwnerNo) {
+            throw new BusinessException("자신의 계정으로만 가게를 등록할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
         log.info("가게 등록 로직 시작: {}", dto.getStoreName());
         int result = ownerMapper.registerStore(dto);
         if (result == 0) {
@@ -73,7 +77,16 @@ public class OwnerService {
         ownerMapper.registerDefaultMenuCategory(dto.getUserId());
     }
 
-    public void updateStore(OwnerStoreUpdateReq dto){
+    public void updateStore(long callerOwnerNo, OwnerStoreUpdateReq dto){
+        // OwnerStoreUpdateReq.storeId는 String 타입 — Long으로 변환 후 권한 검증
+        // (타입 정리는 tech-debt.md, 프론트 협의 필요)
+        long storeId;
+        try {
+            storeId = Long.parseLong(dto.getStoreId());
+        } catch (NumberFormatException e) {
+            throw new BusinessException("storeId 형식이 잘못되었습니다.", HttpStatus.BAD_REQUEST);
+        }
+        verifyStoreOwner(callerOwnerNo, storeId);
         int result = ownerMapper.updateStore(dto);
         if (result == 0){
             throw new RuntimeException("가게 정보 수정 실패: 해당 가게를 찾을 수 없음");
@@ -81,26 +94,28 @@ public class OwnerService {
     }
 
     @Transactional
-    public OwnerStoreRes updateStoreStatus(OwnerStoreUpdateStatusReq dto){
+    public OwnerStoreRes updateStoreStatus(long callerOwnerNo, OwnerStoreUpdateStatusReq dto){
+        verifyStoreOwner(callerOwnerNo, dto.getStoreId());
         ownerMapper.updateStoreStatus(dto);
         return ownerMapper.getStoreById(dto.getStoreId());
     }
 
-    public void deleteStore(Long store_id){
+    public void deleteStore(long callerOwnerNo, Long store_id){
+        verifyStoreOwner(callerOwnerNo, store_id);
         int result = ownerMapper.deleteStore(store_id);
         if (result == 0){
             throw new RuntimeException("삭제할 가게를 찾을 수 없습니다.");
         }
     }
 
-    // 내 가게 1개 조회 (매출 조회 등 내부용)
-    public OwnerStoreRes getMyStore(long ownerNo) {
-        return ownerMapper.getMyStore(ownerNo);
+    // 내 가게 1개 조회 (매출 조회 등 내부용) — ownerNo는 callerOwnerNo와 동일 (본인 자원만 조회)
+    public OwnerStoreRes getMyStore(long callerOwnerNo) {
+        return ownerMapper.getMyStore(callerOwnerNo);
     }
 
     // 내 가게 목록 조회 (여러 가게 지원)
-    public List<OwnerStoreRes> getMyStores(long ownerNo) {
-        return ownerMapper.getMyStores(ownerNo);
+    public List<OwnerStoreRes> getMyStores(long callerOwnerNo) {
+        return ownerMapper.getMyStores(callerOwnerNo);
     }
 
     // ========== 주문 관련 ==========

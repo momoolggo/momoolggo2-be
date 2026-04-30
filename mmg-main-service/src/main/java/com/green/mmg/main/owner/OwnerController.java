@@ -32,30 +32,34 @@ public class OwnerController {
     // ========== 가게 관련 ==========
 
     @PostMapping("/store")
-    public ResultResponse<Void> postStore(@RequestBody OwnerStoreRegReq dto){
+    public ResultResponse<Void> postStore(@AuthenticationPrincipal UserPrincipal principal,
+                                          @RequestBody OwnerStoreRegReq dto){
         log.info("가게 등록 요청 데이터: {}", dto);
-        ownerService.registerStore(dto);
+        ownerService.registerStore(principal.getSignedUserNo(), dto);
         return new ResultResponse<>("가게 등록 성공", null);
     }
 
     @PutMapping("/store")
-    public ResultResponse<Void> updatedStore(@RequestBody OwnerStoreUpdateReq dto){
+    public ResultResponse<Void> updatedStore(@AuthenticationPrincipal UserPrincipal principal,
+                                             @RequestBody OwnerStoreUpdateReq dto){
         log.info("가게 기본 정보 수정: {}", dto);
-        ownerService.updateStore(dto);
+        ownerService.updateStore(principal.getSignedUserNo(), dto);
         return new ResultResponse<>("기본정보 수정 완료", null);
     }
 
     @PutMapping("/store/status")
-    public ResultResponse<OwnerStoreRes> updateStoreStatus(@RequestBody OwnerStoreUpdateStatusReq dto){
+    public ResultResponse<OwnerStoreRes> updateStoreStatus(@AuthenticationPrincipal UserPrincipal principal,
+                                                           @RequestBody OwnerStoreUpdateStatusReq dto){
         log.info("가게 운영관리 수정: {}", dto);
-        OwnerStoreRes updatedStore = ownerService.updateStoreStatus(dto);
+        OwnerStoreRes updatedStore = ownerService.updateStoreStatus(principal.getSignedUserNo(), dto);
         return new ResultResponse<>("운영정보 업데이트 완료", null);
     }
 
     @DeleteMapping("/store/{store_id}")
-    public ResultResponse<Void> deleteStore(@PathVariable Long store_id){
+    public ResultResponse<Void> deleteStore(@AuthenticationPrincipal UserPrincipal principal,
+                                            @PathVariable Long store_id){
         log.info("가게 삭제 요청: store_id = {}", store_id);
-        ownerService.deleteStore(store_id);
+        ownerService.deleteStore(principal.getSignedUserNo(), store_id);
         return new ResultResponse<>("가게 삭제 성공", null);
     }
 
