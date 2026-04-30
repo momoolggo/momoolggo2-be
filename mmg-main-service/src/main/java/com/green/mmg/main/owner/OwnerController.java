@@ -52,7 +52,7 @@ public class OwnerController {
                                                            @RequestBody OwnerStoreUpdateStatusReq dto){
         log.info("가게 운영관리 수정: {}", dto);
         OwnerStoreRes updatedStore = ownerService.updateStoreStatus(principal.getSignedUserNo(), dto);
-        return new ResultResponse<>("운영정보 업데이트 완료", null);
+        return new ResultResponse<>("운영정보 업데이트 완료", updatedStore);
     }
 
     @DeleteMapping("/store/{store_id}")
