@@ -150,6 +150,8 @@ class ReviewServiceTest {
         void zeroCount_returnsZeroPages() {
             GetReviewReq req = new GetReviewReq();
             req.setUserNo(USER_NO);
+            req.setCurrentPage(1);
+            req.setSize(5);  // GetReviewReq 기본값 묵시 의존 제거 — 기본값 변경 시 테스트가 조용히 동작 바꾸는 것 방지
             when(reviewMapper.countReviews(USER_NO)).thenReturn(0);
             when(reviewMapper.getReviews(req)).thenReturn(List.of());
 
