@@ -64,3 +64,9 @@
 | **OwnerService 17개 메서드 권한 분기 일괄 추가** | 2026-04-30 | 2026-04-30 | Phase 2-Backfill-D-bis — Mapper 헬퍼 4개 + Service verify 4개 + 5 그룹 (가게/주문/메뉴/매출/카테고리). 커밋: `a0ba8a2`(인프라) + 그룹별 feat 5 + test 5. 신규 32 케이스, 148/148 PASS. |
 | **registerStore dto.userId 위조 방지** | 2026-04-30 | 2026-04-30 | `aa65c86` `8963d58` (Phase 2-Backfill-D-bis 그룹 ㄱ) — 옵션 B (불일치 시 FORBIDDEN throw) |
 | **OwnerController.updateStoreStatus 응답 null (W-1, 기존 부채)** | 2026-04-30 | 2026-04-30 | `1cf07a7` (Phase 2-Backfill-D-bis 후처리) — Service 결과 받아놓고 응답에 `null` 반환하던 버그. `null` → `updatedStore` 1줄 수정. Phase 2-B에서 도입된 부채. |
+| **OrderController.deleteOrder 인증 누락 (Critical 1)** | 2026-04-30 | 2026-04-30 | `08a4a28` `e57587b` (Phase 3-Backfill-A-1) — `@AuthenticationPrincipal` 추가 + 소유자 검증. 응답 스펙 동결 (미존재 → return 0). |
+| **StoreController FavoriteToggle dto.userNo 위조 (Critical 3, D-bis 패턴 재발)** | 2026-04-30 | 2026-04-30 | `6a284c0` `6979ce4` (Phase 3-Backfill-A-2) — wishToggle/checkWish/wishListGet 3곳 옵션 B 적용. System.out 1건 제거. |
+| **OrderController 내역 엔드포인트 인증 누락 (Critical 2)** | 2026-04-30 | 2026-04-30 | `54a267b` `9ebc82f` (Phase 3-Backfill-A-3) — getOrderHistory/orderHistoryDetail/maxHistoryPage 3곳. System.out 1건 제거. |
+| **OrderService.getOrderInfo Feign null NPE (Critical 4)** | 2026-04-30 | 2026-04-30 | `6d6cc14` `2011b90` (Phase 3-Backfill-A-4) — storeOneGet 패턴 전파. BusinessException NOT_FOUND. |
+| **StoreService.getStoreReviews Feign batch null NPE (Major)** | 2026-04-30 | 2026-04-30 | `361ce00` `2011b90` (Phase 3-Backfill-A-4) — null 응답 → 빈 Map → userName 빈 문자열 fallback. Owner.getOrders와 다른 결정(Phase 5). |
+| **UserAddressService.update 소유자 검증 누락 (Major)** | 2026-04-30 | 2026-04-30 | `5253bef` `ca78b7a` (Phase 3-Backfill-A-5) — D-4 delete 패턴을 update에도 일관 적용. 4 신규 케이스. |

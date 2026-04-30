@@ -1,6 +1,6 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
-> 작성: 2026-04-28 / 최종 갱신: **2026-04-30 Phase 2-Backfill-D-bis 완료 (Phase 2 백필 종료)**
+> 작성: 2026-04-28 / 최종 갱신: **2026-04-30 Phase 3-Backfill-A 완료**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).
 
@@ -157,7 +157,10 @@
 - [x] **Phase 2-Backfill-B (2026-04-29)** — OrderService 단위 테스트 9 + Payment 통합 fixture 전환 + dead code 1건 제거, 43/43 PASS
 - [x] **Phase 2-Backfill-C (2026-04-30)** — ReviewService 11 + CartService 16 + UserAddressService 2 = 단위 29 추가, 72/72 PASS
 - [x] **Phase 2-Backfill-D (2026-04-30)** — Owner 18 + Store Feign null fix 5 + AddressSearch refactor 8 + Cart 권한 5+통합 4 + UserAddress 권한 2 = 신규 42 추가, 116/116 PASS
-- [x] **Phase 2-Backfill-D-bis (2026-04-30)** — OwnerService 17개 메서드 권한 분기 일괄 + dto.userId 위조 방지 + Mapper 헬퍼 4개 + 32 신규 케이스, **148/148 PASS** (Phase 2 백필 종료)
+- [x] **Phase 2-Backfill-D-bis (2026-04-30)** — OwnerService 17개 메서드 권한 분기 일괄 + dto.userId 위조 방지 + Mapper 헬퍼 4개 + 32 신규 케이스, 148/148 PASS (Phase 2 백필 종료)
+- [x] **Phase 3-Backfill-A (2026-04-30)** — Critical 4 + Major 1 일괄 처리 (Order DELETE 인증 / Favorite 위조 방지 / Order 내역 인증 / Feign null 패턴 전파 / UserAddress.update 권한), 19 신규 케이스, **167/167 PASS**
+- [ ] Phase 3-Backfill-B (readOnly + Review 통합 + UserAddress save/setDefault 단위 + System.out 잔존)
+- [ ] Phase 3-Backfill-C (StoreService/LikedStore 단위 보강)
 - [ ] Phase 3 백필 → `@code-reviewer` 검증 → PASS
 - [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
 - [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
@@ -349,12 +352,40 @@
 - uploadImage 권한 추가 제외 OK (Controller hasRole("OWNER") 1차 필터 + multipart 10MB 제한 적용)
 - Owner 도메인은 다른 서비스에서 호출 안 함 → 통합 테스트 영향 0
 
+### Phase 3-Backfill-A 결과 (2026-04-30)
+
+**Phase 3 진단에서 발견된 Critical 4 + Major 1 일괄 처리 — 19 신규 / 0 failures / 0 errors / 11 커밋**:
+
+| Step | 내용 | 신규 케이스 | 커밋 |
+|---|---|---|---|
+| A-1 | Order DELETE 인증 (`OrderService.deleteOrder` callerUserNo + 소유자 검증, 응답 스펙 동결) | 1 (3 갱신) | `08a4a28` `e57587b` |
+| A-2 | Favorite dto.userNo 위조 방지 (`wishToggle/checkWish/wishListGet` 옵션 B) + System.out 1건 제거 | 6 | `6a284c0` `6979ce4` |
+| A-3 | Order 내역 인증 (`getOrderHistory/orderHistoryDetail/maxHistoryPage` 권한) + System.out 제거 | 5 (4 갱신) | `54a267b` `9ebc82f` |
+| A-4 | Feign null 패턴 전파 (`OrderService.getOrderInfo` getUser null + `StoreService.getStoreReviews` batch null) | 4 | `6d6cc14` `361ce00` `2011b90` |
+| A-5 | UserAddressService.update 소유자 검증 (D 단계 일관성) | 4 | `5253bef` `ca78b7a` |
+
+**main-service 전체 빌드/테스트 통과 (167/167)**:
+- Phase 2 누적 148 + A 신규 19 = **167**
+
+**Phase 3-Backfill-A 핵심 검증 케이스**:
+- `OrderServiceCalSumOrderTest.DeleteOrder.otherUserOrder_throwsForbiddenAndShortCircuits`: 다른 사용자 미결제 주문 삭제 시도 → FORBIDDEN + 삭제/calSumOrder 미호출 (보안 + InOrder 동결 양립)
+- `StoreServiceTest.WishToggle.dtoUserNoMismatch_throwsForbidden`: D-bis registerStore 패턴 그대로 — 명시적 403 throw, 조용히 덮어쓰기 X
+- `OrderServiceTest.GetOrderInfo.feignNull_throwsNotFound`: Phase 2-D StoreService.storeOneGet 패턴이 Order로 전파됐는지 동결 (BusinessException NOT_FOUND + 후속 미호출)
+- `StoreServiceTest.GetStoreReviews.feignNull_userNamesAreBlank`: batch null이면 빈 Map → review의 userName 빈 문자열 fallback (NPE 차단). Owner.getOrders와 의도적 다른 결정 — 도메인 critical 차이.
+- `UserAddressServiceTest.Update.otherUserAddress_throwsForbiddenAndShortCircuits`: D-4 delete에만 있던 소유자 검증을 update에도 일관 적용 (delete 패턴 복붙)
+
+**진단/결정**:
+- 응답 스펙 동결: deleteOrder 미존재 orderId는 기존 동작 유지 (return 0 → "삭제실패" 200) — CLAUDE.md §6 규칙 7 준수
+- Owner.getOrders Feign 예외는 명시적 propagate 동결 (W-2 — Phase 5 fallback 작업), Store.getStoreReviews는 fallback 동결 — 도메인 critical 차이로 분기
+- A-5는 D-4 누락분 일관성 보강 — Major이지만 백필 자연스러운 위치
+
 ---
 
 ## 다음 단계
 
-**Phase 3 진단** 또는 **Phase 4-C (Redis)** 또는 **Phase 5 (팀원 합류 시)**.
+**Phase 3-Backfill-B** 또는 Phase 4-C / Phase 5.
 
-- **Phase 3 진단**: 백필 완료 후 Phase 3 (영속성 전환) 결과 종합 점검 (이미 8 도메인 JPA 전환 완료 — 3-A/3-B/3-C/3-D 결과 검증)
+- **Phase 3-Backfill-B**: readOnly 적용 + Review 통합 + UserAddress save/setDefault 단위 + 잔존 System.out 제거 (~8 신규)
+- **Phase 3-Backfill-C**: StoreService 나머지 단위 + LikedStore 단위 (~10 신규, 라이더 진입 후 병행 가능)
 - Phase 4-C: 학원 발표 후 — 토큰 저장 (auth) + 날씨 캐시 (main) + Pub/Sub
 - Phase 5: 팀원 합류 시 본격 — 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 잔존 도메인 경계 정리
