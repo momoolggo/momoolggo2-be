@@ -1,0 +1,154 @@
+package com.green.mmg.main.owner;
+
+import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.owner.model.OwnerStoreRegReq;
+import com.green.mmg.main.owner.model.OwnerStoreUpdateReq;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.*;
+
+/**
+ * Phase 2-Backfill-D Step D-1-B: OwnerService 핵심 9개 메서드 단위 테스트 — 현재 동작 동결.
+ *
+ * <p><b>권한 분기 부재를 명시적으로 동결한다.</b><br>
+ * OwnerService 14개 메서드 중 {@code getMyStore/getMyStores}만 ownerNo 파라미터로 본인 가게 필터.
+ * 나머지 메서드(registerStore/updateStore/deleteStore/getOrders/updateOrderState/deleteOrder/
+ * registerMenu/updateMenu/deleteMenu/매출/카테고리)는 store_id/order_id/menu_id/dto.userId만 받고
+ * 점주 본인 소유 검증을 하지 않는다 — 다른 점주의 가게/메뉴/주문 변경 가능.
+ * 이는 알려진 보안 부채이며 <b>Phase 2-Backfill-D-bis에서 14개 메서드 권한 분기를 일괄 추가할 예정</b>.<br>
+ * 본 테스트는 현재 동작을 회귀 방지를 위해 그대로 동결한다 (D-bis에서 함께 갱신).</p>
+ *
+ * <p>학원 DB / Spring 컨텍스트 의존 0 — 순수 Mockito.</p>
+ */
+@ExtendWith(MockitoExtension.class)
+@DisplayName("OwnerService — 핵심 9개 메서드 단위 테스트 (현재 동작 동결)")
+class OwnerServiceTest {
+
+    @Mock private OwnerMapper ownerMapper;
+    @Mock private AuthFeignClient authFeignClient;
+
+    @InjectMocks
+    private OwnerService ownerService;
+
+    private static final long USER_ID = 100L;
+    private static final long CATEGORY_ID = 7L;
+    private static final long STORE_ID = 21L;
+    private static final long MENU_ID = 17L;
+    private static final long ORDER_ID = 391_000_001L;
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("registerStore — 가게 등록 + storeCategory + defaultMenuCategory 후속 호출")
+    class RegisterStore {
+
+        @Test
+        @DisplayName("happy: result>0 → registerStoreCategory + registerDefaultMenuCategory 순차 호출 (InOrder 동결)")
+        void happyPath_registersAndChainsCategories() {
+            OwnerStoreRegReq dto = newRegReq(USER_ID, CATEGORY_ID, "맛집");
+            when(ownerMapper.registerStore(dto)).thenReturn(1);
+
+            ownerService.registerStore(dto);
+
+            InOrder inOrder = inOrder(ownerMapper);
+            inOrder.verify(ownerMapper).registerStore(dto);
+            inOrder.verify(ownerMapper).registerStoreCategory(USER_ID, CATEGORY_ID);
+            inOrder.verify(ownerMapper).registerDefaultMenuCategory(USER_ID);
+        }
+
+        @Test
+        @DisplayName("실패: result==0 → RuntimeException '가게 등록 실패' + 후속 호출 미발생")
+        void registerFails_throwsAndShortCircuits() {
+            OwnerStoreRegReq dto = newRegReq(USER_ID, CATEGORY_ID, "실패");
+            when(ownerMapper.registerStore(dto)).thenReturn(0);
+
+            assertThatThrownBy(() -> ownerService.registerStore(dto))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("가게 등록 실패");
+
+            verify(ownerMapper, never()).registerStoreCategory(anyLong(), anyLong());
+            verify(ownerMapper, never()).registerDefaultMenuCategory(anyLong());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("updateStore — 가게 기본 정보 수정")
+    class UpdateStore {
+
+        @Test
+        @DisplayName("happy: result>0 → 정상 종료")
+        void happyPath_updates() {
+            OwnerStoreUpdateReq dto = newUpdateReq("21", "변경");
+            when(ownerMapper.updateStore(dto)).thenReturn(1);
+
+            ownerService.updateStore(dto);
+
+            verify(ownerMapper).updateStore(dto);
+            verifyNoMoreInteractions(ownerMapper);
+        }
+
+        @Test
+        @DisplayName("실패: result==0 → RuntimeException '가게 정보 수정 실패' (메시지 동결)")
+        void updateFails_throws() {
+            OwnerStoreUpdateReq dto = newUpdateReq("21", "변경");
+            when(ownerMapper.updateStore(dto)).thenReturn(0);
+
+            assertThatThrownBy(() -> ownerService.updateStore(dto))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("가게 정보 수정 실패")
+                    .hasMessageContaining("해당 가게를 찾을 수 없음");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("deleteStore — 가게 삭제")
+    class DeleteStore {
+
+        @Test
+        @DisplayName("happy: result>0 → 정상 종료")
+        void happyPath_deletes() {
+            when(ownerMapper.deleteStore(STORE_ID)).thenReturn(1);
+
+            ownerService.deleteStore(STORE_ID);
+
+            verify(ownerMapper).deleteStore(STORE_ID);
+        }
+
+        @Test
+        @DisplayName("실패: result==0 → RuntimeException '삭제할 가게를 찾을 수 없습니다.' (메시지 동결)")
+        void deleteFails_throws() {
+            when(ownerMapper.deleteStore(STORE_ID)).thenReturn(0);
+
+            assertThatThrownBy(() -> ownerService.deleteStore(STORE_ID))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("삭제할 가게를 찾을 수 없습니다");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    private static OwnerStoreRegReq newRegReq(long userId, long categoryId, String name) {
+        OwnerStoreRegReq dto = new OwnerStoreRegReq();
+        dto.setUserId(userId);
+        dto.setCategoryId(categoryId);
+        dto.setStoreName(name);
+        return dto;
+    }
+
+    private static OwnerStoreUpdateReq newUpdateReq(String storeId, String name) {
+        OwnerStoreUpdateReq dto = new OwnerStoreUpdateReq();
+        dto.setStoreId(storeId);
+        dto.setStoreName(name);
+        return dto;
+    }
+}
