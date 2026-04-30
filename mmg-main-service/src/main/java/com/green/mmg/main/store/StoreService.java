@@ -1,11 +1,13 @@
 package com.green.mmg.main.store;
 
 import com.green.mmg.common.dto.feign.UserBriefDto;
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.store.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.annotations.Param;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +32,9 @@ public class StoreService {
         StoreOneGetRes res = storeMapper.findOne(id);
         if (res != null && res.getOwnerId() != null) {
             UserBriefDto owner = authFeignClient.getOwner(res.getOwnerId());
+            if (owner == null) {
+                throw new BusinessException("사장 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+            }
             res.setOwnerName(owner.getName());
         }
         return res;
