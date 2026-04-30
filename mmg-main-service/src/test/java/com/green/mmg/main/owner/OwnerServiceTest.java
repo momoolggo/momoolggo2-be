@@ -2,6 +2,9 @@ package com.green.mmg.main.owner;
 
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.owner.model.OwnerMenuRegReq;
+import com.green.mmg.main.owner.model.OwnerMenuRes;
+import com.green.mmg.main.owner.model.OwnerMenuUpdateReq;
 import com.green.mmg.main.owner.model.OwnerOrderRes;
 import com.green.mmg.main.owner.model.OwnerOrderStateReq;
 import com.green.mmg.main.owner.model.OwnerStoreRegReq;
@@ -276,6 +279,117 @@ class OwnerServiceTest {
     }
 
     // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("registerMenu — 등록 후 getMenuById로 결과 조립")
+    class RegisterMenu {
+
+        @Test
+        @DisplayName("happy: registerMenu → getMenuById(dto.menuId) 순차 호출 후 결과 반환")
+        void happyPath_registerThenFetch() {
+            OwnerMenuRegReq dto = newMenuRegReq(MENU_ID, STORE_ID, "피자", 15000);
+            OwnerMenuRes registered = newMenuRes(MENU_ID, "피자");
+            when(ownerMapper.getMenuById(MENU_ID)).thenReturn(registered);
+
+            OwnerMenuRes result = ownerService.registerMenu(dto);
+
+            assertThat(result).isSameAs(registered);
+            assertThat(result.getMenuId()).isEqualTo(MENU_ID);
+
+            InOrder inOrder = inOrder(ownerMapper);
+            inOrder.verify(ownerMapper).registerMenu(dto);
+            inOrder.verify(ownerMapper).getMenuById(MENU_ID);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("updateMenu — @Transactional, result 검증 후 getMenuById")
+    class UpdateMenu {
+
+        @Test
+        @DisplayName("happy: result>0 → getMenuById 호출 후 결과 반환 (InOrder)")
+        void happyPath_updatesThenFetches() {
+            OwnerMenuUpdateReq dto = newMenuUpdateReq(MENU_ID, "변경된 메뉴", 18000);
+            OwnerMenuRes updated = newMenuRes(MENU_ID, "변경된 메뉴");
+            when(ownerMapper.updateMenu(dto)).thenReturn(1);
+            when(ownerMapper.getMenuById(MENU_ID)).thenReturn(updated);
+
+            OwnerMenuRes result = ownerService.updateMenu(dto);
+
+            assertThat(result).isSameAs(updated);
+            InOrder inOrder = inOrder(ownerMapper);
+            inOrder.verify(ownerMapper).updateMenu(dto);
+            inOrder.verify(ownerMapper).getMenuById(MENU_ID);
+        }
+
+        @Test
+        @DisplayName("실패: result==0 → RuntimeException '메뉴 수정 실패' + getMenuById 미호출")
+        void updateFails_throwsAndShortCircuits() {
+            OwnerMenuUpdateReq dto = newMenuUpdateReq(MENU_ID, "x", 1);
+            when(ownerMapper.updateMenu(dto)).thenReturn(0);
+
+            assertThatThrownBy(() -> ownerService.updateMenu(dto))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("메뉴 수정 실패")
+                    .hasMessageContaining("해당 메뉴를 찾을 수 없음");
+
+            verify(ownerMapper, never()).getMenuById(anyLong());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("deleteMenu — @Transactional, 성공 시 menuId 반환")
+    class DeleteMenu {
+
+        @Test
+        @DisplayName("happy: result>0 → 입력 menuId 그대로 반환 (응답 동결)")
+        void happyPath_returnsMenuId() {
+            when(ownerMapper.deleteMenu(MENU_ID)).thenReturn(1);
+
+            Long result = ownerService.deleteMenu(MENU_ID);
+
+            assertThat(result).isEqualTo(MENU_ID);
+            verify(ownerMapper).deleteMenu(MENU_ID);
+        }
+
+        @Test
+        @DisplayName("실패: result==0 → RuntimeException '메뉴 삭제 실패: 해당 메뉴를 찾을 수 없음'")
+        void deleteFails_throws() {
+            when(ownerMapper.deleteMenu(MENU_ID)).thenReturn(0);
+
+            assertThatThrownBy(() -> ownerService.deleteMenu(MENU_ID))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("메뉴 삭제 실패")
+                    .hasMessageContaining("해당 메뉴를 찾을 수 없음");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    private static OwnerMenuRegReq newMenuRegReq(long menuId, long storeId, String name, int price) {
+        OwnerMenuRegReq dto = new OwnerMenuRegReq();
+        dto.setMenuId(menuId);
+        dto.setStoreId(storeId);
+        dto.setName(name);
+        dto.setPrice(price);
+        return dto;
+    }
+
+    private static OwnerMenuUpdateReq newMenuUpdateReq(long menuId, String name, int price) {
+        OwnerMenuUpdateReq dto = new OwnerMenuUpdateReq();
+        dto.setMenuId(menuId);
+        dto.setName(name);
+        dto.setPrice(price);
+        return dto;
+    }
+
+    private static OwnerMenuRes newMenuRes(Long menuId, String name) {
+        OwnerMenuRes res = new OwnerMenuRes();
+        res.setMenuId(menuId);
+        res.setName(name);
+        return res;
+    }
+
     private static OwnerOrderStateReq newStateReq(long orderId, int state) {
         OwnerOrderStateReq req = new OwnerOrderStateReq();
         req.setOrderId(orderId);
