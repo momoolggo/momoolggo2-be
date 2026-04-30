@@ -3,6 +3,8 @@ package com.green.mmg.main.store;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.store.model.FavoriteToggleReq;
+import com.green.mmg.main.store.model.StoreFavoriteReq;
 import com.green.mmg.main.store.model.StoreOneGetRes;
 import feign.FeignException;
 import feign.Request;
@@ -17,6 +19,7 @@ import org.springframework.http.HttpStatus;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -122,5 +125,113 @@ class StoreServiceTest {
         res.setStoreName("가게");
         res.setOwnerId(ownerId);
         return res;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Phase 3-Backfill-A-2: dto.userNo 위조 방지
+    // ─────────────────────────────────────────────────────────────────
+
+    private static final long USER_NO = 42L;
+    private static final long OTHER_USER_NO = 99L;
+
+    @Nested
+    @DisplayName("wishToggle — dto.userNo 위조 방지")
+    class WishToggle {
+
+        @Test
+        @DisplayName("happy: dto.userNo == caller → likedStoreRepository INSERT (existsByUserNoAndStoreId=false 분기)")
+        void happyPath_callerMatchesDto_insertsLike() {
+            FavoriteToggleReq req = new FavoriteToggleReq();
+            req.setUserNo(USER_NO);
+            req.setStoreId(STORE_ID);
+            when(likedStoreRepository.existsByUserNoAndStoreId(USER_NO, STORE_ID)).thenReturn(false);
+
+            boolean result = storeService.wishToggle(USER_NO, req);
+
+            assertThat(result).isTrue();
+            verify(likedStoreRepository).saveAndFlush(any());
+        }
+
+        @Test
+        @DisplayName("403 위조: dto.userNo != caller → FORBIDDEN '자신의 계정으로만 찜할 수 있습니다.' + Repository 미호출")
+        void dtoUserNoMismatch_throwsForbidden() {
+            FavoriteToggleReq req = new FavoriteToggleReq();
+            req.setUserNo(OTHER_USER_NO);  // 위조: 다른 사용자 userNo
+            req.setStoreId(STORE_ID);
+
+            assertThatThrownBy(() -> storeService.wishToggle(USER_NO, req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("자신의 계정으로만 찜할 수 있습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+
+            verifyNoInteractions(likedStoreRepository);
+        }
+    }
+
+    @Nested
+    @DisplayName("checkWish — dto.userNo 위조 방지")
+    class CheckWish {
+
+        @Test
+        @DisplayName("happy: dto.userNo == caller → existsByUserNoAndStoreId 위임")
+        void happyPath_callerMatches_returnsExist() {
+            FavoriteToggleReq req = new FavoriteToggleReq();
+            req.setUserNo(USER_NO);
+            req.setStoreId(STORE_ID);
+            when(likedStoreRepository.existsByUserNoAndStoreId(USER_NO, STORE_ID)).thenReturn(true);
+
+            boolean result = storeService.checkWish(USER_NO, req);
+
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        @DisplayName("403 위조: dto.userNo != caller → FORBIDDEN '자신의 계정으로만 조회할 수 있습니다.' + Repository 미호출")
+        void dtoUserNoMismatch_throwsForbidden() {
+            FavoriteToggleReq req = new FavoriteToggleReq();
+            req.setUserNo(OTHER_USER_NO);
+            req.setStoreId(STORE_ID);
+
+            assertThatThrownBy(() -> storeService.checkWish(USER_NO, req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("자신의 계정으로만 조회할 수 있습니다.");
+
+            verifyNoInteractions(likedStoreRepository);
+        }
+    }
+
+    @Nested
+    @DisplayName("getWishListResponse — dto.userNo 위조 방지")
+    class GetWishListResponse {
+
+        @Test
+        @DisplayName("happy: dto.userNo == caller → favoriteList + countByUserNo 합성")
+        void happyPath_callerMatches_assemblesResponse() {
+            StoreFavoriteReq req = new StoreFavoriteReq();
+            req.setUserNo(USER_NO);
+            req.setCurrentPage(1);
+            req.setSize(10);
+            when(storeMapper.favoriteList(req)).thenReturn(List.of());
+            when(likedStoreRepository.countByUserNo(USER_NO)).thenReturn(3L);
+
+            var result = storeService.getWishListResponse(USER_NO, req);
+
+            assertThat(result.get("totalCount")).isEqualTo(3);
+            assertThat(((List<?>) result.get("list"))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("403 위조: dto.userNo != caller → FORBIDDEN '본인 찜 목록만 조회 가능합니다.' + Repository/Mapper 미호출")
+        void dtoUserNoMismatch_throwsForbidden() {
+            StoreFavoriteReq req = new StoreFavoriteReq();
+            req.setUserNo(OTHER_USER_NO);
+
+            assertThatThrownBy(() -> storeService.getWishListResponse(USER_NO, req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 찜 목록만 조회 가능합니다.");
+
+            verifyNoInteractions(likedStoreRepository);
+            verifyNoInteractions(storeMapper);
+        }
     }
 }
