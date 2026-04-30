@@ -42,13 +42,17 @@ public class UserAddressService {
     }
 
     @Transactional
-    public void update(long userNo, UserAddressReq req) {
-        if (req.getDefaultAd() != null && req.getDefaultAd() == 1) {
-            userAddressRepository.resetDefault(userNo);
-            userAddressRepository.flush();
-        }
+    public void update(long callerUserNo, UserAddressReq req) {
         UserAddress entity = userAddressRepository.findById(req.getAddressId())
                 .orElseThrow(() -> new BusinessException("주소를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        // Phase 3-Backfill-A-5: 소유자 검증 (delete 패턴 일관 적용)
+        if (entity.getUserNo() == null || entity.getUserNo() != callerUserNo) {
+            throw new BusinessException("본인 주소만 수정 가능합니다.", HttpStatus.FORBIDDEN);
+        }
+        if (req.getDefaultAd() != null && req.getDefaultAd() == 1) {
+            userAddressRepository.resetDefault(callerUserNo);
+            userAddressRepository.flush();
+        }
         entity.setAddress(req.getAddress());
         entity.setAddressDetail(req.getAddressDetail());
         entity.setLatitude(req.getLatitude());
