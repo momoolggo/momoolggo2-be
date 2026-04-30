@@ -3,6 +3,7 @@ package com.green.mmg.main.owner;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.owner.model.OwnerOrderRes;
+import com.green.mmg.main.owner.model.OwnerOrderStateReq;
 import com.green.mmg.main.owner.model.OwnerStoreRegReq;
 import com.green.mmg.main.owner.model.OwnerStoreUpdateReq;
 import feign.FeignException;
@@ -229,6 +230,59 @@ class OwnerServiceTest {
     }
 
     // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("updateOrderState — 주문 상태 변경")
+    class UpdateOrderState {
+
+        @Test
+        @DisplayName("happy: result>0 → 정상 종료")
+        void happyPath_updates() {
+            OwnerOrderStateReq req = newStateReq(ORDER_ID, 3);
+            when(ownerMapper.updateOrderState(req)).thenReturn(1);
+
+            ownerService.updateOrderState(req);
+
+            verify(ownerMapper).updateOrderState(req);
+        }
+
+        @Test
+        @DisplayName("실패: result==0 → RuntimeException '주문 상태 변경 실패: 주문을 찾을 수 없습니다.'")
+        void updateFails_throws() {
+            OwnerOrderStateReq req = newStateReq(ORDER_ID, 3);
+            when(ownerMapper.updateOrderState(req)).thenReturn(0);
+
+            assertThatThrownBy(() -> ownerService.updateOrderState(req))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("주문 상태 변경 실패")
+                    .hasMessageContaining("주문을 찾을 수 없습니다");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("deleteOrder — @Transactional, OrderDetail → Order 순차 삭제")
+    class DeleteOrder {
+
+        @Test
+        @DisplayName("호출 순서 동결: deleteOrderDetail → deleteOrder (InOrder)")
+        void deletesInOrder() {
+            ownerService.deleteOrder(ORDER_ID);
+
+            InOrder inOrder = inOrder(ownerMapper);
+            inOrder.verify(ownerMapper).deleteOrderDetail(ORDER_ID);
+            inOrder.verify(ownerMapper).deleteOrder(ORDER_ID);
+            verifyNoMoreInteractions(ownerMapper);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    private static OwnerOrderStateReq newStateReq(long orderId, int state) {
+        OwnerOrderStateReq req = new OwnerOrderStateReq();
+        req.setOrderId(orderId);
+        req.setOrderState(state);
+        return req;
+    }
+
     private static OwnerOrderRes newOrder(long orderId, long userNo) {
         OwnerOrderRes o = new OwnerOrderRes();
         o.setOrderId(orderId);
