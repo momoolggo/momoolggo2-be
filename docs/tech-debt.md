@@ -27,13 +27,22 @@
 | **PaymentService.confirmPayment `@Transactional` 안 HTTP 외부 호출 + timeout 미설정** | 2026-04-29 | `PaymentService.callTossConfirm` (HttpURLConnection) | Phase 5 — `TossPaymentClient` 컴포넌트 추출 + RestTemplate/WebClient 전환 + 트랜잭션 외부로 호출 분리 |
 | **PaymentControllerIntegrationTest 학원 DB row PK 하드코딩** (`ORDER_ID_UNPAID=391775460588723L` 등) | 2026-04-29 | `PaymentControllerIntegrationTest` | Phase 2-Backfill-B — `@Transactional + @Rollback + fixture INSERT` 패턴으로 전환 (다른 5개 테스트 패턴과 통일) |
 
-### Phase 2-Backfill-C 예정
+---
 
-| 항목 | 발견일 | 위치 | 처리 시점 |
+## 예정된 작업
+
+> 단순 백필이 아니라 **신규 코드 변경 + 컨트롤러 시그니처 변경 + 프론트 영향**이 동반되는 항목.
+> Phase 2-Backfill-C에서 진단되어 D 단계로 분리된 작업.
+
+### Phase 2-Backfill-D — 권한 분기 추가 (라이더 진입 전 처리)
+
+| 항목 | 발견일 | 위치 | 처리 방향 |
 |---|---|---|---|
-| **ReviewService 예외 케이스 (403 주문자 불일치 / 409 중복 리뷰) 테스트 0** | 2026-04-29 | `ReviewService.postReview` | Phase 2-Backfill-C |
-| **CartService.clearAndAddToCart / deleteCartItem 단위 테스트 0** | 2026-04-29 | `CartService` | Phase 2-Backfill-C |
-| **UserAddressService.delete addressId 유효성 검증 없음** | 2026-04-29 | `UserAddressService.delete` | Phase 2-Backfill-C |
+| **CartService 권한 분기 추가 (cartItem 소유자 검증)** | 2026-04-30 | `CartService.updateCartItem(Long cartItemId, int quantity)` / `deleteCartItem(Long cartItemId)` — `userNo` 파라미터 부재 | `userNo` 파라미터 추가 → `cartDetailRepository.findById` 후 `cart.userNo == 호출자 userNo` 검증 → 불일치 시 `BusinessException FORBIDDEN` |
+| **UserAddressService.delete 권한 분기 추가 (userNo 파라미터, JWT principal)** | 2026-04-30 | `UserAddressService.delete(long addressId)` — `userNo` 파라미터 부재로 다른 사용자 주소 삭제 가능 | `delete(long userNo, long addressId)` 시그니처 변경 → `findById` 후 `address.userNo == 호출자 userNo` 검증 → 불일치 시 `BusinessException FORBIDDEN` |
+| **컨트롤러 시그니처 변경 + 프론트 영향 점검** | 2026-04-30 | `CartController` / `UserAddressController` | `@AuthenticationPrincipal UserPrincipal` 사용 강제 → 컨트롤러 메서드 시그니처 변경 가능 → 프론트(`momoolggo-fe`)의 cart/address 호출부 회귀 점검 필요 |
+
+> **현재 동작 동결 테스트**: `CartServiceTest`(13 케이스)와 `UserAddressServiceTest.Delete`(2 케이스)는 권한 분기 부재를 명시적으로 동결한 상태. D 단계에서 권한 분기 추가 시 해당 테스트 갱신 + 403 케이스 신규 추가 필요.
 
 ---
 
@@ -47,3 +56,6 @@
 | **calSumOrder가 orderId 받음 → deleteOrder 후 서브쿼리 empty로 store.order_count 미갱신** | 2026-04-29 | 2026-04-29 | `6d75c61` `e500e60` (Phase 2-A) |
 | **PaymentService.confirmPayment 흐름이 거꾸로** (장바구니 정리가 결제 저장보다 먼저) | 2026-04-29 | 2026-04-29 | `6565841` `c3f24d5` (Phase 2-A) |
 | `order-delete-not-found.json` snapshot 임시 문자열 `"ㅇㅇ"` 동결 | 2026-04-29 | 2026-04-29 | `6e1aa68` (Phase 2-A) |
+| **ReviewService 예외 케이스 (403 주문자 불일치 / 409 중복 리뷰) 테스트 0** | 2026-04-29 | 2026-04-30 | `ba284a7` (Phase 2-Backfill-C) |
+| **CartService.clearAndAddToCart / deleteCartItem 단위 테스트 0** | 2026-04-29 | 2026-04-30 | `f6a15ab` (Phase 2-Backfill-C — 현재 동작 동결, 권한 분기는 D로 이관) |
+| **UserAddressService.delete addressId 유효성 검증 없음** | 2026-04-29 | 2026-04-30 | `d21834d` (Phase 2-Backfill-C — 현재 동작 동결, 권한 분기는 D로 이관) |

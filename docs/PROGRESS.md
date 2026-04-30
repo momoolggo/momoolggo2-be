@@ -1,6 +1,6 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
-> 작성: 2026-04-28 / 최종 갱신: **2026-04-29 Phase 4-B 완료**
+> 작성: 2026-04-28 / 최종 갱신: **2026-04-30 Phase 2-Backfill-C 완료**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).
 
@@ -155,8 +155,8 @@
 - [x] **Phase 1 백필 (2026-04-29)** — Critical 3건 수정 + 테스트 42개 작성, 42/42 PASS
 - [x] **Phase 2-Backfill-A (2026-04-29)** — Critical-1/2 수정 + Order/Payment 단위 테스트 13개, 34/34 PASS
 - [x] **Phase 2-Backfill-B (2026-04-29)** — OrderService 단위 테스트 9 + Payment 통합 fixture 전환 + dead code 1건 제거, 43/43 PASS
-- [ ] Phase 2-Backfill-C (Review 403/409 + Cart 누락)
-- [ ] Phase 2-Backfill-D (Owner 핵심 + Store Feign null + AddressSearch)
+- [x] **Phase 2-Backfill-C (2026-04-30)** — ReviewService 11 + CartService 16 + UserAddressService 2 = 단위 29 추가, 72/72 PASS
+- [ ] Phase 2-Backfill-D (Owner 핵심 + Store Feign null + AddressSearch + **Cart/UserAddress 권한 분기 추가**)
 - [ ] Phase 3 백필 → `@code-reviewer` 검증 → PASS
 - [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
 - [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
@@ -239,6 +239,37 @@
 - `OrderServiceTest.GetOrderInfo.noCart_throwsAndShortCircuits`: cart 없을 때 Feign/주소 조회 모두 미호출 (verifyNoInteractions) — 불필요한 외부 호출 동결
 - `OrderServiceTest.MaxHistoryPage.delegatesToCountByUserNo`: `verifyNoInteractions(orderMapper)` — MyBatis → JPA 전환 결과 동결 (회귀 시 즉시 검출)
 - `PaymentControllerIntegrationTest.insertOrder` 헬퍼: Phase 2-A에서 user FK는 DROP했지만 store_id FK는 살아있음 — 학원 DB 실존 store_id=21 사용으로 통합 테스트 안정화
+
+### Phase 2-Backfill-C 결과 (2026-04-30)
+
+**테스트 작성 — 29개 / 0 failures / 0 errors / 5 커밋**:
+| 모듈/클래스 | 케이스 수 | 커밋 |
+|---|---|---|
+| `mmg-main-service` ReviewServiceTest.PostReview (happy + 403 + 409) | **3** | `ba284a7` |
+| `mmg-main-service` ReviewServiceTest.GetReviews + GetReviewById (happy/zeroCount + happy/404) | **4** | `aded988` |
+| `mmg-main-service` ReviewServiceTest.DeleteReview + UpdateReview (happy InOrder + 403) | **4** | `0ca5578` |
+| `mmg-main-service` CartServiceTest (GetCart 2 + AddToCart 5 + ClearAndAddToCart 2 + UpdateCartItem 2 + DeleteCartItem 3 + ClearCart 2) | **16** | `f6a15ab` |
+| `mmg-main-service` UserAddressServiceTest.Delete (happy + Repository 예외 propagate) | **2** | `d21834d` |
+
+**main-service 전체 빌드/테스트 통과 (72/72)**:
+| 분류 | 케이스 수 |
+|---|---|
+| 기존 통합: UserAddress 4 / Cart 5 / Order 3 / Payment 3 / Review 2 / LikedStore 4 | 21 |
+| 단위 (Phase 2-A): OrderServiceCalSumOrderTest 6 + PaymentServiceTest 7 | 13 |
+| 단위 (Phase 2-B): OrderServiceTest 9 | 9 |
+| 단위 (Phase 2-C): ReviewServiceTest 11 + CartServiceTest 16 + UserAddressServiceTest 2 | 29 |
+| **합계** | **72** |
+
+**Phase 2-Backfill-C 핵심 검증 케이스**:
+- `ReviewServiceTest.PostReview.otherUser_throwsForbiddenAndShortCircuits`: `checkReviewWriter` 불일치 시 `BusinessException FORBIDDEN` + `saveAndFlush` 미호출 동결 — 권한 분기 회귀 검출
+- `ReviewServiceTest.PostReview.duplicateReview_throwsConflict`: `DataIntegrityViolationException` → `BusinessException CONFLICT` 변환 + `updateStoreRating` 미호출 동결
+- `ReviewServiceTest.DeleteReview.happyPath_deletesAndUpdatesRating`: `InOrder`로 findStoreId → delete → updateRating **호출 순서 동결** (storeId 캐싱 분기 회귀 방지)
+- `CartServiceTest`: 권한 분기 부재를 클래스/메서드 주석으로 명시 동결 — Phase 2-Backfill-D에서 권한 분기 추가 시 본 테스트 갱신 필요
+- `UserAddressServiceTest.Delete`: `verifyNoMoreInteractions`로 `deleteById` 외 모든 호출 부재 동결 — userNo 파라미터 + 권한 분기 추가는 D 단계 작업
+
+**진단/결정 (Step 1)**:
+- CartService.updateCartItem/deleteCartItem 및 UserAddressService.delete에 **userNo 파라미터 부재 + 권한 검증 분기 부재** 발견 (보안 부채)
+- 옵션 C 채택: 현재 동작 동결 + tech-debt.md "예정된 작업" 섹션에 Phase 2-Backfill-D 항목으로 등록 (권한 분기 추가는 라이더 진입 전 D 단계에서 처리)
 
 ---
 
