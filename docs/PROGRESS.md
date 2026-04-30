@@ -1,6 +1,6 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
-> 작성: 2026-04-28 / 최종 갱신: **2026-04-30 Phase 2-Backfill-C 완료**
+> 작성: 2026-04-28 / 최종 갱신: **2026-04-30 Phase 2-Backfill-D 완료**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).
 
@@ -156,7 +156,8 @@
 - [x] **Phase 2-Backfill-A (2026-04-29)** — Critical-1/2 수정 + Order/Payment 단위 테스트 13개, 34/34 PASS
 - [x] **Phase 2-Backfill-B (2026-04-29)** — OrderService 단위 테스트 9 + Payment 통합 fixture 전환 + dead code 1건 제거, 43/43 PASS
 - [x] **Phase 2-Backfill-C (2026-04-30)** — ReviewService 11 + CartService 16 + UserAddressService 2 = 단위 29 추가, 72/72 PASS
-- [ ] Phase 2-Backfill-D (Owner 핵심 + Store Feign null + AddressSearch + **Cart/UserAddress 권한 분기 추가**)
+- [x] **Phase 2-Backfill-D (2026-04-30)** — Owner 18 + Store Feign null fix 5 + AddressSearch refactor 8 + Cart 권한 5+통합 4 + UserAddress 권한 2 = 신규 42 추가, **116/116 PASS**
+- [ ] Phase 2-Backfill-D-bis (OwnerService 14개 메서드 권한 일괄 추가, 라이더 진입 전)
 - [ ] Phase 3 백필 → `@code-reviewer` 검증 → PASS
 - [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
 - [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
@@ -271,11 +272,58 @@
 - CartService.updateCartItem/deleteCartItem 및 UserAddressService.delete에 **userNo 파라미터 부재 + 권한 검증 분기 부재** 발견 (보안 부채)
 - 옵션 C 채택: 현재 동작 동결 + tech-debt.md "예정된 작업" 섹션에 Phase 2-Backfill-D 항목으로 등록 (권한 분기 추가는 라이더 진입 전 D 단계에서 처리)
 
+### Phase 2-Backfill-D 결과 (2026-04-30)
+
+**신규 코드 변경 + 테스트 작성 — 42개 신규 / 0 failures / 0 errors / 11 커밋**:
+
+| 단계 | 내용 | 케이스 | 커밋 |
+|---|---|---|---|
+| D-1-B (가게) | OwnerService.registerStore + updateStore + deleteStore 단위 | **6** | `481c3cc` |
+| D-1-B (Feign) | OwnerService.getOrders 단위 (Feign batch + 합성 + 예외 propagate) | **4** | `b263168` |
+| D-1-B (주문) | OwnerService.updateOrderState + deleteOrder 단위 (InOrder) | **3** | `c167f57` |
+| D-1-B (메뉴) | OwnerService.registerMenu + updateMenu + deleteMenu 단위 | **5** | `1ac986f` |
+| D-2-A (fix) | StoreService.storeOneGet Feign null NPE 처리 (BusinessException NOT_FOUND) | — | `2102bb5` |
+| D-2-A (test) | StoreServiceTest (5 시나리오: happy / store 없음 / ownerId null / Feign null / Feign 예외) | **5** | `bdb6c6e` |
+| D-2-B (refactor) | RestTemplateConfig 신설 + AddressSearchService 싱글톤 주입 (connect 3s / read 5s) | — | `fb3b021` |
+| D-2-B (test) | AddressSearchServiceTest 7 + RestTemplateConfigTest 1 (timeout 동결) | **8** | `b658378` |
+| D-3-B (feat) | CartService cartItem 소유자 검증 추가 — 시그니처 변경 + Controller principal 주입 | (단위 5 신규) | `f35d1c9` |
+| D-3-B (test) | CartIntegrationTest — UPDATE 회로 + 권한 통합 (Warning 1 해소) | **4** | `f4b810b` |
+| D-4-B (feat) | UserAddressService.delete 소유자 검증 추가 — 시그니처 + Controller principal | — | `890e3ad` |
+| D-4-B (test) | UserAddressServiceTest 4 케이스 (happy / 403 / 404 / null userNo 방어적) | (2 신규) | `5621730` |
+
+**main-service 전체 빌드/테스트 통과 (116/116)**:
+| 분류 | 케이스 수 |
+|---|---|
+| 기존 통합 | 21 |
+| 단위 (Phase 2-A): OrderServiceCalSumOrderTest 6 + PaymentServiceTest 7 | 13 |
+| 단위 (Phase 2-B): OrderServiceTest 9 | 9 |
+| 단위 (Phase 2-C): ReviewServiceTest 11 + CartServiceTest 16 + UserAddressServiceTest 2 | 29 |
+| 단위 (Phase 2-D): OwnerServiceTest 18 + StoreServiceTest 5 + AddressSearchServiceTest 7 + RestTemplateConfigTest 1 + CartServiceTest 권한 5 추가 + UserAddressServiceTest 2 추가 | 38 |
+| 통합 (Phase 2-D): CartIntegrationTest 4 | 4 |
+| 시그니처 갱신 (Phase 2-D 영향): CartServiceTest 기존 13 동작 동결은 권한 검증 통합으로 흡수 | (포함) |
+| **합계** | **116** |
+
+**Phase 2-Backfill-D 핵심 검증 케이스**:
+- `StoreServiceTest.feignNull_throwsNotFound`: Feign 응답 null 시 `owner.getName()` NPE 차단 검증 — 직렬화/디코더 변경 회귀 방지
+- `AddressSearchServiceTest.localException_fallsBackToGeocoding`: 지역검색 timeout/예외 시 search() 전체가 깨지지 않고 Geocoding fallback 회로 동결
+- `RestTemplateConfigTest.restTemplate_hasConfiguredTimeouts`: connect 3s / read 5s 동결 (Reflection으로 SimpleClientHttpRequestFactory private field 확인)
+- `CartServiceTest.UpdateCartItem.otherUserCartItem_throwsForbidden`: cartId → Cart.userNo 조회 후 비교하는 *실제 권한 분기* 검증 (mock 우회 X)
+- `CartIntegrationTest.update_byOwner_actuallyPersistsToDb`: JPA 영속성 컨텍스트에서 dirty checking → flush → DB row 갱신까지 동결 (Warning 1 해소)
+- `CartIntegrationTest.update_byOtherUser_throwsForbiddenAndDbUnchanged`: 403 발생 시 DB row 미변경 (롤백 안전성)
+- `UserAddressServiceTest.otherUserAddress_throwsForbiddenAndShortCircuits`: findById 후 userNo 비교 분기 + delete 미호출 동결
+
+**진단/결정**:
+- Owner 도메인은 14개 메서드 모두 권한 분기 부재 발견 — 옵션 C(현재 동작 동결 + D-bis로 분리) 채택
+- CartService/UserAddressService.delete는 D 단계에서 권한 분기 추가 완료
+- StoreService.storeOneGet Feign null은 실제 발생 경로 없지만 방어적 코딩으로 BusinessException NOT_FOUND 처리
+- AddressSearchService는 외부 API 무한 대기 위험 차단 (timeout 적용) — 라이더 진입 전 보안 부채 정리
+
 ---
 
 ## 다음 단계
 
-**Phase 4-C (Redis)** 또는 **Phase 5 (팀원 합류 시)**.
+**Phase 2-Backfill-D-bis (라이더 진입 전 마지막 단계)** 또는 **Phase 4-C (Redis)** 또는 **Phase 5 (팀원 합류 시)**.
 
+- **Phase 2-Backfill-D-bis**: OwnerService 14개 메서드 권한 분기 일괄 추가 (D 단계에서 보류된 항목, tech-debt.md "예정된 작업" 참조)
 - Phase 4-C: 학원 발표 후 — 토큰 저장 (auth) + 날씨 캐시 (main) + Pub/Sub
 - Phase 5: 팀원 합류 시 본격 — 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 잔존 도메인 경계 정리

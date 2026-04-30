@@ -12,13 +12,11 @@
 
 ## 백필 대기
 
-### Phase 2-Backfill-D 예정
+### 라이더 진입 전 잔존 부채
 
 | 항목 | 발견일 | 위치 | 처리 시점 |
 |---|---|---|---|
-| **MapConfigController 네이버 지도 client-id 인증 없이 공개** (`/api/map/key`) | 2026-04-29 | `MapConfigController` | 프론트(`momoolggo-fe`) 협의 후 토큰 방식 전환 (Phase 2-D 또는 Phase 5) |
-| **AddressSearchService `new RestTemplate()` 매 요청 + timeout 미설정** | 2026-04-29 | `AddressSearchService` (searchByLocal/searchByGeocoding/reverseGeocode) | Phase 2-Backfill-D — `@Bean RestTemplate` + connect/read timeout |
-| **StoreService.storeOneGet Feign null NPE** | 2026-04-29 | `StoreService.java:32` `authFeignClient.getOwner(...)` | Phase 2-Backfill-D — null 처리 + 단위 테스트 |
+| **MapConfigController 네이버 지도 client-id 인증 없이 공개** (`/api/map/key`) | 2026-04-29 | `MapConfigController` | 프론트(`momoolggo-fe`) 협의 후 토큰 방식 전환 (Phase 2-Backfill-D-bis 또는 Phase 5) |
 
 ### Phase 5 예정 (TossPaymentClient 분리 시)
 
@@ -32,18 +30,14 @@
 ## 예정된 작업
 
 > 단순 백필이 아니라 **신규 코드 변경 + 컨트롤러 시그니처 변경 + 프론트 영향**이 동반되는 항목.
-> Phase 2-Backfill-C에서 진단되어 D 단계로 분리된 작업.
 
-### Phase 2-Backfill-D — 권한 분기 추가 (라이더 진입 전 처리)
+### Phase 2-Backfill-D-bis — Owner 권한 분기 일괄 추가 (라이더 진입 전 처리)
 
 | 항목 | 발견일 | 위치 | 처리 방향 |
 |---|---|---|---|
-| **CartService 권한 분기 추가 (cartItem 소유자 검증)** | 2026-04-30 | `CartService.updateCartItem(Long cartItemId, int quantity)` / `deleteCartItem(Long cartItemId)` — `userNo` 파라미터 부재 | `userNo` 파라미터 추가 → `cartDetailRepository.findById` 후 `cart.userNo == 호출자 userNo` 검증 → 불일치 시 `BusinessException FORBIDDEN` |
-| **UserAddressService.delete 권한 분기 추가 (userNo 파라미터, JWT principal)** | 2026-04-30 | `UserAddressService.delete(long addressId)` — `userNo` 파라미터 부재로 다른 사용자 주소 삭제 가능 | `delete(long userNo, long addressId)` 시그니처 변경 → `findById` 후 `address.userNo == 호출자 userNo` 검증 → 불일치 시 `BusinessException FORBIDDEN` |
-| **컨트롤러 시그니처 변경 + 프론트 영향 점검** | 2026-04-30 | `CartController` / `UserAddressController` | `@AuthenticationPrincipal UserPrincipal` 사용 강제 → 컨트롤러 메서드 시그니처 변경 가능 → 프론트(`momoolggo-fe`)의 cart/address 호출부 회귀 점검 필요 |
-| **CartService UPDATE 회로 통합 테스트 추가 (권한 분기 추가와 함께, JPA dirty checking 검증)** | 2026-04-30 | `CartService.updateCartItem` — `CartServiceTest` Mockito 단위는 영속성 컨텍스트가 없어 dirty checking 실제 UPDATE 발행을 검증 못함 | Phase 2-Backfill-D — 권한 분기 추가 작업 시 `@SpringBootTest + @Transactional + @Rollback`으로 cartItem fixture INSERT → updateCartItem → flush → DB row의 quantity 갱신 확인하는 통합 테스트 1건 추가 |
-
-> **현재 동작 동결 테스트**: `CartServiceTest`(13 케이스)와 `UserAddressServiceTest.Delete`(2 케이스)는 권한 분기 부재를 명시적으로 동결한 상태. D 단계에서 권한 분기 추가 시 해당 테스트 갱신 + 403 케이스 신규 추가 필요.
+| **OwnerService 14개 메서드 권한 분기 일괄 추가** | 2026-04-30 | `OwnerService` 전체 (registerStore/updateStore/deleteStore/updateStoreStatus/getOrders/updateOrderState/deleteOrder/registerMenu/updateMenu/deleteMenu/매출 2/카테고리 4) — `getMyStore/getMyStores`만 ownerNo 필터, 나머지는 store_id/order_id/menu_id/dto.userId만 받고 점주 본인 소유 검증 X | 모든 메서드에 `long callerOwnerNo` 추가 → `ownerMapper.findStoreOwnerByXxxId(...)` 후 `storeOwner == callerOwnerNo` 검증 → 불일치 시 `BusinessException FORBIDDEN`. 14개 메서드 + 14개 컨트롤러 + dto.userId 위조 방지(`registerStore`) 포함. 프론트 영향 LOW (URL/body 형식 그대로). |
+| **`OwnerServiceTest` 권한 분기 부재 동결 → 권한 검증 단위 테스트로 전환** | 2026-04-30 | `OwnerServiceTest` 18 케이스 (D-1-B에서 현재 동작 동결로 작성) | D-bis 권한 분기 추가 시 시그니처 갱신 + 403 케이스 추가. 클래스 주석의 "권한 분기는 D-bis 예정" 문구 제거. |
+| **MapConfigController 네이버 client-id 공개 보안 부채** (`/api/map/key`) | 2026-04-29 | `MapConfigController` | 프론트 협의 후 처리 — D-bis 또는 Phase 5 |
 
 ---
 
@@ -60,3 +54,8 @@
 | **ReviewService 예외 케이스 (403 주문자 불일치 / 409 중복 리뷰) 테스트 0** | 2026-04-29 | 2026-04-30 | `ba284a7` (Phase 2-Backfill-C) |
 | **CartService.clearAndAddToCart / deleteCartItem 단위 테스트 0** | 2026-04-29 | 2026-04-30 | `f6a15ab` (Phase 2-Backfill-C — 현재 동작 동결, 권한 분기는 D로 이관) |
 | **UserAddressService.delete addressId 유효성 검증 없음** | 2026-04-29 | 2026-04-30 | `d21834d` (Phase 2-Backfill-C — 현재 동작 동결, 권한 분기는 D로 이관) |
+| **StoreService.storeOneGet Feign null NPE** | 2026-04-29 | 2026-04-30 | `2102bb5` `bdb6c6e` (Phase 2-Backfill-D — BusinessException NOT_FOUND 처리 + 5 케이스 단위 테스트) |
+| **AddressSearchService `new RestTemplate()` 매 요청 + timeout 미설정** | 2026-04-29 | 2026-04-30 | `fb3b021` `b658378` (Phase 2-Backfill-D — RestTemplate 싱글톤 Bean + connect 3s/read 5s + 8 케이스 테스트) |
+| **CartService 권한 분기 추가 (cartItem 소유자 검증)** | 2026-04-30 | 2026-04-30 | `f35d1c9` `f4b810b` (Phase 2-Backfill-D — Service/Controller 시그니처 변경 + 단위 5 + 통합 4) |
+| **UserAddressService.delete 권한 분기 추가 (userNo 파라미터)** | 2026-04-30 | 2026-04-30 | `890e3ad` `5621730` (Phase 2-Backfill-D — Service/Controller 시그니처 변경 + 단위 4) |
+| **CartService UPDATE 회로 통합 테스트 추가 (Warning 1)** | 2026-04-30 | 2026-04-30 | `f4b810b` (Phase 2-Backfill-D — `CartIntegrationTest`로 dirty checking + 권한 + 롤백 안전성 검증) |
