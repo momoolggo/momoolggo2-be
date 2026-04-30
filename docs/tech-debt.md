@@ -38,6 +38,7 @@
 | **MapConfigController 네이버 client-id 공개 보안 부채** (`/api/map/key`) | 2026-04-29 | `MapConfigController` | 프론트 협의 후 처리 — Phase 5 |
 | **OwnerStoreUpdateReq.storeId 타입 정리 (String → Long)** | 2026-04-30 | `OwnerStoreUpdateReq.java:9` `private String storeId` | D-bis에서 임시로 `Long.parseLong` 변환 + BusinessException BAD_REQUEST 처리. 근본 해결은 dto 타입 변경이지만 프론트(`StoreManagementView.vue` 등)의 storeId 전송 형식 협의 필요. |
 | **OwnerService.uploadImage 확장자 화이트리스트 부재** | 2026-04-30 | `OwnerService.uploadImage` (39행) — `contentType.startsWith("image/")`만 체크 | content-type 헤더 위조 시 우회 가능. 실 확장자(jpg/png/gif/webp 등) 화이트리스트 추가 필요. multipart 10MB 제한은 적용됨. |
+| **OwnerService.getOrders Feign 예외 try-catch 없음 (W-2)** | 2026-04-30 | `OwnerService.getOrders` — `authFeignClient.getUsers(userNos)` 예외 시 그대로 propagate → 점주 화면에 500 노출 | Phase 5 — `TossPaymentClient` 분리 작업과 함께 Feign Fallback 패턴 도입 (CircuitBreaker / 빈 응답 fallback). 단위 테스트 `feignException_propagates`가 현재 동작 명시 동결. |
 
 ---
 
@@ -62,3 +63,4 @@
 | **CartIntegrationTest 1차 캐시 의존 강화 (Warning)** | 2026-04-30 | 2026-04-30 | `ef77f34` (Phase 2-Backfill-D — entityManager.clear() 추가 → DB SELECT 검증 격상) |
 | **OwnerService 17개 메서드 권한 분기 일괄 추가** | 2026-04-30 | 2026-04-30 | Phase 2-Backfill-D-bis — Mapper 헬퍼 4개 + Service verify 4개 + 5 그룹 (가게/주문/메뉴/매출/카테고리). 커밋: `a0ba8a2`(인프라) + 그룹별 feat 5 + test 5. 신규 32 케이스, 148/148 PASS. |
 | **registerStore dto.userId 위조 방지** | 2026-04-30 | 2026-04-30 | `aa65c86` `8963d58` (Phase 2-Backfill-D-bis 그룹 ㄱ) — 옵션 B (불일치 시 FORBIDDEN throw) |
+| **OwnerController.updateStoreStatus 응답 null (W-1, 기존 부채)** | 2026-04-30 | 2026-04-30 | `1cf07a7` (Phase 2-Backfill-D-bis 후처리) — Service 결과 받아놓고 응답에 `null` 반환하던 버그. `null` → `updatedStore` 1줄 수정. Phase 2-B에서 도입된 부채. |
