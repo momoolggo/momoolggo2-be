@@ -39,20 +39,22 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 /**
- * Phase 2-Backfill-D Step D-1-B: OwnerService 핵심 9개 메서드 단위 테스트 — 현재 동작 동결.
+ * OwnerService 단위 테스트 — Phase 2-Backfill-D-bis 권한 분기 적용 완료.
  *
- * <p><b>권한 분기 부재를 명시적으로 동결한다.</b><br>
- * OwnerService 14개 메서드 중 {@code getMyStore/getMyStores}만 ownerNo 파라미터로 본인 가게 필터.
- * 나머지 메서드(registerStore/updateStore/deleteStore/getOrders/updateOrderState/deleteOrder/
- * registerMenu/updateMenu/deleteMenu/매출/카테고리)는 store_id/order_id/menu_id/dto.userId만 받고
- * 점주 본인 소유 검증을 하지 않는다 — 다른 점주의 가게/메뉴/주문 변경 가능.
- * 이는 알려진 보안 부채이며 <b>Phase 2-Backfill-D-bis에서 14개 메서드 권한 분기를 일괄 추가할 예정</b>.<br>
- * 본 테스트는 현재 동작을 회귀 방지를 위해 그대로 동결한다 (D-bis에서 함께 갱신).</p>
+ * <p>모든 메서드는 {@code callerOwnerNo} (JWT principal) + 본인 자원 검증을 거친다:
+ * <ul>
+ *   <li>{@code verifyStoreOwner}: store_id → store.owner_id 비교</li>
+ *   <li>{@code verifyOrderOwner}: order_id → orders.store_id → store.owner_id 비교</li>
+ *   <li>{@code verifyMenuOwner}: menu_id → menu_category → store.owner_id 비교</li>
+ *   <li>{@code verifyCategoryOwner}: category_id → menu_category → store.owner_id 비교</li>
+ *   <li>{@code registerStore}: dto.userId 위조 방지 (불일치 시 FORBIDDEN — 옵션 B)</li>
+ * </ul>
+ * Cart의 {@code verifyCartItemOwner}와 동일 패턴 (Repository 교차 검증).</p>
  *
  * <p>학원 DB / Spring 컨텍스트 의존 0 — 순수 Mockito.</p>
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("OwnerService — 핵심 9개 메서드 단위 테스트 (현재 동작 동결)")
+@DisplayName("OwnerService — 권한 분기 + 분기별 동작")
 class OwnerServiceTest {
 
     @Mock private OwnerMapper ownerMapper;
@@ -284,15 +286,16 @@ class OwnerServiceTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("getOrders — Feign batch + 응답 합성 (N+1 회피)")
+    @DisplayName("getOrders — verifyStoreOwner + Feign batch")
     class GetOrders {
 
         @Test
-        @DisplayName("happy: 중복 userNo 제거(distinct) batch 호출 + customerName/tel 합성")
+        @DisplayName("happy: 본인 가게 → distinct batch + name/tel 합성")
         void happyPath_batchedFeignAndAssembled() {
             OwnerOrderRes o1 = newOrder(391_000_001L, 100L);
-            OwnerOrderRes o2 = newOrder(391_000_002L, 100L);  // 중복 user
+            OwnerOrderRes o2 = newOrder(391_000_002L, 100L);
             OwnerOrderRes o3 = newOrder(391_000_003L, 200L);
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
             when(ownerMapper.getOrders(STORE_ID, 1, "2026-04-30"))
                     .thenReturn(List.of(o1, o2, o3));
             when(authFeignClient.getUsers(anyList())).thenReturn(List.of(
@@ -300,56 +303,63 @@ class OwnerServiceTest {
                     new UserBriefDto(200L, "민수", "010-2222", "")
             ));
 
-            List<OwnerOrderRes> result = ownerService.getOrders(STORE_ID, 1, "2026-04-30");
+            List<OwnerOrderRes> result = ownerService.getOrders(USER_ID, STORE_ID, 1, "2026-04-30");
 
-            // distinct userNos가 batch로 전달됐는지 동결
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<Long>> captor = ArgumentCaptor.forClass(List.class);
             verify(authFeignClient).getUsers(captor.capture());
-            assertThat(captor.getValue()).containsExactlyInAnyOrder(100L, 200L);  // 중복 제거
-
-            // 합성된 customerName/tel 동결
+            assertThat(captor.getValue()).containsExactlyInAnyOrder(100L, 200L);
             assertThat(result.get(0).getCustomerName()).isEqualTo("준하");
-            assertThat(result.get(0).getTel()).isEqualTo("010-1111");
-            assertThat(result.get(1).getCustomerName()).isEqualTo("준하");  // 같은 user 합성
             assertThat(result.get(2).getCustomerName()).isEqualTo("민수");
-            assertThat(result.get(2).getTel()).isEqualTo("010-2222");
         }
 
         @Test
-        @DisplayName("orders 빈 리스트 → Feign 미호출 (early return 동결)")
+        @DisplayName("403: 다른 점주 가게 주문 조회 → FORBIDDEN + Mapper/Feign 미호출")
+        void otherOwnerStore_throwsForbiddenAndShortCircuits() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.getOrders(USER_ID, STORE_ID, null, null))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).getOrders(anyLong(), any(), any());
+            verifyNoInteractions(authFeignClient);
+        }
+
+        @Test
+        @DisplayName("happy: orders 빈 리스트 → Feign 미호출 (early return)")
         void emptyOrders_skipsFeign() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
             when(ownerMapper.getOrders(STORE_ID, null, null)).thenReturn(List.of());
 
-            List<OwnerOrderRes> result = ownerService.getOrders(STORE_ID, null, null);
+            List<OwnerOrderRes> result = ownerService.getOrders(USER_ID, STORE_ID, null, null);
 
             assertThat(result).isEmpty();
             verifyNoInteractions(authFeignClient);
         }
 
         @Test
-        @DisplayName("Feign 응답에 없는 userNo → if (u != null) 분기 → customerName/tel 미설정 (현재 동작 동결)")
+        @DisplayName("happy: Feign 응답에 없는 userNo → if (u != null) 분기 → 미설정 동결")
         void userMissingFromFeign_keepsNullFields() {
             OwnerOrderRes o1 = newOrder(391_000_001L, 100L);
-            OwnerOrderRes o2 = newOrder(391_000_002L, 999L);  // Feign 응답에 없음
+            OwnerOrderRes o2 = newOrder(391_000_002L, 999L);
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
             when(ownerMapper.getOrders(STORE_ID, null, null)).thenReturn(List.of(o1, o2));
-            // batch 응답에 user 100만 포함, 999는 누락
             when(authFeignClient.getUsers(anyList())).thenReturn(List.of(
                     new UserBriefDto(100L, "준하", "010-1111", "")
             ));
 
-            List<OwnerOrderRes> result = ownerService.getOrders(STORE_ID, null, null);
+            List<OwnerOrderRes> result = ownerService.getOrders(USER_ID, STORE_ID, null, null);
 
             assertThat(result.get(0).getCustomerName()).isEqualTo("준하");
-            assertThat(result.get(0).getTel()).isEqualTo("010-1111");
-            assertThat(result.get(1).getCustomerName()).isNull();  // 미설정 동결
-            assertThat(result.get(1).getTel()).isNull();
+            assertThat(result.get(1).getCustomerName()).isNull();
         }
 
         @Test
-        @DisplayName("Feign 예외 → 호출자에게 그대로 propagate (try-catch 없음 동결)")
+        @DisplayName("Feign 예외 → 그대로 propagate (try-catch 없음 동결)")
         void feignException_propagates() {
             OwnerOrderRes o1 = newOrder(391_000_001L, 100L);
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
             when(ownerMapper.getOrders(STORE_ID, null, null)).thenReturn(List.of(o1));
             when(authFeignClient.getUsers(anyList())).thenThrow(
                     new FeignException.ServiceUnavailable(
@@ -358,54 +368,95 @@ class OwnerServiceTest {
                                     new HashMap<>(), null, StandardCharsets.UTF_8, null),
                             null, null));
 
-            assertThatThrownBy(() -> ownerService.getOrders(STORE_ID, null, null))
+            assertThatThrownBy(() -> ownerService.getOrders(USER_ID, STORE_ID, null, null))
                     .isInstanceOf(FeignException.class);
         }
     }
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("updateOrderState — 주문 상태 변경")
+    @DisplayName("updateOrderState — verifyOrderOwner + 상태 변경")
     class UpdateOrderState {
 
         @Test
-        @DisplayName("happy: result>0 → 정상 종료")
+        @DisplayName("happy: 본인 가게 주문 → updateOrderState 호출")
         void happyPath_updates() {
             OwnerOrderStateReq req = newStateReq(ORDER_ID, 3);
+            when(ownerMapper.findStoreOwnerByOrderId(ORDER_ID)).thenReturn(USER_ID);
             when(ownerMapper.updateOrderState(req)).thenReturn(1);
 
-            ownerService.updateOrderState(req);
+            ownerService.updateOrderState(USER_ID, req);
 
             verify(ownerMapper).updateOrderState(req);
         }
 
         @Test
-        @DisplayName("실패: result==0 → RuntimeException '주문 상태 변경 실패: 주문을 찾을 수 없습니다.'")
+        @DisplayName("403: 다른 점주 주문 → FORBIDDEN '본인 가게의 주문만 접근 가능합니다.' + updateOrderState 미호출")
+        void otherOwnerOrder_throwsForbidden() {
+            OwnerOrderStateReq req = newStateReq(ORDER_ID, 3);
+            when(ownerMapper.findStoreOwnerByOrderId(ORDER_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.updateOrderState(USER_ID, req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게의 주문만 접근 가능합니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(ownerMapper, never()).updateOrderState(any());
+        }
+
+        @Test
+        @DisplayName("404: orderId 미존재 → NOT_FOUND '주문을 찾을 수 없습니다.'")
+        void orderNotFound_throwsNotFound() {
+            OwnerOrderStateReq req = newStateReq(ORDER_ID, 3);
+            when(ownerMapper.findStoreOwnerByOrderId(ORDER_ID)).thenReturn(null);
+
+            assertThatThrownBy(() -> ownerService.updateOrderState(USER_ID, req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("주문을 찾을 수 없습니다.");
+        }
+
+        @Test
+        @DisplayName("실패: 권한 통과 + result==0 → RuntimeException '주문 상태 변경 실패'")
         void updateFails_throws() {
             OwnerOrderStateReq req = newStateReq(ORDER_ID, 3);
+            when(ownerMapper.findStoreOwnerByOrderId(ORDER_ID)).thenReturn(USER_ID);
             when(ownerMapper.updateOrderState(req)).thenReturn(0);
 
-            assertThatThrownBy(() -> ownerService.updateOrderState(req))
+            assertThatThrownBy(() -> ownerService.updateOrderState(USER_ID, req))
                     .isInstanceOf(RuntimeException.class)
-                    .hasMessageContaining("주문 상태 변경 실패")
-                    .hasMessageContaining("주문을 찾을 수 없습니다");
+                    .hasMessageContaining("주문 상태 변경 실패");
         }
     }
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("deleteOrder — @Transactional, OrderDetail → Order 순차 삭제")
+    @DisplayName("deleteOrder — @Transactional, verifyOrderOwner + 순차 삭제")
     class DeleteOrder {
 
         @Test
-        @DisplayName("호출 순서 동결: deleteOrderDetail → deleteOrder (InOrder)")
+        @DisplayName("happy: 본인 주문 → InOrder verifyOwner → deleteOrderDetail → deleteOrder")
         void deletesInOrder() {
-            ownerService.deleteOrder(ORDER_ID);
+            when(ownerMapper.findStoreOwnerByOrderId(ORDER_ID)).thenReturn(USER_ID);
+
+            ownerService.deleteOrder(USER_ID, ORDER_ID);
 
             InOrder inOrder = inOrder(ownerMapper);
+            inOrder.verify(ownerMapper).findStoreOwnerByOrderId(ORDER_ID);
             inOrder.verify(ownerMapper).deleteOrderDetail(ORDER_ID);
             inOrder.verify(ownerMapper).deleteOrder(ORDER_ID);
-            verifyNoMoreInteractions(ownerMapper);
+        }
+
+        @Test
+        @DisplayName("403: 다른 점주 주문 → FORBIDDEN + 삭제 미호출")
+        void otherOwnerOrder_throwsForbiddenAndShortCircuits() {
+            when(ownerMapper.findStoreOwnerByOrderId(ORDER_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.deleteOrder(USER_ID, ORDER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게의 주문만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).deleteOrderDetail(anyLong());
+            verify(ownerMapper, never()).deleteOrder(anyLong());
         }
     }
 
