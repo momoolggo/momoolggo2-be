@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -193,6 +194,76 @@ class ReviewServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .hasMessage("리뷰를 찾을 수 없습니다.")
                     .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("deleteReview — 삭제 권한 + storeRating 갱신")
+    class DeleteReview {
+
+        @Test
+        @DisplayName("happy: result>0 → updateStoreRating 호출 (호출 순서 동결: findStoreId → delete → updateRating)")
+        void happyPath_deletesAndUpdatesRating() {
+            when(reviewMapper.findStoreIdByReviewId(REVIEW_ID)).thenReturn(STORE_ID);
+            when(reviewMapper.deleteReview(USER_NO, REVIEW_ID)).thenReturn(1);
+
+            reviewService.deleteReview(USER_NO, REVIEW_ID);
+
+            InOrder inOrder = inOrder(reviewMapper);
+            inOrder.verify(reviewMapper).findStoreIdByReviewId(REVIEW_ID);
+            inOrder.verify(reviewMapper).deleteReview(USER_NO, REVIEW_ID);
+            inOrder.verify(reviewMapper).updateStoreRating(STORE_ID);
+            verifyNoInteractions(reviewRepository);
+        }
+
+        @Test
+        @DisplayName("403: result==0 (다른 사용자 리뷰) → FORBIDDEN '삭제 권한이 없습니다.' + updateStoreRating 미호출")
+        void noPermission_throwsForbiddenAndShortCircuits() {
+            when(reviewMapper.findStoreIdByReviewId(REVIEW_ID)).thenReturn(STORE_ID);
+            when(reviewMapper.deleteReview(OTHER_USER_NO, REVIEW_ID)).thenReturn(0);
+
+            assertThatThrownBy(() -> reviewService.deleteReview(OTHER_USER_NO, REVIEW_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("삭제 권한이 없습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(reviewMapper, never()).updateStoreRating(anyLong());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("updateReview — 수정 권한 + storeRating 갱신")
+    class UpdateReview {
+
+        @Test
+        @DisplayName("happy: result>0 → updateStoreRating 호출 (호출 순서 동결: update → findStoreId → updateRating)")
+        void happyPath_updatesAndRefreshesRating() {
+            when(reviewMapper.updateReview(REVIEW_ID, USER_NO, 3, "수정")).thenReturn(1);
+            when(reviewMapper.findStoreIdByReviewId(REVIEW_ID)).thenReturn(STORE_ID);
+
+            reviewService.updateReview(USER_NO, REVIEW_ID, 3, "수정");
+
+            InOrder inOrder = inOrder(reviewMapper);
+            inOrder.verify(reviewMapper).updateReview(REVIEW_ID, USER_NO, 3, "수정");
+            inOrder.verify(reviewMapper).findStoreIdByReviewId(REVIEW_ID);
+            inOrder.verify(reviewMapper).updateStoreRating(STORE_ID);
+            verifyNoInteractions(reviewRepository);
+        }
+
+        @Test
+        @DisplayName("403: result==0 → FORBIDDEN '수정 권한이 없거나 리뷰를 찾을 수 없습니다.' + findStoreId/updateRating 미호출")
+        void noPermission_throwsForbiddenAndShortCircuits() {
+            when(reviewMapper.updateReview(REVIEW_ID, OTHER_USER_NO, 1, "x")).thenReturn(0);
+
+            assertThatThrownBy(() -> reviewService.updateReview(OTHER_USER_NO, REVIEW_ID, 1, "x"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("수정 권한이 없거나 리뷰를 찾을 수 없습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(reviewMapper, never()).findStoreIdByReviewId(anyLong());
+            verify(reviewMapper, never()).updateStoreRating(anyLong());
         }
     }
 
