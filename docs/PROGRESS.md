@@ -1,6 +1,6 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
-> 작성: 2026-04-28 / 최종 갱신: **2026-04-30 Phase 2-Backfill-D 완료**
+> 작성: 2026-04-28 / 최종 갱신: **2026-04-30 Phase 2-Backfill-D-bis 완료 (Phase 2 백필 종료)**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).
 
@@ -156,8 +156,8 @@
 - [x] **Phase 2-Backfill-A (2026-04-29)** — Critical-1/2 수정 + Order/Payment 단위 테스트 13개, 34/34 PASS
 - [x] **Phase 2-Backfill-B (2026-04-29)** — OrderService 단위 테스트 9 + Payment 통합 fixture 전환 + dead code 1건 제거, 43/43 PASS
 - [x] **Phase 2-Backfill-C (2026-04-30)** — ReviewService 11 + CartService 16 + UserAddressService 2 = 단위 29 추가, 72/72 PASS
-- [x] **Phase 2-Backfill-D (2026-04-30)** — Owner 18 + Store Feign null fix 5 + AddressSearch refactor 8 + Cart 권한 5+통합 4 + UserAddress 권한 2 = 신규 42 추가, **116/116 PASS**
-- [ ] Phase 2-Backfill-D-bis (OwnerService 14개 메서드 권한 일괄 추가, 라이더 진입 전)
+- [x] **Phase 2-Backfill-D (2026-04-30)** — Owner 18 + Store Feign null fix 5 + AddressSearch refactor 8 + Cart 권한 5+통합 4 + UserAddress 권한 2 = 신규 42 추가, 116/116 PASS
+- [x] **Phase 2-Backfill-D-bis (2026-04-30)** — OwnerService 17개 메서드 권한 분기 일괄 + dto.userId 위조 방지 + Mapper 헬퍼 4개 + 32 신규 케이스, **148/148 PASS** (Phase 2 백필 종료)
 - [ ] Phase 3 백필 → `@code-reviewer` 검증 → PASS
 - [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
 - [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
@@ -318,12 +318,43 @@
 - StoreService.storeOneGet Feign null은 실제 발생 경로 없지만 방어적 코딩으로 BusinessException NOT_FOUND 처리
 - AddressSearchService는 외부 API 무한 대기 위험 차단 (timeout 적용) — 라이더 진입 전 보안 부채 정리
 
+### Phase 2-Backfill-D-bis 결과 (2026-04-30) — Phase 2 백필 종료
+
+**Owner 17개 메서드 권한 분기 일괄 추가 — 32 신규 / 0 failures / 0 errors / 11 커밋**:
+
+| 그룹 | 메서드 수 | 신규 케이스 | feat 커밋 | test 커밋 |
+|---|---|---|---|---|
+| 사전 인프라 | Mapper 헬퍼 4개 + Service verify 4개 | — | `a0ba8a2` | — |
+| ㅁ 카테고리 | 4 | 10 | `1e27ead` | `20aa3ec` |
+| ㄷ 메뉴 | 4 | 10 (기존 5 갱신 + 5 신규) | `b61d5d8` | `78f958b` |
+| ㄹ 매출 | 2 | 4 | `0d1cda6` | `b6ebd07` |
+| ㄱ 가게 | 6 (registerStore 위조 방지 + Long.parseLong) | 14 (기존 6 갱신 + 8 신규) | `aa65c86` | `8963d58` |
+| ㄴ 주문 | 3 | 11 (기존 3 갱신 + 8 신규) | `579fef3` | `9f5cc3f` |
+
+**main-service 전체 빌드/테스트 통과 (148/148)**:
+- Phase 2-D 누적 116 + D-bis 신규 32 = **148**
+- Owner 권한 검증 SQL 4개 신설 (store/orders/menu/menu_category JOIN)
+- 통합 테스트 영향 0 (OwnerService는 다른 서비스에서 호출 안 함)
+
+**핵심 검증 케이스**:
+- `RegisterStore.dtoUserIdMismatch_throwsForbidden`: 프론트가 dto.userId 위조 시도 시 FORBIDDEN. 옵션 B 적용 — 명시적 거부.
+- `UpdateStore.invalidStoreIdFormat_throwsBadRequest`: String storeId의 비숫자 입력 → BAD_REQUEST. dto 타입 정리는 tech-debt 등재 (프론트 협의 필요).
+- `DeleteOrder.deletesInOrder`: InOrder로 `findStoreOwnerByOrderId → deleteOrderDetail → deleteOrder` 순서 동결.
+- `UpdateMenu.otherOwnerMenu_throwsForbiddenAndShortCircuits`: 다른 점주 메뉴 수정 시도 시 권한 검증 → FORBIDDEN + Mapper 미호출. 메시지 "본인 가게의 메뉴만 접근 가능합니다."
+- `GetOrders.otherOwnerStore_throwsForbiddenAndShortCircuits`: 권한 미통과 시 Feign batch 호출 미발생 (불필요한 외부 호출 차단).
+
+**진단/결정**:
+- 그룹 진행 순서 ㅁ → ㄷ → ㄹ → ㄱ → ㄴ (단순 → 복잡, 위험한 것 마지막)
+- 프론트 영향 LOW 확정 (`AddStoreView.vue`의 dto.userId 자동 일치 검증)
+- uploadImage 권한 추가 제외 OK (Controller hasRole("OWNER") 1차 필터 + multipart 10MB 제한 적용)
+- Owner 도메인은 다른 서비스에서 호출 안 함 → 통합 테스트 영향 0
+
 ---
 
 ## 다음 단계
 
-**Phase 2-Backfill-D-bis (라이더 진입 전 마지막 단계)** 또는 **Phase 4-C (Redis)** 또는 **Phase 5 (팀원 합류 시)**.
+**Phase 3 진단** 또는 **Phase 4-C (Redis)** 또는 **Phase 5 (팀원 합류 시)**.
 
-- **Phase 2-Backfill-D-bis**: OwnerService 14개 메서드 권한 분기 일괄 추가 (D 단계에서 보류된 항목, tech-debt.md "예정된 작업" 참조)
+- **Phase 3 진단**: 백필 완료 후 Phase 3 (영속성 전환) 결과 종합 점검 (이미 8 도메인 JPA 전환 완료 — 3-A/3-B/3-C/3-D 결과 검증)
 - Phase 4-C: 학원 발표 후 — 토큰 저장 (auth) + 날씨 캐시 (main) + Pub/Sub
 - Phase 5: 팀원 합류 시 본격 — 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 잔존 도메인 경계 정리

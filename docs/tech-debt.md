@@ -31,13 +31,13 @@
 
 > 단순 백필이 아니라 **신규 코드 변경 + 컨트롤러 시그니처 변경 + 프론트 영향**이 동반되는 항목.
 
-### Phase 2-Backfill-D-bis — Owner 권한 분기 일괄 추가 (라이더 진입 전 처리)
+### Phase 5 또는 후속 단계
 
 | 항목 | 발견일 | 위치 | 처리 방향 |
 |---|---|---|---|
-| **OwnerService 14개 메서드 권한 분기 일괄 추가** | 2026-04-30 | `OwnerService` 전체 (registerStore/updateStore/deleteStore/updateStoreStatus/getOrders/updateOrderState/deleteOrder/registerMenu/updateMenu/deleteMenu/매출 2/카테고리 4) — `getMyStore/getMyStores`만 ownerNo 필터, 나머지는 store_id/order_id/menu_id/dto.userId만 받고 점주 본인 소유 검증 X | 모든 메서드에 `long callerOwnerNo` 추가 → `ownerMapper.findStoreOwnerByXxxId(...)` 후 `storeOwner == callerOwnerNo` 검증 → 불일치 시 `BusinessException FORBIDDEN`. 14개 메서드 + 14개 컨트롤러 + dto.userId 위조 방지(`registerStore`) 포함. 프론트 영향 LOW (URL/body 형식 그대로). |
-| **`OwnerServiceTest` 권한 분기 부재 동결 → 권한 검증 단위 테스트로 전환** | 2026-04-30 | `OwnerServiceTest` 18 케이스 (D-1-B에서 현재 동작 동결로 작성) | D-bis 권한 분기 추가 시 시그니처 갱신 + 403 케이스 추가. 클래스 주석의 "권한 분기는 D-bis 예정" 문구 제거. |
-| **MapConfigController 네이버 client-id 공개 보안 부채** (`/api/map/key`) | 2026-04-29 | `MapConfigController` | 프론트 협의 후 처리 — D-bis 또는 Phase 5 |
+| **MapConfigController 네이버 client-id 공개 보안 부채** (`/api/map/key`) | 2026-04-29 | `MapConfigController` | 프론트 협의 후 처리 — Phase 5 |
+| **OwnerStoreUpdateReq.storeId 타입 정리 (String → Long)** | 2026-04-30 | `OwnerStoreUpdateReq.java:9` `private String storeId` | D-bis에서 임시로 `Long.parseLong` 변환 + BusinessException BAD_REQUEST 처리. 근본 해결은 dto 타입 변경이지만 프론트(`StoreManagementView.vue` 등)의 storeId 전송 형식 협의 필요. |
+| **OwnerService.uploadImage 확장자 화이트리스트 부재** | 2026-04-30 | `OwnerService.uploadImage` (39행) — `contentType.startsWith("image/")`만 체크 | content-type 헤더 위조 시 우회 가능. 실 확장자(jpg/png/gif/webp 등) 화이트리스트 추가 필요. multipart 10MB 제한은 적용됨. |
 
 ---
 
@@ -59,3 +59,6 @@
 | **CartService 권한 분기 추가 (cartItem 소유자 검증)** | 2026-04-30 | 2026-04-30 | `f35d1c9` `f4b810b` (Phase 2-Backfill-D — Service/Controller 시그니처 변경 + 단위 5 + 통합 4) |
 | **UserAddressService.delete 권한 분기 추가 (userNo 파라미터)** | 2026-04-30 | 2026-04-30 | `890e3ad` `5621730` (Phase 2-Backfill-D — Service/Controller 시그니처 변경 + 단위 4) |
 | **CartService UPDATE 회로 통합 테스트 추가 (Warning 1)** | 2026-04-30 | 2026-04-30 | `f4b810b` (Phase 2-Backfill-D — `CartIntegrationTest`로 dirty checking + 권한 + 롤백 안전성 검증) |
+| **CartIntegrationTest 1차 캐시 의존 강화 (Warning)** | 2026-04-30 | 2026-04-30 | `ef77f34` (Phase 2-Backfill-D — entityManager.clear() 추가 → DB SELECT 검증 격상) |
+| **OwnerService 17개 메서드 권한 분기 일괄 추가** | 2026-04-30 | 2026-04-30 | Phase 2-Backfill-D-bis — Mapper 헬퍼 4개 + Service verify 4개 + 5 그룹 (가게/주문/메뉴/매출/카테고리). 커밋: `a0ba8a2`(인프라) + 그룹별 feat 5 + test 5. 신규 32 케이스, 148/148 PASS. |
+| **registerStore dto.userId 위조 방지** | 2026-04-30 | 2026-04-30 | `aa65c86` `8963d58` (Phase 2-Backfill-D-bis 그룹 ㄱ) — 옵션 B (불일치 시 FORBIDDEN throw) |
