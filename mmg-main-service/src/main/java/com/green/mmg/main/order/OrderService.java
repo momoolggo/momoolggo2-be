@@ -59,7 +59,12 @@ public class OrderService {
 
         String storeName = cartMapper.findStoreNameByStoreId(cart.getStoreId());
 
-        String tel = authFeignClient.getUser(userNo).getTel();
+        // Phase 3-Backfill-A-4: Feign null 처리 (StoreService.storeOneGet 패턴 전파)
+        com.green.mmg.common.dto.feign.UserBriefDto user = authFeignClient.getUser(userNo);
+        if (user == null) {
+            throw new BusinessException("사용자 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        String tel = user.getTel();
         OrderAddressInfo addr = userAddressRepository.findFirstDefaultByUserNo(userNo).orElse(null);
 
         int menuTotal = items.stream()
