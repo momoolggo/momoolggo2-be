@@ -57,8 +57,14 @@ public class UserAddressService {
         // dirty checking으로 자동 UPDATE
     }
 
-    public void delete(long addressId) {
-        userAddressRepository.deleteById(addressId);
+    @Transactional
+    public void delete(long callerUserNo, long addressId) {
+        UserAddress entity = userAddressRepository.findById(addressId)
+                .orElseThrow(() -> new BusinessException("주소를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (entity.getUserNo() == null || entity.getUserNo() != callerUserNo) {
+            throw new BusinessException("본인 주소만 삭제 가능합니다.", HttpStatus.FORBIDDEN);
+        }
+        userAddressRepository.delete(entity);
     }
 
     @Transactional

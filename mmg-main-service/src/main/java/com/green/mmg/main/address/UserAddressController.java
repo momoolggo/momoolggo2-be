@@ -43,8 +43,9 @@ public class UserAddressController {
 
     // ── 주소 삭제 DELETE /api/address/{addressId}
     @DeleteMapping("/{addressId}")
-    public ResultResponse<Void> delete(@PathVariable long addressId) {
-        userAddressService.delete(addressId);
+    public ResultResponse<Void> delete(@AuthenticationPrincipal UserPrincipal principal,
+                                       @PathVariable long addressId) {
+        userAddressService.delete(principal.getSignedUserNo(), addressId);
         return new ResultResponse<>("주소 삭제 성공", null);
     }
 
