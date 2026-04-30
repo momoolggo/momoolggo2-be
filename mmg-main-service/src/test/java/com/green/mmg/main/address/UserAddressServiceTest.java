@@ -1,5 +1,7 @@
 package com.green.mmg.main.address;
 
+import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.main.address.model.UserAddress;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -7,22 +9,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.http.HttpStatus;
 
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
- * Phase 2-Backfill-C: UserAddressService.delete 단위 테스트 — 현재 동작 동결.
- *
- * <p><b>권한 분기 부재를 명시적으로 동결한다.</b><br>
- * {@code delete(long addressId)}는 {@code userNo} 파라미터를 받지 않아
- * 다른 사용자 주소 삭제 시도를 막을 수 없다. 이는 알려진 보안 부채이며
- * <b>Phase 2-Backfill-D에서 userNo 파라미터 추가 + JWT principal 사용 + 권한 분기를 추가할 예정</b>이다.<br>
- * 본 테스트는 현재 동작을 회귀 방지를 위해 그대로 동결한다 (D 단계에서 함께 갱신).</p>
+ * Phase 2-Backfill-D Step D-4: UserAddressService.delete 소유자 검증 추가 단위 테스트.
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("UserAddressService.delete — 단위 테스트 (현재 동작 동결)")
+@DisplayName("UserAddressService.delete — 소유자 검증")
 class UserAddressServiceTest {
 
     @Mock private UserAddressRepository userAddressRepository;
@@ -31,33 +30,74 @@ class UserAddressServiceTest {
     private UserAddressService userAddressService;
 
     private static final long ADDRESS_ID = 555L;
+    private static final long OWNER_USER_NO = 42L;
+    private static final long OTHER_USER_NO = 99L;
 
     @Nested
-    @DisplayName("delete — Repository 단순 위임")
+    @DisplayName("delete — findById → 소유자 검증 → delete")
     class Delete {
 
         @Test
-        @DisplayName("happy: deleteById(addressId) 단일 호출 + 권한 검증 호출 일체 없음 (분기 부재 동결)")
-        void happyPath_delegatesToDeleteById() {
-            userAddressService.delete(ADDRESS_ID);
+        @DisplayName("happy: 본인 주소 → findById → delete 호출")
+        void happyPath_deletesOwnAddress() {
+            UserAddress entity = newAddress(ADDRESS_ID, OWNER_USER_NO);
+            when(userAddressRepository.findById(ADDRESS_ID)).thenReturn(Optional.of(entity));
 
-            verify(userAddressRepository).deleteById(ADDRESS_ID);
-            // 권한 분기 부재 동결: userNo 기반 조회/검증/findById 등 후속 호출 일체 없음
-            // Phase 2-Backfill-D에서 userNo 파라미터 + 권한 분기 추가 시 본 verify는 갱신 필요
+            userAddressService.delete(OWNER_USER_NO, ADDRESS_ID);
+
+            verify(userAddressRepository).findById(ADDRESS_ID);
+            verify(userAddressRepository).delete(entity);
             verifyNoMoreInteractions(userAddressRepository);
         }
 
         @Test
-        @DisplayName("Repository EmptyResultDataAccessException → 호출자에게 그대로 propagate (별도 wrapping 없음)")
-        void repositoryException_propagatesAsIs() {
-            doThrow(new EmptyResultDataAccessException(1))
-                    .when(userAddressRepository).deleteById(ADDRESS_ID);
+        @DisplayName("403: 다른 사용자 주소 삭제 시도 → FORBIDDEN '본인 주소만 삭제 가능합니다.' + delete 미호출")
+        void otherUserAddress_throwsForbiddenAndShortCircuits() {
+            UserAddress entity = newAddress(ADDRESS_ID, OWNER_USER_NO);  // 주소는 OWNER 소유
+            when(userAddressRepository.findById(ADDRESS_ID)).thenReturn(Optional.of(entity));
 
-            assertThatThrownBy(() -> userAddressService.delete(ADDRESS_ID))
-                    .isInstanceOf(EmptyResultDataAccessException.class);
+            assertThatThrownBy(() -> userAddressService.delete(OTHER_USER_NO, ADDRESS_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 주소만 삭제 가능합니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
 
-            verify(userAddressRepository).deleteById(ADDRESS_ID);
-            verifyNoMoreInteractions(userAddressRepository);
+            verify(userAddressRepository, never()).delete(any(UserAddress.class));
+            verify(userAddressRepository, never()).deleteById(any());
         }
+
+        @Test
+        @DisplayName("404: 존재하지 않는 주소 → NOT_FOUND '주소를 찾을 수 없습니다.' + delete 미호출")
+        void addressNotFound_throwsNotFound() {
+            when(userAddressRepository.findById(ADDRESS_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userAddressService.delete(OWNER_USER_NO, ADDRESS_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("주소를 찾을 수 없습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+            verify(userAddressRepository, never()).delete(any(UserAddress.class));
+            verify(userAddressRepository, never()).deleteById(any());
+        }
+
+        @Test
+        @DisplayName("403: 주소의 userNo가 null인 비정상 데이터 → FORBIDDEN (방어적)")
+        void addressWithNullUserNo_throwsForbidden() {
+            UserAddress entity = newAddress(ADDRESS_ID, null);  // userNo == null
+            when(userAddressRepository.findById(ADDRESS_ID)).thenReturn(Optional.of(entity));
+
+            assertThatThrownBy(() -> userAddressService.delete(OWNER_USER_NO, ADDRESS_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 주소만 삭제 가능합니다.");
+
+            verify(userAddressRepository, never()).delete(any(UserAddress.class));
+        }
+    }
+
+    private static UserAddress newAddress(long addressId, Long userNo) {
+        UserAddress entity = new UserAddress();
+        entity.setAddressId(addressId);
+        entity.setUserNo(userNo);
+        entity.setAddress("테스트 주소");
+        return entity;
     }
 }
