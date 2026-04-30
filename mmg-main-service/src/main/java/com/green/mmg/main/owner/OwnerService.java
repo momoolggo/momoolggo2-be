@@ -2,11 +2,13 @@ package com.green.mmg.main.owner;
 
 
 import com.green.mmg.common.dto.feign.UserBriefDto;
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.owner.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.coobird.thumbnailator.Thumbnails;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -174,6 +176,52 @@ public class OwnerService {
 
     public List<OwnerSalesRankingRes> getSalesRanking(long storeId, String period) {
         return ownerMapper.getSalesRanking(storeId, period);
+    }
+
+    // ========== Phase 2-Backfill-D-bis: 권한 검증 헬퍼 (private) ==========
+
+    /** store가 callerOwnerNo 소유인지. 미존재 → NOT_FOUND, 타인 소유 → FORBIDDEN. */
+    private void verifyStoreOwner(long callerOwnerNo, long storeId) {
+        Long ownerId = ownerMapper.findStoreOwnerByStoreId(storeId);
+        if (ownerId == null) {
+            throw new BusinessException("가게를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        if (ownerId != callerOwnerNo) {
+            throw new BusinessException("본인 가게만 접근 가능합니다.", HttpStatus.FORBIDDEN);
+        }
+    }
+
+    /** order의 store가 callerOwnerNo 소유인지. */
+    private void verifyOrderOwner(long callerOwnerNo, long orderId) {
+        Long ownerId = ownerMapper.findStoreOwnerByOrderId(orderId);
+        if (ownerId == null) {
+            throw new BusinessException("주문을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        if (ownerId != callerOwnerNo) {
+            throw new BusinessException("본인 가게의 주문만 접근 가능합니다.", HttpStatus.FORBIDDEN);
+        }
+    }
+
+    /** menu의 store가 callerOwnerNo 소유인지. */
+    private void verifyMenuOwner(long callerOwnerNo, long menuId) {
+        Long ownerId = ownerMapper.findStoreOwnerByMenuId(menuId);
+        if (ownerId == null) {
+            throw new BusinessException("메뉴를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        if (ownerId != callerOwnerNo) {
+            throw new BusinessException("본인 가게의 메뉴만 접근 가능합니다.", HttpStatus.FORBIDDEN);
+        }
+    }
+
+    /** category의 store가 callerOwnerNo 소유인지. */
+    private void verifyCategoryOwner(long callerOwnerNo, long categoryId) {
+        Long ownerId = ownerMapper.findStoreOwnerByCategoryId(categoryId);
+        if (ownerId == null) {
+            throw new BusinessException("카테고리를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        if (ownerId != callerOwnerNo) {
+            throw new BusinessException("본인 가게의 카테고리만 접근 가능합니다.", HttpStatus.FORBIDDEN);
+        }
     }
 
     // ========== 카테고리 관련 ==========

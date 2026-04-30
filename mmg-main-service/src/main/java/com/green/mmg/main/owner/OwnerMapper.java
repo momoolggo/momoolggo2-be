@@ -71,4 +71,19 @@ public interface OwnerMapper {
 
     OwnerSalesStatsRes getSalesStats(@Param("storeId") long storeId, @Param("period") String period);
     List<OwnerSalesRankingRes> getSalesRanking(@Param("storeId") long storeId, @Param("period") String period);
+
+    // ========== Phase 2-Backfill-D-bis: 권한 검증 헬퍼 (4개) ==========
+    // 각 ID에서 store.owner_id를 조회 → Service의 verify*Owner가 callerOwnerNo와 비교
+
+    /** store_id로 owner_id 조회 (없으면 null) */
+    Long findStoreOwnerByStoreId(@Param("storeId") long storeId);
+
+    /** order_id → orders.store_id → store.owner_id (없으면 null) */
+    Long findStoreOwnerByOrderId(@Param("orderId") long orderId);
+
+    /** menu_id → menu.category_id → menu_category.store_id → store.owner_id (없으면 null) */
+    Long findStoreOwnerByMenuId(@Param("menuId") long menuId);
+
+    /** category_id → menu_category.store_id → store.owner_id (없으면 null) */
+    Long findStoreOwnerByCategoryId(@Param("categoryId") long categoryId);
 }
