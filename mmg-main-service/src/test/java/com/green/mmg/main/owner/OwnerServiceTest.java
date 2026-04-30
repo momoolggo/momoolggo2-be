@@ -11,7 +11,9 @@ import com.green.mmg.main.owner.model.OwnerOrderStateReq;
 import com.green.mmg.main.owner.model.OwnerSalesStatsRes;
 import com.green.mmg.main.owner.model.OwnerSalesRankingRes;
 import com.green.mmg.main.owner.model.OwnerStoreRegReq;
+import com.green.mmg.main.owner.model.OwnerStoreRes;
 import com.green.mmg.main.owner.model.OwnerStoreUpdateReq;
+import com.green.mmg.main.owner.model.OwnerStoreUpdateStatusReq;
 import feign.FeignException;
 import feign.Request;
 import org.junit.jupiter.api.DisplayName;
@@ -67,16 +69,16 @@ class OwnerServiceTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("registerStore — 가게 등록 + storeCategory + defaultMenuCategory 후속 호출")
+    @DisplayName("registerStore — dto.userId 위조 방지 + 등록 + storeCategory/defaultMenuCategory")
     class RegisterStore {
 
         @Test
-        @DisplayName("happy: result>0 → registerStoreCategory + registerDefaultMenuCategory 순차 호출 (InOrder 동결)")
+        @DisplayName("happy: dto.userId == caller → registerStore → categories (InOrder 동결)")
         void happyPath_registersAndChainsCategories() {
             OwnerStoreRegReq dto = newRegReq(USER_ID, CATEGORY_ID, "맛집");
             when(ownerMapper.registerStore(dto)).thenReturn(1);
 
-            ownerService.registerStore(dto);
+            ownerService.registerStore(USER_ID, dto);
 
             InOrder inOrder = inOrder(ownerMapper);
             inOrder.verify(ownerMapper).registerStore(dto);
@@ -85,12 +87,26 @@ class OwnerServiceTest {
         }
 
         @Test
-        @DisplayName("실패: result==0 → RuntimeException '가게 등록 실패' + 후속 호출 미발생")
+        @DisplayName("403 위조 방지: dto.userId != caller → FORBIDDEN '자신의 계정으로만 가게를 등록할 수 있습니다.' + Mapper 미호출")
+        void dtoUserIdMismatch_throwsForbidden() {
+            // 프론트가 다른 userId 위조 시도
+            OwnerStoreRegReq dto = newRegReq(USER_ID + 1, CATEGORY_ID, "위조");
+
+            assertThatThrownBy(() -> ownerService.registerStore(USER_ID, dto))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("자신의 계정으로만 가게를 등록할 수 있습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+
+            verifyNoInteractions(ownerMapper);
+        }
+
+        @Test
+        @DisplayName("실패: dto.userId == caller + result==0 → RuntimeException '가게 등록 실패' + 후속 미호출")
         void registerFails_throwsAndShortCircuits() {
             OwnerStoreRegReq dto = newRegReq(USER_ID, CATEGORY_ID, "실패");
             when(ownerMapper.registerStore(dto)).thenReturn(0);
 
-            assertThatThrownBy(() -> ownerService.registerStore(dto))
+            assertThatThrownBy(() -> ownerService.registerStore(USER_ID, dto))
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining("가게 등록 실패");
 
@@ -101,57 +117,168 @@ class OwnerServiceTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("updateStore — 가게 기본 정보 수정")
+    @DisplayName("updateStore — verifyStoreOwner + Long.parseLong + result 검증")
     class UpdateStore {
 
         @Test
-        @DisplayName("happy: result>0 → 정상 종료")
+        @DisplayName("happy: 본인 가게 → updateStore 호출")
         void happyPath_updates() {
             OwnerStoreUpdateReq dto = newUpdateReq("21", "변경");
+            when(ownerMapper.findStoreOwnerByStoreId(21L)).thenReturn(USER_ID);
             when(ownerMapper.updateStore(dto)).thenReturn(1);
 
-            ownerService.updateStore(dto);
+            ownerService.updateStore(USER_ID, dto);
 
             verify(ownerMapper).updateStore(dto);
-            verifyNoMoreInteractions(ownerMapper);
         }
 
         @Test
-        @DisplayName("실패: result==0 → RuntimeException '가게 정보 수정 실패' (메시지 동결)")
+        @DisplayName("403: 다른 점주 가게 → FORBIDDEN + updateStore 미호출")
+        void otherOwner_throwsForbidden() {
+            OwnerStoreUpdateReq dto = newUpdateReq("21", "변경");
+            when(ownerMapper.findStoreOwnerByStoreId(21L)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.updateStore(USER_ID, dto))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).updateStore(any());
+        }
+
+        @Test
+        @DisplayName("400: storeId 비숫자 → BAD_REQUEST 'storeId 형식이 잘못되었습니다.'")
+        void invalidStoreIdFormat_throwsBadRequest() {
+            OwnerStoreUpdateReq dto = newUpdateReq("abc", "x");
+
+            assertThatThrownBy(() -> ownerService.updateStore(USER_ID, dto))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("storeId 형식이 잘못되었습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verifyNoInteractions(ownerMapper);
+        }
+
+        @Test
+        @DisplayName("실패: 권한 통과 + result==0 → RuntimeException '가게 정보 수정 실패'")
         void updateFails_throws() {
             OwnerStoreUpdateReq dto = newUpdateReq("21", "변경");
+            when(ownerMapper.findStoreOwnerByStoreId(21L)).thenReturn(USER_ID);
             when(ownerMapper.updateStore(dto)).thenReturn(0);
 
-            assertThatThrownBy(() -> ownerService.updateStore(dto))
+            assertThatThrownBy(() -> ownerService.updateStore(USER_ID, dto))
                     .isInstanceOf(RuntimeException.class)
-                    .hasMessageContaining("가게 정보 수정 실패")
-                    .hasMessageContaining("해당 가게를 찾을 수 없음");
+                    .hasMessageContaining("가게 정보 수정 실패");
         }
     }
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("deleteStore — 가게 삭제")
+    @DisplayName("updateStoreStatus — verifyStoreOwner + update + getStoreById")
+    class UpdateStoreStatus {
+
+        @Test
+        @DisplayName("happy: 본인 가게 → updateStoreStatus → getStoreById 호출")
+        void happyPath_updates() {
+            OwnerStoreUpdateStatusReq dto = new OwnerStoreUpdateStatusReq();
+            dto.setStoreId(STORE_ID);
+            dto.setHoliday("월");
+            dto.setNotice("공지");
+            dto.setState(1);
+            OwnerStoreRes fetched = new OwnerStoreRes();
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
+            when(ownerMapper.getStoreById(STORE_ID)).thenReturn(fetched);
+
+            OwnerStoreRes result = ownerService.updateStoreStatus(USER_ID, dto);
+
+            assertThat(result).isSameAs(fetched);
+            InOrder inOrder = inOrder(ownerMapper);
+            inOrder.verify(ownerMapper).findStoreOwnerByStoreId(STORE_ID);
+            inOrder.verify(ownerMapper).updateStoreStatus(dto);
+            inOrder.verify(ownerMapper).getStoreById(STORE_ID);
+        }
+
+        @Test
+        @DisplayName("403: 다른 점주 가게 → FORBIDDEN + update/getStore 미호출")
+        void otherOwner_throwsForbidden() {
+            OwnerStoreUpdateStatusReq dto = new OwnerStoreUpdateStatusReq();
+            dto.setStoreId(STORE_ID);
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.updateStoreStatus(USER_ID, dto))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).updateStoreStatus(any());
+            verify(ownerMapper, never()).getStoreById(anyLong());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("deleteStore — verifyStoreOwner + delete")
     class DeleteStore {
 
         @Test
-        @DisplayName("happy: result>0 → 정상 종료")
+        @DisplayName("happy: 본인 가게 → deleteStore 호출")
         void happyPath_deletes() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
             when(ownerMapper.deleteStore(STORE_ID)).thenReturn(1);
 
-            ownerService.deleteStore(STORE_ID);
+            ownerService.deleteStore(USER_ID, STORE_ID);
 
             verify(ownerMapper).deleteStore(STORE_ID);
         }
 
         @Test
-        @DisplayName("실패: result==0 → RuntimeException '삭제할 가게를 찾을 수 없습니다.' (메시지 동결)")
+        @DisplayName("403: 다른 점주 가게 → FORBIDDEN + deleteStore 미호출")
+        void otherOwner_throwsForbidden() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID + 1);
+
+            assertThatThrownBy(() -> ownerService.deleteStore(USER_ID, STORE_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 가게만 접근 가능합니다.");
+
+            verify(ownerMapper, never()).deleteStore(anyLong());
+        }
+
+        @Test
+        @DisplayName("실패: 권한 통과 + result==0 → RuntimeException '삭제할 가게를 찾을 수 없습니다.'")
         void deleteFails_throws() {
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
             when(ownerMapper.deleteStore(STORE_ID)).thenReturn(0);
 
-            assertThatThrownBy(() -> ownerService.deleteStore(STORE_ID))
+            assertThatThrownBy(() -> ownerService.deleteStore(USER_ID, STORE_ID))
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining("삭제할 가게를 찾을 수 없습니다");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("getMyStore / getMyStores — caller로 본인 가게만 조회")
+    class GetMyStore {
+
+        @Test
+        @DisplayName("getMyStore: caller userNo로 ownerMapper.getMyStore 위임")
+        void getMyStore_delegates() {
+            OwnerStoreRes store = new OwnerStoreRes();
+            when(ownerMapper.getMyStore(USER_ID)).thenReturn(store);
+
+            OwnerStoreRes result = ownerService.getMyStore(USER_ID);
+
+            assertThat(result).isSameAs(store);
+            verify(ownerMapper).getMyStore(USER_ID);
+        }
+
+        @Test
+        @DisplayName("getMyStores: caller userNo로 ownerMapper.getMyStores 위임")
+        void getMyStores_delegates() {
+            when(ownerMapper.getMyStores(USER_ID)).thenReturn(List.of());
+
+            List<OwnerStoreRes> result = ownerService.getMyStores(USER_ID);
+
+            assertThat(result).isEmpty();
+            verify(ownerMapper).getMyStores(USER_ID);
         }
     }
 
