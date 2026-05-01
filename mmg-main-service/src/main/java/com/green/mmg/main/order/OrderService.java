@@ -51,6 +51,7 @@ public class OrderService {
     private static final int DELIVERY_FEE = 1500;
 
     // 주문 화면 초기 데이터 조회
+    @Transactional(readOnly = true)
     public OrderInfoRes getOrderInfo(Long userNo) {
         Cart cart = cartRepository.findByUserNo(userNo)
                 .orElseThrow(() -> new RuntimeException("장바구니가 비어있습니다."));
@@ -147,6 +148,7 @@ public class OrderService {
         return affected;
     }
 
+    @Transactional(readOnly = true)
     public List<OrderHistoryDto> getOrderHistory(long callerUserNo, OrderHistoryReq req) {
         // Phase 3-Backfill-A-3: req.userId 위조 방지 (옵션 B — 명시적 403 throw)
         if (req.getUserId() != callerUserNo) {
@@ -162,6 +164,7 @@ public class OrderService {
         return orders;
     }
 
+    @Transactional(readOnly = true)
     public OrderHistoryDto orderHistoryDetail(long callerUserNo, long orderId) {
         // Phase 3-Backfill-A-3: 본인 주문 검증
         Orders order = orderRepository.findById(orderId)
@@ -174,6 +177,7 @@ public class OrderService {
         return result;
     }
 
+    @Transactional(readOnly = true)
     public int maxHistoryPage(long callerUserNo, long userId) {
         // Phase 3-Backfill-A-3: path userId 위조 방지 (옵션 B)
         if (userId != callerUserNo) {
