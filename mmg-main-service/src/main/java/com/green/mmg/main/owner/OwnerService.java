@@ -63,6 +63,7 @@ public class OwnerService {
 
     // ========== 가게 관련 (D-bis 그룹 ㄱ: 권한 분기 + dto.userId 위조 방지) ==========
 
+    @Transactional
     public void registerStore(long callerOwnerNo, OwnerStoreRegReq dto){
         // dto.userId 위조 방지: 옵션 B — 불일치 시 403 throw (강제 덮어쓰기 대신 명시적 거부)
         if (dto.getUserId() != callerOwnerNo) {
@@ -77,6 +78,7 @@ public class OwnerService {
         ownerMapper.registerDefaultMenuCategory(dto.getUserId());
     }
 
+    @Transactional
     public void updateStore(long callerOwnerNo, OwnerStoreUpdateReq dto){
         // OwnerStoreUpdateReq.storeId는 String 타입 — Long으로 변환 후 권한 검증
         // (타입 정리는 tech-debt.md, 프론트 협의 필요)
@@ -100,6 +102,7 @@ public class OwnerService {
         return ownerMapper.getStoreById(dto.getStoreId());
     }
 
+    @Transactional
     public void deleteStore(long callerOwnerNo, Long store_id){
         verifyStoreOwner(callerOwnerNo, store_id);
         int result = ownerMapper.deleteStore(store_id);
@@ -145,6 +148,7 @@ public class OwnerService {
         return orders;
     }
 
+    @Transactional
     public void updateOrderState(long callerOwnerNo, OwnerOrderStateReq req){
         verifyOrderOwner(callerOwnerNo, req.getOrderId());
         int result = ownerMapper.updateOrderState(req);
@@ -162,6 +166,7 @@ public class OwnerService {
 
     // ========== 메뉴 관련 (D-bis 그룹 ㄷ: 권한 분기 추가) ==========
 
+    @Transactional
     public OwnerMenuRes registerMenu(long callerOwnerNo, OwnerMenuRegReq dto){
         verifyStoreOwner(callerOwnerNo, dto.getStoreId());
         ownerMapper.registerMenu(dto);
@@ -262,16 +267,19 @@ public class OwnerService {
         return ownerMapper.getCategoriesByStoreId(storeId);
     }
 
+    @Transactional
     public void addCategory(long callerOwnerNo, Long storeId, String category) {
         verifyStoreOwner(callerOwnerNo, storeId);
         ownerMapper.addCategory(storeId, category);
     }
 
+    @Transactional
     public void updateCategory(long callerOwnerNo, Long categoryId, String category) {
         verifyCategoryOwner(callerOwnerNo, categoryId);
         ownerMapper.updateCategory(categoryId, category);
     }
 
+    @Transactional
     public void deleteCategory(long callerOwnerNo, Long categoryId) {
         verifyCategoryOwner(callerOwnerNo, categoryId);
         ownerMapper.deleteCategory(categoryId);
