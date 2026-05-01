@@ -109,17 +109,20 @@ public class OwnerService {
     }
 
     // 내 가게 1개 조회 (매출 조회 등 내부용) — ownerNo는 callerOwnerNo와 동일 (본인 자원만 조회)
+    @Transactional(readOnly = true)
     public OwnerStoreRes getMyStore(long callerOwnerNo) {
         return ownerMapper.getMyStore(callerOwnerNo);
     }
 
     // 내 가게 목록 조회 (여러 가게 지원)
+    @Transactional(readOnly = true)
     public List<OwnerStoreRes> getMyStores(long callerOwnerNo) {
         return ownerMapper.getMyStores(callerOwnerNo);
     }
 
     // ========== 주문 관련 (D-bis 그룹 ㄴ: 권한 분기 추가) ==========
 
+    @Transactional(readOnly = true)
     public List<OwnerOrderRes> getOrders(long callerOwnerNo, Long storeId, Integer state, String date) {
         verifyStoreOwner(callerOwnerNo, storeId);
         List<OwnerOrderRes> orders = ownerMapper.getOrders(storeId, state, date);
@@ -185,6 +188,7 @@ public class OwnerService {
         return menuId;
     }
 
+    @Transactional(readOnly = true)
     public List<OwnerMenuRes> getMenusByStoreId(long callerOwnerNo, Long storeId) {
         verifyStoreOwner(callerOwnerNo, storeId);
         return ownerMapper.getMenusByStoreId(storeId);
@@ -192,11 +196,13 @@ public class OwnerService {
 
     // ========== 매출 관련 (D-bis 그룹 ㄹ: 권한 분기 추가) ==========
 
+    @Transactional(readOnly = true)
     public OwnerSalesStatsRes getSalesStats(long callerOwnerNo, long storeId, String period) {
         verifyStoreOwner(callerOwnerNo, storeId);
         return ownerMapper.getSalesStats(storeId, period);
     }
 
+    @Transactional(readOnly = true)
     public List<OwnerSalesRankingRes> getSalesRanking(long callerOwnerNo, long storeId, String period) {
         verifyStoreOwner(callerOwnerNo, storeId);
         return ownerMapper.getSalesRanking(storeId, period);
@@ -250,6 +256,7 @@ public class OwnerService {
 
     // ========== 카테고리 관련 (D-bis 그룹 ㅁ: 권한 분기 추가) ==========
 
+    @Transactional(readOnly = true)
     public List<Map<String, Object>> getCategoriesByStoreId(long callerOwnerNo, Long storeId) {
         verifyStoreOwner(callerOwnerNo, storeId);
         return ownerMapper.getCategoriesByStoreId(storeId);
