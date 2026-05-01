@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Phase 3-C-1: Order/OrderDetail 단순 CRUD JPA 전환 + 하이브리드.
@@ -135,7 +136,7 @@ public class OrderService {
         // 미존재 orderId는 기존 동작 유지 (return 0 → "삭제실패") — 응답 스펙 동결
         Orders order = orderRepository.findById(orderId).orElse(null);
         if (order == null) return 0;
-        if (order.getUserNo() == null || order.getUserNo() != callerUserNo) {
+        if (!Objects.equals(order.getUserNo(), callerUserNo)) {
             throw new BusinessException("본인 주문만 삭제할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
         Long storeId = order.getStoreId();
@@ -165,7 +166,7 @@ public class OrderService {
         // Phase 3-Backfill-A-3: 본인 주문 검증
         Orders order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (order.getUserNo() == null || order.getUserNo() != callerUserNo) {
+        if (!Objects.equals(order.getUserNo(), callerUserNo)) {
             throw new BusinessException("본인 주문만 조회 가능합니다.", HttpStatus.FORBIDDEN);
         }
         OrderHistoryDto result = orderMapper.orderHistoryDetail(orderId);  // 복잡 DATE_FORMAT — 잔존
