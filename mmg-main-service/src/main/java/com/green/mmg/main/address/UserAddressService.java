@@ -38,6 +38,7 @@ public class UserAddressService {
         userAddressRepository.save(entity);
     }
 
+    @Transactional(readOnly = true)
     public List<UserAddressRes> findAll(long userNo) {
         return userAddressRepository.findAllByUserNo(userNo);
     }
