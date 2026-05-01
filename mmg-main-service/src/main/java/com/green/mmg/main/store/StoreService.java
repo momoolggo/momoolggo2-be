@@ -24,10 +24,12 @@ public class StoreService {
     private final LikedStoreRepository likedStoreRepository;  // Phase 3-B-2: 단순 CRUD
     private final AuthFeignClient authFeignClient;   // Phase 4-A: cross-schema user JOIN 대체
 
+    @Transactional(readOnly = true)
     public List<StoreGetRes> storeListGet(StoreGetReq req){
         return storeMapper.findAll(req);
     }
 
+    @Transactional(readOnly = true)
     public StoreOneGetRes storeOneGet(long id){
         StoreOneGetRes res = storeMapper.findOne(id);
         if (res != null && res.getOwnerId() != null) {
@@ -40,10 +42,12 @@ public class StoreService {
         return res;
     }
 
+    @Transactional(readOnly = true)
     public int  getMaxPage (StoreGetReq req){
         return storeMapper.getMaxPage(req);
     }
 
+    @Transactional(readOnly = true)
     public List<MenuGetRes> menuListGet(long id){ return storeMapper.menuAll(id);}
 
     @Transactional
@@ -65,6 +69,7 @@ public class StoreService {
         }
     }
 
+    @Transactional(readOnly = true)
     public boolean checkWish(long callerUserNo, FavoriteToggleReq req){
         if (req.getUserNo() != callerUserNo) {
             throw new BusinessException("자신의 계정으로만 조회할 수 있습니다.", HttpStatus.FORBIDDEN);
@@ -72,6 +77,7 @@ public class StoreService {
         return likedStoreRepository.existsByUserNoAndStoreId(req.getUserNo(), req.getStoreId());
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> getWishListResponse(long callerUserNo, StoreFavoriteReq req) {
         if (req.getUserNo() != callerUserNo) {
             throw new BusinessException("본인 찜 목록만 조회 가능합니다.", HttpStatus.FORBIDDEN);
@@ -87,6 +93,7 @@ public class StoreService {
         return response;
     }
 
+    @Transactional(readOnly = true)
     public List<StoreGetRes> storeSearchList(String searchText) {
         if( searchText == null || searchText.trim().isEmpty()) {
             return List.of();
@@ -95,11 +102,13 @@ public class StoreService {
         return storeMapper.searchStore(searchText);
     }
 
+    @Transactional(readOnly = true)
     public List<StoreGetRes> findNearbyStores(double lat, double lng) {
         return storeMapper.findNearby(lat, lng);
     }
 
     //가게 리뷰 조회 — Phase 4-A: user JOIN 대신 Feign batch로 userName 합성
+    @Transactional(readOnly = true)
     public List<Map<String, Object>> getStoreReviews(long storeId) {
         List<Map<String, Object>> rows = storeMapper.getStoreReviews(storeId);
         if (rows.isEmpty()) return rows;
