@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -135,7 +136,7 @@ public class CartService {
 
     /** URL/dto의 targetUserNo가 호출자와 일치하는지 동결 검증 (자기 카트만) */
     private void verifyOwner(long callerUserNo, Long targetUserNo) {
-        if (targetUserNo == null || callerUserNo != targetUserNo) {
+        if (!Objects.equals(targetUserNo, callerUserNo)) {
             throw new BusinessException("본인 장바구니만 접근 가능합니다.", HttpStatus.FORBIDDEN);
         }
     }
@@ -144,7 +145,7 @@ public class CartService {
     private void verifyCartItemOwner(long callerUserNo, Long cartId) {
         Cart cart = cartRepository.findById(cartId)
                 .orElseThrow(() -> new BusinessException("장바구니를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (!cart.getUserNo().equals(callerUserNo)) {
+        if (!Objects.equals(cart.getUserNo(), callerUserNo)) {
             throw new BusinessException("본인 장바구니 아이템만 접근 가능합니다.", HttpStatus.FORBIDDEN);
         }
     }
