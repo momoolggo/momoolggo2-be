@@ -21,7 +21,6 @@ public class StoreController {
     @GetMapping  //가게 전체목록
     public ResultResponse<?> StoreListGet(@ModelAttribute StoreGetReq req){
         List<StoreGetRes> result = storeService.storeListGet(req);
-            System.out.println(result);
         return new ResultResponse<>("ㅇ", result);
     }
     @GetMapping("max_page")//가게 최대페이지
