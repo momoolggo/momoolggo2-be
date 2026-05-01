@@ -70,3 +70,9 @@
 | **OrderService.getOrderInfo Feign null NPE (Critical 4)** | 2026-04-30 | 2026-04-30 | `6d6cc14` `2011b90` (Phase 3-Backfill-A-4) — storeOneGet 패턴 전파. BusinessException NOT_FOUND. |
 | **StoreService.getStoreReviews Feign batch null NPE (Major)** | 2026-04-30 | 2026-04-30 | `361ce00` `2011b90` (Phase 3-Backfill-A-4) — null 응답 → 빈 Map → userName 빈 문자열 fallback. Owner.getOrders와 다른 결정(Phase 5). |
 | **UserAddressService.update 소유자 검증 누락 (Major)** | 2026-04-30 | 2026-04-30 | `5253bef` `ca78b7a` (Phase 3-Backfill-A-5) — D-4 delete 패턴을 update에도 일관 적용. 4 신규 케이스. |
+| **권한 비교 패턴 비일관 (Long != long / .equals() / null 가드 혼용, 6곳)** | 2026-04-30 | 2026-05-02 | `e95cf97` `ef9a097` `aefb576` (W-A1) — Order/Cart/UserAddress 6곳 `Objects.equals()` 단일 패턴 통일 + null 가드 redundant 제거. 표준 `feedback_owner_check_pattern.md`. |
+| **main-service 조회 메서드 `@Transactional(readOnly=true)` 누락 (24건, 6도메인)** | 2026-05-02 | 2026-05-02 | `38cff0b` `3db1076` `8fe7e7b` `3bf15d0` `6024407` `207996d` (B-1) — Review/Store/Order/Cart/UserAddress/Owner 일괄 적용. auth-service 패턴 일관. |
+| **OwnerService 쓰기 메서드 `@Transactional` 누락 (8건, 데이터 정합성 부채)** | 2026-05-02 | 2026-05-02 | `11422c3` (B-1 확장) — `registerStore` 3 INSERT 부분 실패 위험 등 8건 일괄 처리. *발견 즉시 처리* (tech-debt 등재 X 결정). |
+| **Review 통합 happy path 부재 (post/delete)** | 2026-05-02 | 2026-05-02 | `dca7c02` (B-2) — `ReviewControllerIntegrationTest`에 2건 추가. `entityManager.flush() + clear() + JPQL/findById` 재조회 검증. |
+| **UserAddressService.save / setDefault 단위 테스트 부재** | 2026-05-02 | 2026-05-02 | `8ffba23` (B-3) — Save 3건(defaultAd 분기) + SetDefault 2건 추가. 누적 13건 단위 테스트. |
+| **StoreController `System.out.println` 잔존 1건** | 2026-05-02 | 2026-05-02 | `ad63030` (B-4) — 디버그 잔재 단순 제거. main-service 내 `System.out` 0건 도달. |

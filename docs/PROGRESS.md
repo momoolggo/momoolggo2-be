@@ -1,6 +1,6 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
-> 작성: 2026-04-28 / 최종 갱신: **2026-04-30 Phase 3-Backfill-A 완료**
+> 작성: 2026-04-28 / 최종 갱신: **2026-05-02 Phase 3-Backfill-B + W-A1 완료 (174/174 PASS)**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).
 
@@ -379,13 +379,39 @@
 - Owner.getOrders Feign 예외는 명시적 propagate 동결 (W-2 — Phase 5 fallback 작업), Store.getStoreReviews는 fallback 동결 — 도메인 critical 차이로 분기
 - A-5는 D-4 누락분 일관성 보강 — Major이지만 백필 자연스러운 위치
 
+### Phase 3-Backfill-B + W-A1 결과 (2026-05-02)
+
+**W-A1 + B-1~B-4 완료 — 신규 7 케이스 / 32건 트랜잭션 어노테이션 / main-service System.out 0건 / 12 커밋**:
+
+| Step | 내용 | 신규 케이스 / 어노테이션 | 커밋 |
+|---|---|---|---|
+| W-A1 | 권한 비교 `Objects.equals()` 6곳 전수 통일 (null 가드 제거 — null-safe 단일 패턴) | 0 신규 (167 PASS 유지) | `e95cf97` `ef9a097` `aefb576` |
+| B-1 | 조회 메서드 `@Transactional(readOnly=true)` 적용 (24건, 6도메인) + Owner 쓰기 `@Transactional` 추가 (8건, 데이터 정합성 부채 즉시 처리) | 0 신규 (어노테이션 32건) | `38cff0b` `3db1076` `8fe7e7b` `3bf15d0` `6024407` `207996d` `11422c3` |
+| B-2 | Review 통합 happy path (`postReview` / `deleteReview` — Service 호출 + JPQL/findById 재조회 검증) | 2 | `dca7c02` |
+| B-3 | UserAddressService.save / setDefault 단위 테스트 (defaultAd 분기 3 + setDefault InOrder + NOT_FOUND) | 5 | `8ffba23` |
+| B-4 | StoreController.StoreListGet `System.out.println` 제거 (Phase 3-Backfill-A 후속 잔존 1건 정리 — main-service 내 0건 도달) | 0 신규 | `ad63030` |
+
+**main-service 전체 빌드/테스트 통과 (174/174)**:
+- Phase 3-Backfill-A 누적 167 + B 신규 7 = **174**
+
+**Phase 3-Backfill-B 핵심 검증 케이스**:
+- `ReviewControllerIntegrationTest.postReview_happy`: BaseEntity Auditing + Service 통합 흐름 동결 — JPQL로 `Review WHERE orderId = :oid` 재조회 → rating/contents/photo + write_at/amended_at 채움 검증
+- `ReviewControllerIntegrationTest.deleteReview_happy`: `entityManager.flush() + clear()` 후 `findById` empty 동결 (1차 캐시 우회)
+- `UserAddressServiceTest.Save.defaultAd1_resetsThenSaves`: `InOrder` + `ArgumentCaptor`로 `resetDefault → flush → save` 순서 + 저장 entity 6필드 동결
+- `UserAddressServiceTest.SetDefault.happyPath_setsDefaultViaDirtyChecking`: dirty checking 검증 — Mock entity의 `getDefaultAd()`가 1로 변경됐는지 직접 확인
+- `UserAddressServiceTest.SetDefault.addressNotFound_throwsNotFound`: `resetDefault/flush` 호출 후 NOT_FOUND throw — 트랜잭션 롤백 의존 동작 명시 동결
+
+**진단/결정**:
+- W-A1 메모리 정정: 기존 메모는 "Cart/UserAddress = .equals() 패턴"이라고 기록했으나 실제로는 1곳(CartService:147)만 .equals()였고 나머지는 모두 `Long != long`이었음. `Objects.equals()` 단일 표준으로 통일 + `feedback_owner_check_pattern.md` 신설.
+- OwnerService 쓰기 `@Transactional` 누락은 발견 시점에 *즉시 처리* (tech-debt 등재 X). `registerStore` 3 INSERT 부분 실패 위험을 미루지 않음. 영향 분석으로 OwnerServiceTest는 Mockito 단위 — 트랜잭션 동작 무관 확인.
+- `System.out.println`은 Phase 3-Backfill-A에서 이미 2건(Favorite/Order) 제거됐고, 잔존 1건도 Logger 전환 가치 없는 디버그 잔재 → 단순 제거.
+
 ---
 
 ## 다음 단계
 
-**Phase 3-Backfill-B** 또는 Phase 4-C / Phase 5.
+**Phase 3-Backfill-C** 또는 Phase 4-C / Phase 5.
 
-- **Phase 3-Backfill-B**: readOnly 적용 + Review 통합 + UserAddress save/setDefault 단위 + 잔존 System.out 제거 (~8 신규)
 - **Phase 3-Backfill-C**: StoreService 나머지 단위 + LikedStore 단위 (~10 신규, 라이더 진입 후 병행 가능)
 - Phase 4-C: 학원 발표 후 — 토큰 저장 (auth) + 날씨 캐시 (main) + Pub/Sub
 - Phase 5: 팀원 합류 시 본격 — 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 잔존 도메인 경계 정리
