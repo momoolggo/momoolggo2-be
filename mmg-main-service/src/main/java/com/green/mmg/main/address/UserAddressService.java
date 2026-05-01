@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Phase 3-D-B: 전 6 SQL JPA 전환 + UserAddressMapper / Address.xml 제거.
@@ -46,7 +47,7 @@ public class UserAddressService {
         UserAddress entity = userAddressRepository.findById(req.getAddressId())
                 .orElseThrow(() -> new BusinessException("주소를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         // Phase 3-Backfill-A-5: 소유자 검증 (delete 패턴 일관 적용)
-        if (entity.getUserNo() == null || entity.getUserNo() != callerUserNo) {
+        if (!Objects.equals(entity.getUserNo(), callerUserNo)) {
             throw new BusinessException("본인 주소만 수정 가능합니다.", HttpStatus.FORBIDDEN);
         }
         if (req.getDefaultAd() != null && req.getDefaultAd() == 1) {
@@ -65,7 +66,7 @@ public class UserAddressService {
     public void delete(long callerUserNo, long addressId) {
         UserAddress entity = userAddressRepository.findById(addressId)
                 .orElseThrow(() -> new BusinessException("주소를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (entity.getUserNo() == null || entity.getUserNo() != callerUserNo) {
+        if (!Objects.equals(entity.getUserNo(), callerUserNo)) {
             throw new BusinessException("본인 주소만 삭제 가능합니다.", HttpStatus.FORBIDDEN);
         }
         userAddressRepository.delete(entity);
