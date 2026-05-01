@@ -28,6 +28,7 @@ public class CartService {
     private final CartRepository cartRepository;          // JPA
     private final CartDetailRepository cartDetailRepository;  // JPA
 
+    @Transactional(readOnly = true)
     public CartListRes getCart(long callerUserNo, Long userNo) {
         verifyOwner(callerUserNo, userNo);
         Cart cart = cartRepository.findByUserNo(userNo).orElse(null);
