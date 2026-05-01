@@ -3,7 +3,10 @@ package com.green.mmg.main.review;
 import com.green.mmg.main.order.OrderRepository;
 import com.green.mmg.main.order.model.Orders;
 import com.green.mmg.main.review.model.Review;
+import com.green.mmg.main.review.model.ReviewReq;
 import com.green.mmg.main.support.SnapshotAssert;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,6 +18,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -31,7 +36,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *   <li>{@code @EnableJpaAuditing}이 MainApplication에서 활성화됨 (Phase 3-A에서 검증, 재확인)</li>
  * </ol>
  *
- * <p>BaseEntity 검증 실패 시 Phase 5 신규 도메인(펫/쿠폰/룰렛 등)에서 audit 컬럼 자유 사용 불가.</p>
+ * <p>Phase 3-Backfill-B-2: postReview / deleteReview happy path 추가.
+ * Service 직접 호출 + DB 재조회 검증 (BaseEntity 검증 패턴 일관 — INSERT → findById/JPQL 재조회).</p>
  */
 @SpringBootTest
 @Transactional
@@ -43,12 +49,32 @@ class ReviewControllerIntegrationTest {
     @Autowired private WebApplicationContext webApplicationContext;
     @Autowired private ReviewRepository reviewRepository;
     @Autowired private OrderRepository orderRepository;
+    @Autowired private ReviewService reviewService;
+    @PersistenceContext private EntityManager entityManager;
 
     private static final long TEST_USER_NO = 99999L;
+    private static final long TEST_STORE_ID = 21L;  // 실재 store (BaseEntity 검증 fixture와 일관)
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+    }
+
+    private Orders seedOrder(long orderId) {
+        Orders order = new Orders();
+        order.setOrderId(orderId);
+        order.setUserNo(TEST_USER_NO);
+        order.setStoreId(TEST_STORE_ID);
+        order.setRequest("테스트");
+        order.setRiderRequest("테스트");
+        order.setAddress("테스트 주소");
+        order.setAddressDetail("테스트 상세");
+        order.setDeliveryFee(1500);
+        order.setAmount(15000);
+        order.setDeliveryState(1);
+        order.setPayState(1);
+        order.setOrderState(1);
+        return orderRepository.saveAndFlush(order);
     }
 
     @Test
@@ -56,20 +82,7 @@ class ReviewControllerIntegrationTest {
     void review_baseEntityAuditing() {
         // 1. 임시 orders row INSERT (review.order_id FK 만족용)
         long testOrderId = 999999999L;
-        Orders testOrder = new Orders();
-        testOrder.setOrderId(testOrderId);
-        testOrder.setUserNo(TEST_USER_NO);
-        testOrder.setStoreId(21L);  // 실재 store
-        testOrder.setRequest("테스트");
-        testOrder.setRiderRequest("테스트");
-        testOrder.setAddress("테스트 주소");
-        testOrder.setAddressDetail("테스트 상세");
-        testOrder.setDeliveryFee(1500);
-        testOrder.setAmount(15000);
-        testOrder.setDeliveryState(1);
-        testOrder.setPayState(1);
-        testOrder.setOrderState(1);
-        orderRepository.saveAndFlush(testOrder);
+        seedOrder(testOrderId);
 
         // 2. Review INSERT — BaseEntity Auditing 검증
         Review review = new Review();
@@ -104,5 +117,69 @@ class ReviewControllerIntegrationTest {
         assertThat(result.getResponse().getStatus()).isEqualTo(404);
         SnapshotAssert.assertMatches("review-get-by-id-not-found",
                 result.getResponse().getContentAsString());
+    }
+
+    @Test
+    @DisplayName("postReview happy — 본인 주문 리뷰 작성 → DB 반영 + write_at/amended_at 자동 채움")
+    void postReview_happy() {
+        // 1. fixture: 본인 주문 INSERT
+        long testOrderId = 999999997L;
+        seedOrder(testOrderId);
+
+        // 2. happy: 본인 주문 → postReview (Service 직접 호출)
+        ReviewReq req = new ReviewReq();
+        req.setOrderId(testOrderId);
+        req.setUserNo(TEST_USER_NO);  // ReviewReq.userNo는 미사용 (callerUserNo로 위조 방지)
+        req.setText("happy path 통합 검증");
+        req.setRating(5);
+        req.setImage(null);
+        reviewService.postReview(TEST_USER_NO, req);
+
+        // 3. 검증: orderId로 review row 재조회 (1차 캐시 우회)
+        entityManager.flush();
+        entityManager.clear();
+        List<Review> reviews = entityManager.createQuery(
+                        "SELECT r FROM Review r WHERE r.orderId = :oid", Review.class)
+                .setParameter("oid", testOrderId)
+                .getResultList();
+        assertThat(reviews)
+                .as("postReview 후 review row 1건 INSERT")
+                .hasSize(1);
+        Review saved = reviews.get(0);
+        assertThat(saved.getRating()).isEqualTo(5);
+        assertThat(saved.getContents()).isEqualTo("happy path 통합 검증");
+        assertThat(saved.getPhoto()).isNull();
+        assertThat(saved.getCreatedAt())
+                .as("@CreatedDate write_at 자동 채움")
+                .isNotNull();
+        assertThat(saved.getUpdatedAt())
+                .as("@LastModifiedDate amended_at 자동 채움")
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("deleteReview happy — 본인 리뷰 삭제 → DB row 제거")
+    void deleteReview_happy() {
+        // 1. fixture: 본인 주문 + review INSERT
+        long testOrderId = 999999996L;
+        seedOrder(testOrderId);
+
+        Review review = new Review();
+        review.setOrderId(testOrderId);
+        review.setRating(4);
+        review.setContents("삭제 대상 리뷰");
+        reviewRepository.saveAndFlush(review);
+        Long fixtureReviewId = review.getReviewId();
+        assertThat(fixtureReviewId).isNotNull();
+
+        // 2. happy: 본인 리뷰 → deleteReview (Service 직접 호출)
+        reviewService.deleteReview(TEST_USER_NO, fixtureReviewId);
+
+        // 3. 검증: 1차 캐시 비우고 DB 재조회 → 사라짐 확인
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(reviewRepository.findById(fixtureReviewId))
+                .as("deleteReview 후 review row 제거됨")
+                .isEmpty();
     }
 }
