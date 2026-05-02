@@ -68,7 +68,22 @@ DB 서버: 학원 공유 MySQL (`112.222.157.157:5012`)
 1. Java 21 설치 확인: `java --version`
 2. `.env` 파일 생성 (`.env.example` 참고)
 3. MySQL 4개 스키마 생성 (`docs/ddl/` 참고)
-4. Redis 실행 (Phase 4부터 필요)
+4. Docker Desktop 설치 (Redis 컨테이너 실행용)
+
+### Redis 실행 (Phase 4-C부터 — auth RT 저장)
+
+```bash
+# 백그라운드로 Redis 띄우기
+docker compose up -d redis
+
+# 상태 확인
+docker compose ps
+
+# 종료
+docker compose down
+```
+
+기본 포트 6379. 포트 변경은 `.env`의 `REDIS_PORT` 수정.
 
 ### 빌드 & 실행
 
