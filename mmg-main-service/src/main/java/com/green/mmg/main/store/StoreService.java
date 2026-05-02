@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -53,7 +54,7 @@ public class StoreService {
     @Transactional
     public boolean wishToggle(long callerUserNo, FavoriteToggleReq req){
         // Phase 3-Backfill-A-2: dto.userNo 위조 방지 (옵션 B — 불일치 시 FORBIDDEN throw)
-        if (req.getUserNo() != callerUserNo) {
+        if (!Objects.equals(req.getUserNo(), callerUserNo)) {
             throw new BusinessException("자신의 계정으로만 찜할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
         // Phase 3-B-2: MyBatis 4 SQL → JPA Repository
@@ -71,7 +72,7 @@ public class StoreService {
 
     @Transactional(readOnly = true)
     public boolean checkWish(long callerUserNo, FavoriteToggleReq req){
-        if (req.getUserNo() != callerUserNo) {
+        if (!Objects.equals(req.getUserNo(), callerUserNo)) {
             throw new BusinessException("자신의 계정으로만 조회할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
         return likedStoreRepository.existsByUserNoAndStoreId(req.getUserNo(), req.getStoreId());
@@ -79,7 +80,7 @@ public class StoreService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getWishListResponse(long callerUserNo, StoreFavoriteReq req) {
-        if (req.getUserNo() != callerUserNo) {
+        if (!Objects.equals(req.getUserNo(), callerUserNo)) {
             throw new BusinessException("본인 찜 목록만 조회 가능합니다.", HttpStatus.FORBIDDEN);
         }
         Map<String, Object> response = new HashMap<>();
