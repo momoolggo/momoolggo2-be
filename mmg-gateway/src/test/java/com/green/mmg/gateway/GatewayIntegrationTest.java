@@ -5,13 +5,21 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cloud.gateway.server.mvc.config.GatewayMvcProperties;
+import org.springframework.cloud.gateway.server.mvc.config.PredicateProperties;
+import org.springframework.cloud.gateway.server.mvc.config.RouteProperties;
 import org.springframework.http.HttpMethod;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
@@ -94,6 +102,70 @@ class GatewayIntegrationTest {
                             throw new AssertionError("InternalBlock가 /internal/** 외 경로에 적용됨 — 정책 위반: status=" + status);
                         }
                     });
+        }
+    }
+
+    /**
+     * 라우트 정의 12개 동결 — yml 정렬 변경 시 즉시 회귀 검출.
+     *
+     * <p>특히 review-route(/api/user/review/**)는 auth-user-route(/api/user/**)
+     * 보다 *위에* 있어야 prefix 충돌 회피로 main(8080)에 라우팅됨. 순서 뒤집히면
+     * review가 auth(8081)로 라우팅되어 404.</p>
+     */
+    @Nested
+    @DisplayName("RouteDefinition — yml 라우트 12개 동결 (prefix 매칭 순서 + uri + path)")
+    class RouteDefinition {
+
+        @Autowired
+        GatewayMvcProperties gatewayMvcProperties;
+
+        @Test
+        @DisplayName("12개 라우트 정의 + review-route 1번 위치 동결 (prefix 충돌 회피)")
+        void totalCount_andReviewRouteFirst() {
+            List<RouteProperties> routes = gatewayMvcProperties.getRoutes();
+
+            assertThat(routes).hasSize(12);
+            assertThat(routes.get(0).getId())
+                    .as("review-route는 1번 위치 (auth-user-route 위) — prefix 충돌 회피")
+                    .isEqualTo("review-route");
+            assertThat(routes.get(1).getId())
+                    .as("auth-user-route는 2번 위치 (review-route 아래)")
+                    .isEqualTo("auth-user-route");
+        }
+
+        @ParameterizedTest(name = "[{0}] {1} → {2} {3}")
+        @CsvSource({
+                "0, review-route,        http://localhost:8080, /api/user/review/**",
+                "1, auth-user-route,     http://localhost:8081, /api/user/**",
+                "2, auth-policy-route,   http://localhost:8081, /api/policy/**",
+                "3, main-store-route,    http://localhost:8080, /api/store/**",
+                "4, main-cart-route,     http://localhost:8080, /api/cart/**",
+                "5, main-order-route,    http://localhost:8080, /api/order/**",
+                "6, main-payment-route,  http://localhost:8080, /api/payment/**",
+                "7, main-address-route,  http://localhost:8080, /api/address/**",
+                "8, main-owner-route,    http://localhost:8080, /api/owner/**",
+                "9, main-uploads-route,  http://localhost:8080, /uploads/**",
+                "10, rider-route,        http://localhost:8082, /api/rider/**",
+                "11, admin-route,        http://localhost:8083, /api/admin/**"
+        })
+        @DisplayName("각 인덱스별 id/uri/Path predicate 동결 (yml 변경 즉시 검출)")
+        void routeFieldsFrozen(int index, String expectedId, String expectedUri, String expectedPath) {
+            RouteProperties route = gatewayMvcProperties.getRoutes().get(index);
+
+            assertThat(route.getId()).isEqualTo(expectedId);
+            assertThat(route.getUri()).hasToString(expectedUri);
+
+            // Path predicate 추출 — name="Path", args에 path pattern 포함
+            List<PredicateProperties> predicates = route.getPredicates();
+            assertThat(predicates)
+                    .as("라우트 [%s] predicates 1개 (Path) 정의", expectedId)
+                    .hasSize(1);
+            PredicateProperties pathPredicate = predicates.get(0);
+            assertThat(pathPredicate.getName()).isEqualTo("Path");
+            // args는 Map<String, String> — 단일 path는 _genkey_0 키로 들어감
+            assertThat(pathPredicate.getArgs().values())
+                    .as("라우트 [%s] Path 패턴 동결", expectedId)
+                    .containsExactly(expectedPath);
         }
     }
 }
