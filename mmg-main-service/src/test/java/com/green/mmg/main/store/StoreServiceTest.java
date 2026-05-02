@@ -135,7 +135,7 @@ class StoreServiceTest {
     private static final long OTHER_USER_NO = 99L;
 
     @Nested
-    @DisplayName("wishToggle — dto.userNo 위조 방지")
+    @DisplayName("wishToggle — dto.userNo 위조 방지 + toggle 분기")
     class WishToggle {
 
         @Test
@@ -150,6 +150,21 @@ class StoreServiceTest {
 
             assertThat(result).isTrue();
             verify(likedStoreRepository).saveAndFlush(any());
+        }
+
+        @Test
+        @DisplayName("toggle delete: 이미 찜 상태(existsByUserNoAndStoreId=true) → deleteByUserNoAndStoreId 호출 + return false + saveAndFlush 미호출")
+        void alreadyLiked_callsDeleteAndReturnsFalse() {
+            FavoriteToggleReq req = new FavoriteToggleReq();
+            req.setUserNo(USER_NO);
+            req.setStoreId(STORE_ID);
+            when(likedStoreRepository.existsByUserNoAndStoreId(USER_NO, STORE_ID)).thenReturn(true);
+
+            boolean result = storeService.wishToggle(USER_NO, req);
+
+            assertThat(result).isFalse();
+            verify(likedStoreRepository).deleteByUserNoAndStoreId(USER_NO, STORE_ID);
+            verify(likedStoreRepository, never()).saveAndFlush(any());
         }
 
         @Test
