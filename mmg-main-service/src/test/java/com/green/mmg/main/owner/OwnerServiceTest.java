@@ -371,6 +371,25 @@ class OwnerServiceTest {
             assertThatThrownBy(() -> ownerService.getOrders(USER_ID, STORE_ID, null, null))
                     .isInstanceOf(FeignException.class);
         }
+
+        @Test
+        @DisplayName("Feign null 응답 → 빈 Map → 모든 row의 customerName/tel 미설정 fallback (A-4 패턴 전파, NPE 차단)")
+        void feignNull_customerFieldsNotSet() {
+            OwnerOrderRes o1 = newOrder(391_000_001L, 100L);
+            OwnerOrderRes o2 = newOrder(391_000_002L, 200L);
+            when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
+            when(ownerMapper.getOrders(STORE_ID, null, null)).thenReturn(List.of(o1, o2));
+            when(authFeignClient.getUsers(anyList())).thenReturn(null);
+
+            List<OwnerOrderRes> result = ownerService.getOrders(USER_ID, STORE_ID, null, null);
+
+            // 모든 row가 fallback (customerName/tel 미설정 — 기존 row 값 유지, 보통 null)
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).getCustomerName()).isNull();
+            assertThat(result.get(0).getTel()).isNull();
+            assertThat(result.get(1).getCustomerName()).isNull();
+            assertThat(result.get(1).getTel()).isNull();
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────
