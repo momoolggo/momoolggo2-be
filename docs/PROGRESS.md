@@ -1,6 +1,6 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
-> 작성: 2026-04-28 / 최종 갱신: **2026-05-02 Phase 4-A 백필 완료 (227 PASS — common 9 + auth 40 + main 178)**
+> 작성: 2026-04-28 / 최종 갱신: **2026-05-02 Phase 4-B 백필 완료 (256 PASS — common 9 + auth 40 + main 178 + gateway 29)**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).
 
@@ -186,6 +186,7 @@
 - [x] **Phase 3-Backfill-C (2026-05-02)** — `!=` → `Objects.equals()` 잔존 10곳 전수 통일 (W-A1 6곳에서 누락된 primitive long 비교 4곳 마저 + storeSearchList 단위 2 + wishToggle delete 분기 단위 1, **177/177 PASS** — Phase 3 백필 종결)
 - [x] Phase 3 백필 → `@code-reviewer` 검증 → PASS (Phase 3-Backfill-B 시점)
 - [x] **Phase 4-A 백필 (2026-05-02)** — InternalUserController 통합 6 + UserBriefDto snapshot 1 + OwnerService null 가드 + 단위 1 + readOnly 3건 + Feign timeout yml. **219 → 227 (8 신규)**, code-reviewer **CONDITIONAL PASS** (Critical 0, Warning 2 = 스타일/커버리지 갭). W-2 의미 분리 (null 가드는 처리 완료 / 예외 fallback은 Phase 5 잔존).
+- [x] **Phase 4-B 백필 (2026-05-02)** — Gateway 첫 통합 테스트 도입(WebMVC 5.0.1) + InternalBlock 12건 + 라우트 정의 12개 동결 + CORS preflight/404 + CORS trim 시한폭탄 즉시 처리 + HelloController dead 정리. **227 → 256 (gateway 29 신규)**, code-reviewer **PASS** (Critical 0, Warning 2 = cosmetic). Step 3 가정 정정(헤더 검증/mTLS는 Phase 6 작업 — 4-B는 헤더 무관 무조건 403 동결).
 - [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
 - [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
 
@@ -487,6 +488,37 @@
 - auth-service 통합 테스트 첫 도입: main-service 패턴(`@SpringBootTest+MockMvc+@Transactional+@Rollback+fixture INSERT`)을 그대로 적용. user 엔티티 fixture(UUID 8자 user_id)로 학원 DB 변경 0 보장.
 - Feign timeout yml은 main-service에만 적용 — auth-service는 `spring-cloud-starter-openfeign` 의존성 없음(provider). dead config 회피.
 - code-reviewer Warning 2건은 머지 차단 아님: W-1 yml flat key 표기(`spring.jpa:`와 일관, 빌드 통과), W-2 getUsers empty ids 통합 누락(코드는 정상, 테스트 커버리지 갭) — Phase 5 진입 전 보완 가능, tech-debt 등재.
+
+### Phase 4-B 백필 결과 (2026-05-02) — Gateway 동작 종합 동결
+
+**HelloController 정리 + Gateway 첫 통합 도입 + 4 @Nested 동결 + CORS trim 시한폭탄 — 29 신규 / 0 failures / 6 커밋**:
+
+| Step | 내용 | 신규 / 변경 | 커밋 |
+|---|---|---|---|
+| 1 | HelloController 삭제 (Phase 0-B 잔재 — Gateway 외부 노출 가능했던 debug endpoint) | 코드 1 파일 삭제 | `a4488b8` |
+| 2+3 | Gateway 통합 테스트 셋업(`@SpringBootTest+MockMvc.webAppContextSetup+@Autowired CorsFilter` — auth fixture 패턴 일관) + InternalBlock 동결: sub-path 5 / HTTP method 5 / 위조 헤더 1 / 대비 1 (Phase 6 헤더 검증/mTLS 전 동작 잠금) | 12 신규 | `8af4dfa` |
+| 4 | 라우트 정의 12개 강한 동결: `@Autowired GatewayMvcProperties` + ParameterizedTest CsvSource 12 인덱스별 id/uri/Path 동결 + review-route 1번 위치 명시(prefix 충돌 회피) | 13 신규 | `08a226c` |
+| 5a | CORS preflight + 404 동결: 2 preflight(allowed origin/credentials + 6 methods) + /api/nonexistent 404 | 3 신규 | `9d92347` |
+| 5b | CORS allowedOrigins `.split(',')` trim 누락 시한폭탄 즉시 처리: `parseAllowedOrigins(raw)` 정적 메서드 추출 + map(trim) + filter(empty) | 코드 1 메서드 | `7e87567` |
+| 5c | parseAllowedOrigins 단위 테스트: 단일/공백/연속콤마/빈 입력 6 assertion | 1 신규 | `f7f8bf6` |
+
+**전체 누적**: **256 PASS** (common 9 + auth 40 + main 178 + gateway 29 신규)
+
+**Phase 4-B 핵심 검증 케이스**:
+- `GatewayIntegrationTest.InternalBlock.allSubPaths_returns403WithResultResponse`: ParameterizedTest 5 sub-path → 403 + resultMessage 동결
+- `GatewayIntegrationTest.InternalBlock.forgedHeaders_returnSame403`: X-Internal/Authorization/X-Forwarded-For 주입에도 동일 403 — 헤더 검증 부재 명시 동결 (Phase 6 도입 시 변경 기준점)
+- `GatewayIntegrationTest.RouteDefinition.routeFieldsFrozen`: 12 인덱스별 id/uri/Path predicate 동결 + review-route 1번 + auth-user-route 2번 위치 (yml 정렬 변경 즉시 검출)
+- `GatewayIntegrationTest.Cors.preflight_allowsConfiguredOrigin`: webAppContextSetup이 CorsFilter 자동 등록 X → `addFilter(corsFilter)` 명시 적용 후 preflight 200 + Allow-Origin/Credentials 동결
+- `GatewayCorsConfigTest.parseAllowedOrigins_trimAndFilterEmpty`: 콤마 뒤 공백 / 연속 콤마 / 빈 입력 6 케이스로 시한폭탄 동결
+
+**진단/결정 + 가정 정정 사례 (4번째)**:
+- **Step 3 가정 정정 (사용자 권장 반영)**: 가이드의 "X-Internal 헤더 통과/위조 차단" 시나리오는 CLAUDE.md §3 + InternalUserController 주석에 따라 **Phase 6 작업**으로 분류. 4-B는 *현재 동작 동결*(헤더 무관 무조건 403, 헤더 검증 로직 부재 명시) — 옵션 X 채택.
+- **CorsFilter 자동 등록 부재 (4번째 진단 가정 정정)**: webAppContextSetup이 ServletContext 필터를 자동 적용하지 않아 첫 빌드 시 2건 FAIL → `@Autowired CorsFilter + addFilter` 명시 패턴으로 정정. 누적 가정 정정 사례: ① 4-A ResultResponse 필드명, ② 4-B build.gradle testImplementation, ③ 4-B InternalBlock 헤더, ④ 4-B CorsFilter.
+- **CORS trim 즉시 처리 결정**: env 공백 origin 매칭 실패는 학원 발표 환경변수 설정 시 사고 위험 — Phase 5 미루지 않고 4-B 백필에 묶어 처리.
+- **HelloController 삭제 범위**: gateway 단독. admin/rider HelloController는 Phase 5 신규 기능 도입 시 함께 정리 (현재 미기동 영향 0).
+- **Q3 BaseSecurityConfig CORS PATCH 누락**: tech-debt 등재만 (외부는 Gateway 경유 실질 영향 0, 이중화 제거 작업 시 함께).
+- **WebMVC Gateway 5.0.1 신규 도입 학습**: `GatewayMvcProperties` 빈 주입 가능, RouteProperties/PredicateProperties 별도 클래스, 라우트 검증은 ApplicationContext에서 직접 — 라이더(Phase 5) 신규 모듈 통합 테스트 도입 시 패턴 재사용.
+- code-reviewer Warning 2건(cosmetic): W-1 nonInternalPath lambda 단순화 가능, W-2 클래스 Javadoc 'Step 4·5 추가 예정' 잔존 — 다음 파일 손볼 때 정리.
 
 ---
 
