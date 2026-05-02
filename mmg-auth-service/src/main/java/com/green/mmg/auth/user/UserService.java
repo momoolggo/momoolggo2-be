@@ -1,5 +1,6 @@
 package com.green.mmg.auth.user;
 
+import com.green.mmg.auth.token.RefreshTokenStore;
 import com.green.mmg.auth.user.model.*;
 import com.green.mmg.common.constants.ConstJwt;
 import com.green.mmg.common.exception.BusinessException;
@@ -15,6 +16,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
 
 /**
  * Phase 3-A: MyBatis → JPA 전환 (단순 CRUD).
@@ -32,6 +35,7 @@ public class UserService {
     private final JwtTokenProvider jwtTokenProvider;
     private final MyCookieUtil myCookieUtil;
     private final ConstJwt constJwt;
+    private final RefreshTokenStore refreshTokenStore;  // Phase 4-C: RT revoke 가능성 보장
 
     // ── 아이디 중복확인
     @Transactional(readOnly = true)
@@ -57,7 +61,7 @@ public class UserService {
         User saved = userRepository.save(user);
 
         JwtUser jwtUser = new JwtUser(saved.getUserNo(), saved.getRole(), null, saved.getName());
-        jwtTokenManager.issue(res, jwtUser);
+        issueAndStoreTokens(res, jwtUser);
 
         return new UserSigninRes(saved.getUserNo(), saved.getName(), saved.getRole(),
                 System.currentTimeMillis() + constJwt.getAccessTokenValidityMilliseconds(), null);
@@ -72,9 +76,25 @@ public class UserService {
             throw new BusinessException("아이디 또는 비밀번호가 틀렸습니다.", HttpStatus.UNAUTHORIZED);
         }
         JwtUser jwtUser = new JwtUser(user.getUserNo(), user.getRole(), null, user.getName());
-        jwtTokenManager.issue(res, jwtUser);
+        issueAndStoreTokens(res, jwtUser);
         return new UserSigninRes(user.getUserNo(), user.getName(), user.getRole(),
                 System.currentTimeMillis() + constJwt.getAccessTokenValidityMilliseconds(), null);
+    }
+
+    /**
+     * Phase 4-C: AT/RT 발급 + RT를 Redis에 저장. signup/signin 공통.
+     *
+     * <p>순서: 쿠키 세팅 → Redis 저장 (사용자 결정 — Redis 좀비 데이터 회피).
+     * Redis 저장 실패(RedisConnectionFailureException 등) 시 그대로 throw —
+     * D1 결정(정합성 우선): login 자체 실패. best-effort 회피.</p>
+     */
+    private void issueAndStoreTokens(HttpServletResponse res, JwtUser jwtUser) {
+        String accessToken = jwtTokenProvider.generateAccessToken(jwtUser);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(jwtUser);
+        jwtTokenManager.setAccessTokenInCookie(res, accessToken);
+        jwtTokenManager.setRefreshTokenInCookie(res, refreshToken);
+        refreshTokenStore.save(jwtUser.getSignedUserNo(), refreshToken,
+                Duration.ofMillis(constJwt.getRefreshTokenValidityMilliseconds()));
     }
 
     // ── 로그아웃
