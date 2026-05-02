@@ -97,8 +97,16 @@ public class UserService {
                 Duration.ofMillis(constJwt.getRefreshTokenValidityMilliseconds()));
     }
 
-    // ── 로그아웃
-    public void signout(HttpServletResponse res) {
+    // ── 로그아웃 (Phase 4-C: Redis RT 삭제 + 쿠키 만료)
+    // D1-bis: Redis delete 실패 시 best-effort — 쿠키 만료는 진행, 로그만 남김.
+    // 종료점이라 정합성 살짝 깨져도 RT 자연 만료로 결국 무효화. UX 마이너스 회피.
+    public void signout(long userNo, HttpServletResponse res) {
+        try {
+            refreshTokenStore.delete(userNo);
+        } catch (Exception e) {
+            log.warn("signout: RT 저장소 삭제 실패 (best-effort 진행) — userNo={}, cause={}",
+                    userNo, e.getMessage());
+        }
         jwtTokenManager.signOut(res);
     }
 

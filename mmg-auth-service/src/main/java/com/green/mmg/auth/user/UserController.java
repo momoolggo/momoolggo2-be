@@ -47,10 +47,11 @@ public class UserController {
         return new ResultResponse<>("로그인 성공", data);
     }
 
-    // ── 로그아웃 POST /api/user/logout
+    // ── 로그아웃 POST /api/user/logout (Phase 4-C: principal 받아 RT 저장소 삭제)
     @PostMapping("/logout")
-    public ResultResponse<Void> signout(HttpServletResponse res) {
-        userService.signout(res);
+    public ResultResponse<Void> signout(@AuthenticationPrincipal UserPrincipal principal,
+                                        HttpServletResponse res) {
+        userService.signout(principal.getSignedUserNo(), res);
         return new ResultResponse<>("로그아웃 완료", null);
     }
 

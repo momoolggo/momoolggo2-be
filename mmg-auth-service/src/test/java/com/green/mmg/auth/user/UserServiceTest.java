@@ -291,12 +291,27 @@ class UserServiceTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("signout — 로그아웃")
+    @DisplayName("signout — 로그아웃 (Phase 4-C: Redis RT 삭제 + 쿠키 만료)")
     class Signout {
         @Test
-        @DisplayName("JwtTokenManager.signOut() 호출")
-        void delegatesToManager() {
-            userService.signout(httpRes);
+        @DisplayName("happy: refreshTokenStore.delete(userNo) + jwtTokenManager.signOut(res) 호출")
+        void deletesRtAndSignsOut() {
+            userService.signout(42L, httpRes);
+
+            verify(refreshTokenStore).delete(42L);
+            verify(jwtTokenManager).signOut(httpRes);
+        }
+
+        @Test
+        @DisplayName("D1-bis best-effort: refreshTokenStore.delete 예외 → 쿠키 만료는 진행 (warn 로그만, 응답 정상)")
+        void redisDeleteFailure_continuesWithCookieDeletion() {
+            doThrow(new RedisConnectionFailureException("Redis down"))
+                    .when(refreshTokenStore).delete(42L);
+
+            // 예외 throw 안 함 — best-effort 동결
+            userService.signout(42L, httpRes);
+
+            // 쿠키 만료는 그대로 진행
             verify(jwtTokenManager).signOut(httpRes);
         }
     }

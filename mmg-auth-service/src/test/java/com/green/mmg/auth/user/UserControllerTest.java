@@ -172,16 +172,18 @@ class UserControllerTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("POST /api/user/logout")
+    @DisplayName("POST /api/user/logout (Phase 4-C: principal userNo 위임)")
     class Signout {
         @Test
-        @DisplayName("200 + Service 호출")
+        @DisplayName("200 + signout(principal.userNo, res) 호출")
         void happyPath() throws Exception {
+            authenticateAs(42L, "CUSTOMER", "준하");
+
             mockMvc.perform(post("/api/user/logout"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.resultMessage").value("로그아웃 완료"));
 
-            verify(userService).signout(any(HttpServletResponse.class));
+            verify(userService).signout(eq(42L), any(HttpServletResponse.class));
         }
     }
 
