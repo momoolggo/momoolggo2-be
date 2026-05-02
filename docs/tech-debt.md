@@ -38,7 +38,7 @@
 | **MapConfigController 네이버 client-id 공개 보안 부채** (`/api/map/key`) | 2026-04-29 | `MapConfigController` | 프론트 협의 후 처리 — Phase 5 |
 | **OwnerStoreUpdateReq.storeId 타입 정리 (String → Long)** | 2026-04-30 | `OwnerStoreUpdateReq.java:9` `private String storeId` | D-bis에서 임시로 `Long.parseLong` 변환 + BusinessException BAD_REQUEST 처리. 근본 해결은 dto 타입 변경이지만 프론트(`StoreManagementView.vue` 등)의 storeId 전송 형식 협의 필요. |
 | **OwnerService.uploadImage 확장자 화이트리스트 부재** | 2026-04-30 | `OwnerService.uploadImage` (39행) — `contentType.startsWith("image/")`만 체크 | content-type 헤더 위조 시 우회 가능. 실 확장자(jpg/png/gif/webp 등) 화이트리스트 추가 필요. multipart 10MB 제한은 적용됨. |
-| **OwnerService.getOrders Feign 예외 try-catch 없음 (W-2)** | 2026-04-30 | `OwnerService.getOrders` — `authFeignClient.getUsers(userNos)` 예외 시 그대로 propagate → 점주 화면에 500 노출 | Phase 5 — `TossPaymentClient` 분리 작업과 함께 Feign Fallback 패턴 도입 (CircuitBreaker / 빈 응답 fallback). 단위 테스트 `feignException_propagates`가 현재 동작 명시 동결. |
+| **OwnerService.getOrders Feign 예외 try-catch 없음 (W-2)** | 2026-04-30 | `OwnerService.getOrders` — `authFeignClient.getUsers(userNos)` 예외 시 그대로 propagate → 점주 화면에 500 노출 | Phase 5 라이더 정리 또는 본격 작업 중 처리 — `TossPaymentClient` 분리 작업과 함께 Feign Fallback 패턴 도입 (CircuitBreaker / 빈 응답 fallback). 단위 테스트 `feignException_propagates`가 현재 동작 명시 동결. |
 
 ---
 

@@ -12,6 +12,27 @@
 
 ---
 
+## 진행 흐름
+
+> **Phase 1 → 2 → 3 → 4-A → 4-B → 4-C → [라이더 정리 단계] → Phase 5 → 학원 발표 (최종 마일스톤)**
+>
+> 학원 발표는 Phase 5 종결 후 **최종 마일스톤**이지 단계 진행 조건 아님.
+> 팀원 합류는 **진행 조건 아님** (단독 진행 가능).
+> Phase 4-C / 5 / 라이더 정리는 모두 **정상 순차 진행**.
+
+| 단계 | 위치 | 비고 |
+|---|---|---|
+| Phase 1~3 | ✅ 완료 (Phase 3 백필 2026-05-02 종결, 177 PASS) | — |
+| Phase 4-A | ✅ 완료 (Feign + Internal API + cross-schema JOIN 5개 해소) | — |
+| Phase 4-B | ✅ 완료 (Gateway 라우팅 / Internal 차단 / CORS 통합) | — |
+| **Phase 4-C** | ⏳ 진행 예정 (4-B 다음 정상) | Redis 토큰 저장 / 날씨 캐시 / Pub-Sub |
+| **라이더 정리 단계** | 대기 (4-C 후) | mmg-rider-service 사전 설계 — 결정 항목: 서비스 경계 / 데이터 모델 / 통신 패턴(Feign vs 메시지 큐) / 상태 머신(배차 대기 → 배차 → 픽업 → 이동 → 완료) / 위치 추적 방식 / Phase 4-C Pub/Sub 활용 방안. **산출물**: 라이더 모듈 ADR + 인터페이스 명세 |
+| **Phase 5** | 대기 (라이더 정리 후) | 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 잔존 도메인 경계 정리 |
+| 학원 발표 | Phase 5 종결 후 최종 마일스톤 | 진행 조건 아님 |
+| Phase 4-D / 6 | Phase 5 후 또는 병행 | 외부 FK Saga/Outbox / 고도화 (Outbox/Kafka/모니터링/CI-CD) |
+
+---
+
 ## Phase 진행 상태
 
 | Phase | 작업 | 완료일 | 상태 |
@@ -34,10 +55,12 @@
 | **3-C** | Order/OrderDetail/Review JPA + 🎯 BaseEntity 첫 검증 | **2026-04-29** | ✅ |
 | **3-D** | UserAddress JPA + Store/Owner MyBatis 유지 확정 | **2026-04-29** | ✅ |
 | **4-B** | Gateway 라우팅 정비 + Internal 차단 + CORS 통합 | **2026-04-29** | ✅ |
-| 4-C | Redis 도입 (토큰/캐시/Pub-Sub) | — | ⏳ 다음 |
-| 4-D / 6 | 외부 FK 정합성 (Saga/Outbox) | — | 대기 |
-| 5 | 신규 기능 (펫/룰렛/챗봇/SSE/Rider/Admin) + TossPaymentClient | — | 팀원 합류 시 |
-| 6 | 고도화 (Outbox/Kafka/모니터링/CI-CD) | — | 대기 |
+| 4-C | Redis 도입 (토큰/캐시/Pub-Sub) | — | ⏳ 다음 (4-B 다음 정상) |
+| 라이더 정리 | mmg-rider-service 사전 설계 (서비스 경계 / 데이터 모델 / 통신 패턴 / 상태 머신 / 위치 추적 / Pub-Sub 활용 ADR + 인터페이스 명세) | — | 4-C 후 정상 |
+| 5 | 신규 기능 (펫/룰렛/챗봇/SSE/Rider/Admin) + TossPaymentClient | — | 라이더 정리 후 정상 |
+| 학원 발표 | 최종 마일스톤 | — | Phase 5 종결 후 |
+| 4-D | 외부 FK 정합성 (Saga/Outbox) | — | Phase 5 후 또는 병행 |
+| 6 | 고도화 (Outbox/Kafka/모니터링/CI-CD) | — | Phase 5 후 또는 병행 |
 
 ---
 
@@ -436,7 +459,9 @@
 
 ## 다음 단계
 
-**Phase 3 백필 종결.** Phase 4-C / Phase 5 대기 (외부 일정 의존).
+**Phase 3 백필 종결.** 진행 흐름: 4-C → 라이더 정리 → 5 → 학원 발표 (최종 마일스톤).
 
-- **Phase 4-C**: 학원 발표 후 — 토큰 저장 (auth) + 날씨 캐시 (main) + Pub/Sub
-- **Phase 5**: 팀원 합류 시 본격 — 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 잔존 도메인 경계 정리
+- **Phase 4-C** — 4-B 다음 정상 진행. Redis 토큰 저장 (auth) + 날씨 캐시 (main) + Pub/Sub
+- **라이더 정리 단계** — 4-C 후. mmg-rider-service 사전 설계 (서비스 경계 / 데이터 모델 / 통신 패턴(Feign vs 메시지 큐) / 상태 머신 / 위치 추적 / Pub-Sub 활용). 산출물: 라이더 모듈 ADR + 인터페이스 명세.
+- **Phase 5** — 라이더 정리 후. 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 잔존 도메인 경계 정리. *팀원 합류는 진행 조건 아님.*
+- **학원 발표** — Phase 5 종결 후 최종 마일스톤. 진행 조건 아님.
