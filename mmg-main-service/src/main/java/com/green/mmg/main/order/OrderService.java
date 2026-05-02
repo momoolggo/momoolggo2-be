@@ -151,7 +151,7 @@ public class OrderService {
     @Transactional(readOnly = true)
     public List<OrderHistoryDto> getOrderHistory(long callerUserNo, OrderHistoryReq req) {
         // Phase 3-Backfill-A-3: req.userId 위조 방지 (옵션 B — 명시적 403 throw)
-        if (req.getUserId() != callerUserNo) {
+        if (!Objects.equals(req.getUserId(), callerUserNo)) {
             throw new BusinessException("본인 주문 내역만 조회 가능합니다.", HttpStatus.FORBIDDEN);
         }
         // 복잡 SQL (DATE_FORMAT + 서브쿼리 hasReview) — MyBatis 영구 잔존
@@ -180,7 +180,7 @@ public class OrderService {
     @Transactional(readOnly = true)
     public int maxHistoryPage(long callerUserNo, long userId) {
         // Phase 3-Backfill-A-3: path userId 위조 방지 (옵션 B)
-        if (userId != callerUserNo) {
+        if (!Objects.equals(userId, callerUserNo)) {
             throw new BusinessException("본인 주문 내역만 조회 가능합니다.", HttpStatus.FORBIDDEN);
         }
         // 응답 동결: 기존 OrderMapper.maxHistoryPage가 int 반환 → 동일 타입 유지
