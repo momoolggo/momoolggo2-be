@@ -1,6 +1,6 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
-> 작성: 2026-04-28 / 최종 갱신: **2026-05-02 Phase 3-Backfill-C 완료 (177/177 PASS, Phase 3 백필 종결)**
+> 작성: 2026-04-28 / 최종 갱신: **2026-05-02 Phase 4-A 백필 완료 (227 PASS — common 9 + auth 40 + main 178)**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).
 
@@ -185,6 +185,7 @@
 - [x] **Phase 3-Backfill-B + W-A1 (2026-05-02)** — readOnly 24건 + Owner 쓰기 `@Transactional` 8건 + Review 통합 2 + UserAddress save/setDefault 단위 5 + System.out 잔존 정리, **174/174 PASS**
 - [x] **Phase 3-Backfill-C (2026-05-02)** — `!=` → `Objects.equals()` 잔존 10곳 전수 통일 (W-A1 6곳에서 누락된 primitive long 비교 4곳 마저 + storeSearchList 단위 2 + wishToggle delete 분기 단위 1, **177/177 PASS** — Phase 3 백필 종결)
 - [x] Phase 3 백필 → `@code-reviewer` 검증 → PASS (Phase 3-Backfill-B 시점)
+- [x] **Phase 4-A 백필 (2026-05-02)** — InternalUserController 통합 6 + UserBriefDto snapshot 1 + OwnerService null 가드 + 단위 1 + readOnly 3건 + Feign timeout yml. **219 → 227 (8 신규)**, code-reviewer **CONDITIONAL PASS** (Critical 0, Warning 2 = 스타일/커버리지 갭). W-2 의미 분리 (null 가드는 처리 완료 / 예외 fallback은 Phase 5 잔존).
 - [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
 - [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
 
@@ -453,7 +454,39 @@
 - W-A1 "6곳 통일" 기록의 부분성 정정: primitive `long != long` 4곳(스타일 차이만, 기능 동일)은 W-A1에서 의식적으로/암묵적으로 제외됐으나 결정 근거 미명시 → C에서 전수 통일 + 표준 메모(`feedback_owner_check_pattern.md`)에 "primitive 비교도 단일 표준" 명시
 - autoboxing으로 동작 동일 → 위험 0, 비용 5분, 일관성 가치 큼 (다음 백필 레퍼런스)
 - StoreService Mapper 1:1 위임 4개(storeListGet/getMaxPage/menuListGet/findNearbyStores) 단위는 *형식적 검증*이라 의도적 제외. NAJACKS 가짜 패턴 방지
-- OwnerService.getOrders Feign null 가드는 W-2(Phase 5 fallback) 동결 유지 — 도메인 critical 차이 의도 보존
+- OwnerService.getOrders Feign null 가드는 W-2(Phase 5 fallback) 동결 유지 — 도메인 critical 차이 의도 보존 → **Phase 4-A 백필에서 W-2 의미 분리 후 즉시 처리**
+
+### Phase 4-A 백필 결과 (2026-05-02) — Feign 인프라 동결
+
+**코드 1 + 통합 6 + 단위 1 + snapshot 1 + readOnly 3 + yml — 8 신규 / 0 failures / 6 커밋**:
+
+| Step | 내용 | 신규 / 변경 | 커밋 |
+|---|---|---|---|
+| 1-code | OwnerService.getOrders Feign null 가드 (A-4 패턴 전파 누락 정정) | 코드 1줄 | `d2f87ce` |
+| 1-test | OwnerServiceTest.GetOrders.feignNull_customerFieldsNotSet 단위 1건 | 1 (177→178) | `39e43cd` |
+| 2 | InternalUserController 통합 테스트 (provider 동결): getUser happy/404 + getOwner happy/404 + getUsers batch happy/partial | 6 (34→40) | `b562532` |
+| 3 | UserBriefDto Jackson 직렬화 snapshot (consumer 보호 — 키 4개 동결 + 라운드트립) | 1 (8→9) | `05a2e2b` |
+| 4 | InternalUserController 3 메서드 `@Transactional(readOnly=true)` 적용 (B-1 패턴 일관) | 0 신규 (어노테이션 3건) | `642bd89` |
+| 5 | main-service Feign client timeout yml (60s → connect 3s / read 5s). auth는 의존성 부재로 미적용 | 설정 변경 | `7aec4d7` |
+
+**전체 누적 (Phase 1~4-A 백필)**: **227 PASS** (common 9 + auth 40 + main 178)
+
+**W-2 의미 분리 (Phase 4-A 핵심 결정)**:
+- W-2 defer는 "Feign **예외** fallback (auth 다운 시 점주 화면 동작)" 결정이지 "**null NPE 가드**"가 아님. 두 개념 혼용 박제 정정.
+- `null 가드`는 코드 버그(NPE 위험) — Phase 4-A에서 즉시 처리 (`d2f87ce` `39e43cd`).
+- `예외 fallback`은 비즈니스 결정 — Phase 5 라이더 정리 또는 본격 작업 중 처리 (W-2 잔존).
+
+**Phase 4-A 핵심 검증 케이스**:
+- `InternalUserControllerIntegrationTest.getUser_happy_serializationFrozen`: 200 + JsonPath 4필드 동결 — Feign consumer 4곳이 의존하는 직렬화 형식
+- `InternalUserControllerIntegrationTest.getUsers_batchHappy`: JsonPath filter(`$[?(@.userNo == N)]`)로 순서 비보장 검증 — 실제 batch 동작
+- `InternalUserControllerIntegrationTest.getUsers_batchPartial`: 존재 + 미존재 → 존재만 반환 (consumer는 nameMap.getOrDefault로 fallback)
+- `UserBriefDtoSerializationTest.serializationRoundtrip_freezesFieldNames`: JSON 키 개수 4 동결 — 필드 추가/제거 시 consumer 깨짐 회귀 검출
+- `OwnerServiceTest.GetOrders.feignNull_customerFieldsNotSet`: null 응답 → 모든 row의 customerName/tel null fallback (`feignException_propagates`와 양립)
+
+**진단/결정**:
+- auth-service 통합 테스트 첫 도입: main-service 패턴(`@SpringBootTest+MockMvc+@Transactional+@Rollback+fixture INSERT`)을 그대로 적용. user 엔티티 fixture(UUID 8자 user_id)로 학원 DB 변경 0 보장.
+- Feign timeout yml은 main-service에만 적용 — auth-service는 `spring-cloud-starter-openfeign` 의존성 없음(provider). dead config 회피.
+- code-reviewer Warning 2건은 머지 차단 아님: W-1 yml flat key 표기(`spring.jpa:`와 일관, 빌드 통과), W-2 getUsers empty ids 통합 누락(코드는 정상, 테스트 커버리지 갭) — Phase 5 진입 전 보완 가능, tech-debt 등재.
 
 ---
 
