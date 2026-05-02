@@ -1,6 +1,6 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
-> 작성: 2026-04-28 / 최종 갱신: **2026-05-02 Phase 3-Backfill-B + W-A1 완료 (174/174 PASS)**
+> 작성: 2026-04-28 / 최종 갱신: **2026-05-02 Phase 3-Backfill-C 완료 (177/177 PASS, Phase 3 백필 종결)**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).
 
@@ -159,9 +159,9 @@
 - [x] **Phase 2-Backfill-D (2026-04-30)** — Owner 18 + Store Feign null fix 5 + AddressSearch refactor 8 + Cart 권한 5+통합 4 + UserAddress 권한 2 = 신규 42 추가, 116/116 PASS
 - [x] **Phase 2-Backfill-D-bis (2026-04-30)** — OwnerService 17개 메서드 권한 분기 일괄 + dto.userId 위조 방지 + Mapper 헬퍼 4개 + 32 신규 케이스, 148/148 PASS (Phase 2 백필 종료)
 - [x] **Phase 3-Backfill-A (2026-04-30)** — Critical 4 + Major 1 일괄 처리 (Order DELETE 인증 / Favorite 위조 방지 / Order 내역 인증 / Feign null 패턴 전파 / UserAddress.update 권한), 19 신규 케이스, **167/167 PASS**
-- [ ] Phase 3-Backfill-B (readOnly + Review 통합 + UserAddress save/setDefault 단위 + System.out 잔존)
-- [ ] Phase 3-Backfill-C (StoreService/LikedStore 단위 보강)
-- [ ] Phase 3 백필 → `@code-reviewer` 검증 → PASS
+- [x] **Phase 3-Backfill-B + W-A1 (2026-05-02)** — readOnly 24건 + Owner 쓰기 `@Transactional` 8건 + Review 통합 2 + UserAddress save/setDefault 단위 5 + System.out 잔존 정리, **174/174 PASS**
+- [x] **Phase 3-Backfill-C (2026-05-02)** — `!=` → `Objects.equals()` 잔존 10곳 전수 통일 (W-A1 6곳에서 누락된 primitive long 비교 4곳 마저 + storeSearchList 단위 2 + wishToggle delete 분기 단위 1, **177/177 PASS** — Phase 3 백필 종결)
+- [x] Phase 3 백필 → `@code-reviewer` 검증 → PASS (Phase 3-Backfill-B 시점)
 - [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
 - [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
 
@@ -385,7 +385,7 @@
 
 | Step | 내용 | 신규 케이스 / 어노테이션 | 커밋 |
 |---|---|---|---|
-| W-A1 | 권한 비교 `Objects.equals()` 6곳 전수 통일 (null 가드 제거 — null-safe 단일 패턴) | 0 신규 (167 PASS 유지) | `e95cf97` `ef9a097` `aefb576` |
+| W-A1 | 권한 비교 `Objects.equals()` **6곳 통일** (Long != long / .equals() / null 가드 혼용 제거 — null-safe 단일 패턴) — *primitive `long != long` 4곳은 누락(스타일 통일 가치 미판정) → C에서 전수 종결* | 0 신규 (167 PASS 유지) | `e95cf97` `ef9a097` `aefb576` |
 | B-1 | 조회 메서드 `@Transactional(readOnly=true)` 적용 (24건, 6도메인) + Owner 쓰기 `@Transactional` 추가 (8건, 데이터 정합성 부채 즉시 처리) | 0 신규 (어노테이션 32건) | `38cff0b` `3db1076` `8fe7e7b` `3bf15d0` `6024407` `207996d` `11422c3` |
 | B-2 | Review 통합 happy path (`postReview` / `deleteReview` — Service 호출 + JPQL/findById 재조회 검증) | 2 | `dca7c02` |
 | B-3 | UserAddressService.save / setDefault 단위 테스트 (defaultAd 분기 3 + setDefault InOrder + NOT_FOUND) | 5 | `8ffba23` |
@@ -406,12 +406,37 @@
 - OwnerService 쓰기 `@Transactional` 누락은 발견 시점에 *즉시 처리* (tech-debt 등재 X). `registerStore` 3 INSERT 부분 실패 위험을 미루지 않음. 영향 분석으로 OwnerServiceTest는 Mockito 단위 — 트랜잭션 동작 무관 확인.
 - `System.out.println`은 Phase 3-Backfill-A에서 이미 2건(Favorite/Order) 제거됐고, 잔존 1건도 Logger 전환 가치 없는 디버그 잔재 → 단순 제거.
 
+### Phase 3-Backfill-C 결과 (2026-05-02) — Phase 3 백필 종결
+
+**`!=` 전수 통일 + 단위 3건 / 0 failures / 0 errors / 6 커밋**:
+
+| Step | 내용 | 신규 케이스 / 변경 | 커밋 |
+|---|---|---|---|
+| C-1a | OwnerService 잔존 `!=` 5곳 → `Objects.equals()` (registerStore + verifyStore/Order/Menu/Category 헬퍼 4) | 0 신규 (스타일 통일) | `682a240` |
+| C-1b | StoreService 잔존 `!=` 3곳 → `Objects.equals()` (wishToggle/checkWish/getWishListResponse) | 0 신규 | `a136582` |
+| C-1c | OrderService 잔존 `!=` 2곳 → `Objects.equals()` (getOrderHistory/maxHistoryPage) | 0 신규 | `8a62d48` |
+| C-2 | StoreService.storeSearchList null/blank early return 단위 동결 (verifyNoInteractions) | 2 | `fe8db01` |
+| C-3 | StoreService.wishToggle delete 분기 단위 (deleteByUserNoAndStoreId verify + saveAndFlush 미호출) | 1 | `eced681` |
+
+**main-service 전체 빌드/테스트 통과 (177/177)**:
+- Phase 3-Backfill-B 누적 174 + C 신규 3 = **177**
+
+**Phase 3-Backfill-C 핵심 검증 케이스**:
+- `StoreServiceTest.StoreSearchList.nullSearchText_returnsEmptyAndSkipsMapper`: null 입력 → `List.of()` + `verifyNoInteractions(storeMapper)` 동결 (NPE 차단 + 불필요 SQL 차단)
+- `StoreServiceTest.StoreSearchList.blankSearchText_returnsEmptyAndSkipsMapper`: 공백만(`"   "`) 입력 시 `searchText.trim().isEmpty()` 분기 동결 — trim 효과 검증
+- `StoreServiceTest.WishToggle.alreadyLiked_callsDeleteAndReturnsFalse`: existsByUserNoAndStoreId=true 분기에서 delete 호출 + saveAndFlush 미호출 검증 — toggle 양방향 단위 완성
+
+**진단/결정**:
+- W-A1 "6곳 통일" 기록의 부분성 정정: primitive `long != long` 4곳(스타일 차이만, 기능 동일)은 W-A1에서 의식적으로/암묵적으로 제외됐으나 결정 근거 미명시 → C에서 전수 통일 + 표준 메모(`feedback_owner_check_pattern.md`)에 "primitive 비교도 단일 표준" 명시
+- autoboxing으로 동작 동일 → 위험 0, 비용 5분, 일관성 가치 큼 (다음 백필 레퍼런스)
+- StoreService Mapper 1:1 위임 4개(storeListGet/getMaxPage/menuListGet/findNearbyStores) 단위는 *형식적 검증*이라 의도적 제외. NAJACKS 가짜 패턴 방지
+- OwnerService.getOrders Feign null 가드는 W-2(Phase 5 fallback) 동결 유지 — 도메인 critical 차이 의도 보존
+
 ---
 
 ## 다음 단계
 
-**Phase 3-Backfill-C** 또는 Phase 4-C / Phase 5.
+**Phase 3 백필 종결.** Phase 4-C / Phase 5 대기 (외부 일정 의존).
 
-- **Phase 3-Backfill-C**: StoreService 나머지 단위 + LikedStore 단위 (~10 신규, 라이더 진입 후 병행 가능)
-- Phase 4-C: 학원 발표 후 — 토큰 저장 (auth) + 날씨 캐시 (main) + Pub/Sub
-- Phase 5: 팀원 합류 시 본격 — 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 잔존 도메인 경계 정리
+- **Phase 4-C**: 학원 발표 후 — 토큰 저장 (auth) + 날씨 캐시 (main) + Pub/Sub
+- **Phase 5**: 팀원 합류 시 본격 — 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 잔존 도메인 경계 정리

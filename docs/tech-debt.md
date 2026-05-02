@@ -70,7 +70,10 @@
 | **OrderService.getOrderInfo Feign null NPE (Critical 4)** | 2026-04-30 | 2026-04-30 | `6d6cc14` `2011b90` (Phase 3-Backfill-A-4) — storeOneGet 패턴 전파. BusinessException NOT_FOUND. |
 | **StoreService.getStoreReviews Feign batch null NPE (Major)** | 2026-04-30 | 2026-04-30 | `361ce00` `2011b90` (Phase 3-Backfill-A-4) — null 응답 → 빈 Map → userName 빈 문자열 fallback. Owner.getOrders와 다른 결정(Phase 5). |
 | **UserAddressService.update 소유자 검증 누락 (Major)** | 2026-04-30 | 2026-04-30 | `5253bef` `ca78b7a` (Phase 3-Backfill-A-5) — D-4 delete 패턴을 update에도 일관 적용. 4 신규 케이스. |
-| **권한 비교 패턴 비일관 (Long != long / .equals() / null 가드 혼용, 6곳)** | 2026-04-30 | 2026-05-02 | `e95cf97` `ef9a097` `aefb576` (W-A1) — Order/Cart/UserAddress 6곳 `Objects.equals()` 단일 패턴 통일 + null 가드 redundant 제거. 표준 `feedback_owner_check_pattern.md`. |
+| **권한 비교 패턴 비일관 (Long != long / .equals() / null 가드 혼용, W-A1 6곳)** | 2026-04-30 | 2026-05-02 | `e95cf97` `ef9a097` `aefb576` (W-A1) — Order/Cart/UserAddress 6곳 `Objects.equals()` 단일 패턴 통일 + null 가드 redundant 제거. 표준 `feedback_owner_check_pattern.md`. |
+| **잔존 primitive `long != long` 비교 10곳 통일 (W-A1 후속 — Phase 3-Backfill-C)** | 2026-05-02 | 2026-05-02 | `682a240` `a136582` `8a62d48` (Phase 3-Backfill-C-1) — Owner 5 + Store 3 + Order 2 = 10곳 `Objects.equals()`. autoboxing 동작 동일 (위험 0). W-A1 시점 결정 근거 미명시였던 부분 정정 — primitive 비교도 단일 표준 명시. |
+| **StoreService.storeSearchList null/blank 입력 검증 단위 부재** | 2026-05-02 | 2026-05-02 | `fe8db01` (Phase 3-Backfill-C-2) — verifyNoInteractions으로 Mapper 미호출 동결 2건. |
+| **StoreService.wishToggle delete 분기 단위 부재 (insert만 단위 커버)** | 2026-05-02 | 2026-05-02 | `eced681` (Phase 3-Backfill-C-3) — deleteByUserNoAndStoreId verify + saveAndFlush 미호출 1건. toggle 양방향 단위 완성. |
 | **main-service 조회 메서드 `@Transactional(readOnly=true)` 누락 (24건, 6도메인)** | 2026-05-02 | 2026-05-02 | `38cff0b` `3db1076` `8fe7e7b` `3bf15d0` `6024407` `207996d` (B-1) — Review/Store/Order/Cart/UserAddress/Owner 일괄 적용. auth-service 패턴 일관. |
 | **OwnerService 쓰기 메서드 `@Transactional` 누락 (8건, 데이터 정합성 부채)** | 2026-05-02 | 2026-05-02 | `11422c3` (B-1 확장) — `registerStore` 3 INSERT 부분 실패 위험 등 8건 일괄 처리. *발견 즉시 처리* (tech-debt 등재 X 결정). |
 | **Review 통합 happy path 부재 (post/delete)** | 2026-05-02 | 2026-05-02 | `dca7c02` (B-2) — `ReviewControllerIntegrationTest`에 2건 추가. `entityManager.flush() + clear() + JPQL/findById` 재조회 검증. |
