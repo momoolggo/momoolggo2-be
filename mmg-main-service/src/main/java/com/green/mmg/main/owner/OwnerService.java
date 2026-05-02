@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -66,7 +67,7 @@ public class OwnerService {
     @Transactional
     public void registerStore(long callerOwnerNo, OwnerStoreRegReq dto){
         // dto.userId 위조 방지: 옵션 B — 불일치 시 403 throw (강제 덮어쓰기 대신 명시적 거부)
-        if (dto.getUserId() != callerOwnerNo) {
+        if (!Objects.equals(dto.getUserId(), callerOwnerNo)) {
             throw new BusinessException("자신의 계정으로만 가게를 등록할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
         log.info("가게 등록 로직 시작: {}", dto.getStoreName());
@@ -221,7 +222,7 @@ public class OwnerService {
         if (ownerId == null) {
             throw new BusinessException("가게를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
         }
-        if (ownerId != callerOwnerNo) {
+        if (!Objects.equals(ownerId, callerOwnerNo)) {
             throw new BusinessException("본인 가게만 접근 가능합니다.", HttpStatus.FORBIDDEN);
         }
     }
@@ -232,7 +233,7 @@ public class OwnerService {
         if (ownerId == null) {
             throw new BusinessException("주문을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
         }
-        if (ownerId != callerOwnerNo) {
+        if (!Objects.equals(ownerId, callerOwnerNo)) {
             throw new BusinessException("본인 가게의 주문만 접근 가능합니다.", HttpStatus.FORBIDDEN);
         }
     }
@@ -243,7 +244,7 @@ public class OwnerService {
         if (ownerId == null) {
             throw new BusinessException("메뉴를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
         }
-        if (ownerId != callerOwnerNo) {
+        if (!Objects.equals(ownerId, callerOwnerNo)) {
             throw new BusinessException("본인 가게의 메뉴만 접근 가능합니다.", HttpStatus.FORBIDDEN);
         }
     }
@@ -254,7 +255,7 @@ public class OwnerService {
         if (ownerId == null) {
             throw new BusinessException("카테고리를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
         }
-        if (ownerId != callerOwnerNo) {
+        if (!Objects.equals(ownerId, callerOwnerNo)) {
             throw new BusinessException("본인 가게의 카테고리만 접근 가능합니다.", HttpStatus.FORBIDDEN);
         }
     }
