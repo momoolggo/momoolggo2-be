@@ -16,13 +16,16 @@ import org.springframework.http.HttpMethod;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.filter.CorsFilter;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -42,10 +45,13 @@ class GatewayIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired private WebApplicationContext webApplicationContext;
+    @Autowired private CorsFilter corsFilter;  // GatewayCorsConfig 빈 — webAppContextSetup이 자동 등록 X, 명시적 addFilter
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
+                .addFilter(corsFilter)
+                .build();
     }
 
     @Nested
@@ -166,6 +172,62 @@ class GatewayIntegrationTest {
             assertThat(pathPredicate.getArgs().values())
                     .as("라우트 [%s] Path 패턴 동결", expectedId)
                     .containsExactly(expectedPath);
+        }
+    }
+
+    /**
+     * CORS preflight 동결 — GatewayCorsConfig 설정값이 실제 응답 헤더로 전달되는지.
+     * OPTIONS 요청은 CorsFilter가 직접 200 응답 (백엔드 호출 발생 안 함).
+     */
+    @Nested
+    @DisplayName("CORS — preflight 동결 (allowedOrigins/allowedMethods/credentials)")
+    class Cors {
+
+        @Test
+        @DisplayName("preflight OPTIONS: localhost:5173 origin → 200 + Allow-Origin/Credentials 헤더 동결")
+        void preflight_allowsConfiguredOrigin() throws Exception {
+            mockMvc.perform(options("/api/store")
+                            .header("Origin", "http://localhost:5173")
+                            .header("Access-Control-Request-Method", "POST"))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"))
+                    .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+        }
+
+        @Test
+        @DisplayName("preflight: 허용 메서드 6개 동결 — GET/POST/PUT/PATCH/DELETE/OPTIONS")
+        void preflight_allowedMethodsContainsAll() throws Exception {
+            mockMvc.perform(options("/api/store")
+                            .header("Origin", "http://localhost:5173")
+                            .header("Access-Control-Request-Method", "PATCH"))
+                    .andExpect(status().isOk())
+                    .andExpect(result -> {
+                        String allowMethods = result.getResponse().getHeader("Access-Control-Allow-Methods");
+                        if (allowMethods == null) {
+                            throw new AssertionError("Access-Control-Allow-Methods 헤더 부재");
+                        }
+                        for (String m : new String[]{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}) {
+                            if (!allowMethods.contains(m)) {
+                                throw new AssertionError("허용 메서드 [" + m + "] 누락 — actual: " + allowMethods);
+                            }
+                        }
+                    });
+        }
+    }
+
+    /**
+     * 404 동결 — 라우트 미일치 + InternalBlock 미적용 path가 어떤 응답을 받는지.
+     * GlobalExceptionHandler(NoResourceFoundException → 404)가 활성화되어 있다면 ResultResponse 형식.
+     */
+    @Nested
+    @DisplayName("404 — 미정의 경로 응답")
+    class NotFound {
+
+        @Test
+        @DisplayName("/api/nonexistent (라우트 X + InternalBlock X) → 404")
+        void unmappedPath_returns404() throws Exception {
+            mockMvc.perform(get("/api/nonexistent"))
+                    .andExpect(status().isNotFound());
         }
     }
 }
