@@ -1,6 +1,6 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
-> 작성: 2026-04-28 / 최종 갱신: **2026-05-02 Phase 4-B 백필 완료 (256 PASS — common 9 + auth 40 + main 178 + gateway 29)**
+> 작성: 2026-04-28 / 최종 갱신: **2026-05-02 Phase 4-C 신규 기능 완료 (266 PASS — common 9 + auth 50 + main 178 + gateway 29)**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).
 
@@ -55,7 +55,7 @@
 | **3-C** | Order/OrderDetail/Review JPA + 🎯 BaseEntity 첫 검증 | **2026-04-29** | ✅ |
 | **3-D** | UserAddress JPA + Store/Owner MyBatis 유지 확정 | **2026-04-29** | ✅ |
 | **4-B** | Gateway 라우팅 정비 + Internal 차단 + CORS 통합 | **2026-04-29** | ✅ |
-| 4-C | Redis 도입 (토큰/캐시/Pub-Sub) | — | ⏳ 다음 (4-B 다음 정상) |
+| **4-C** | Redis 도입 (토큰 저장만 — 옵션 A. 날씨/Pub-Sub은 Phase 5 사용처와 함께) | **2026-05-02** | ✅ |
 | 라이더 정리 | mmg-rider-service 사전 설계 (서비스 경계 / 데이터 모델 / 통신 패턴 / 상태 머신 / 위치 추적 / Pub-Sub 활용 ADR + 인터페이스 명세) | — | 4-C 후 정상 |
 | 5 | 신규 기능 (펫/룰렛/챗봇/SSE/Rider/Admin) + TossPaymentClient | — | 라이더 정리 후 정상 |
 | 학원 발표 | 최종 마일스톤 | — | Phase 5 종결 후 |
@@ -187,6 +187,7 @@
 - [x] Phase 3 백필 → `@code-reviewer` 검증 → PASS (Phase 3-Backfill-B 시점)
 - [x] **Phase 4-A 백필 (2026-05-02)** — InternalUserController 통합 6 + UserBriefDto snapshot 1 + OwnerService null 가드 + 단위 1 + readOnly 3건 + Feign timeout yml. **219 → 227 (8 신규)**, code-reviewer **CONDITIONAL PASS** (Critical 0, Warning 2 = 스타일/커버리지 갭). W-2 의미 분리 (null 가드는 처리 완료 / 예외 fallback은 Phase 5 잔존).
 - [x] **Phase 4-B 백필 (2026-05-02)** — Gateway 첫 통합 테스트 도입(WebMVC 5.0.1) + InternalBlock 12건 + 라우트 정의 12개 동결 + CORS preflight/404 + CORS trim 시한폭탄 즉시 처리 + HelloController dead 정리. **227 → 256 (gateway 29 신규)**, code-reviewer **PASS** (Critical 0, Warning 2 = cosmetic). Step 3 가정 정정(헤더 검증/mTLS는 Phase 6 작업 — 4-B는 헤더 무관 무조건 403 동결).
+- [x] **Phase 4-C 신규 기능 (2026-05-02)** — Redis 토큰 저장(RT revoke) 단일 목적: spring-boot-starter-data-redis 의존성 + docker-compose redis + RefreshTokenStore 인터페이스/Redis 구현 + UserService.signup/signin/reissue/signout 통합. 옵션 A(날씨/Pub-Sub은 Phase 5와 함께) + D1 throw / D1-bis best-effort / D2 분리 호출 / D3 auth-service 위치 / D4 RT 문자열 자체. **256 → 266 (auth 신규 10)**, code-reviewer **PASS** (Critical 0, Warning 3 = cosmetic 발표 전 확인). 0단계 .env.example placeholder 정리 별도 PR.
 - [ ] Phase 4 백필 → `@code-reviewer` 검증 → PASS
 - [ ] 전체 종합 리뷰 → 라이더(Phase 5) 진입 승인
 
@@ -520,13 +521,46 @@
 - **WebMVC Gateway 5.0.1 신규 도입 학습**: `GatewayMvcProperties` 빈 주입 가능, RouteProperties/PredicateProperties 별도 클래스, 라우트 검증은 ApplicationContext에서 직접 — 라이더(Phase 5) 신규 모듈 통합 테스트 도입 시 패턴 재사용.
 - code-reviewer Warning 2건(cosmetic): W-1 nonInternalPath lambda 단순화 가능, W-2 클래스 Javadoc 'Step 4·5 추가 예정' 잔존 — 다음 파일 손볼 때 정리.
 
+### Phase 4-C 신규 기능 결과 (2026-05-02) — Redis 토큰 저장 단일 목적
+
+**0단계 .env.example placeholder + Redis 인프라 + RefreshTokenStore + UserService 통합 — 9 커밋 / 10 신규**:
+
+| Step | 내용 | 신규 / 변경 | 커밋 |
+|---|---|---|---|
+| 0 | `.env.example` placeholder 정리 (실 시크릿 git 추적 차단 — Q6 (b) 별도 PR 즉시) | 설정 | `3720d8f` |
+| 1-1 | spring-boot-starter-data-redis 의존성 + application.yml redis 설정 | 의존성 | `75767d4` |
+| 1-2 | docker-compose.yml — redis:7-alpine + healthcheck (Q5 docker-compose) | 인프라 | `50cc7f7` |
+| 1-3 | README Redis 실행 섹션 (`docker compose up -d redis`) | 문서 | `1492326` |
+| 2-1 | `RefreshTokenStore` 인터페이스 + `RedisRefreshTokenStore` 구현 (Lettuce, key `rt:{userNo}`, RT 문자열 그대로) | 신설 코드 | `693bf84` |
+| 2-2 | RedisRefreshTokenStoreTest 단위 (save 2 + get 2 + delete 1, ArgumentCaptor) | 5 | `3259c28` |
+| 3-1 | UserService.signup/signin: `issueAndStoreTokens` 헬퍼 (D2 분리 호출) + D1 throw 동결 | 코드 + 테스트 갱신 6 + 신규 2 | `c26a4c4` |
+| 3-2 | UserService.reissue: 저장 RT 비교 (storedRtMissing → 401 / 불일치 → 401) | 코드 + 테스트 갱신 1 + 신규 2 | `6fd8ce1` |
+| 3-3 | UserService.signout 시그니처 `(long userNo, res)` + D1-bis best-effort + UserController @AuthenticationPrincipal | 코드 + 테스트 갱신 2 + 신규 1 | `d903672` |
+
+**전체 누적**: **266 PASS** (common 9 + auth 50 + main 178 + gateway 29). auth 40 → 50 (+10).
+
+**Phase 4-C 핵심 검증 케이스**:
+- `RedisRefreshTokenStoreTest.Save.save_capturesKeyValueAndTtl`: ArgumentCaptor 3개로 키 `rt:42` + RT 문자열 + TTL Duration 동결
+- `UserServiceTest.Signup.redisStoreFailure_throws` / `Signin.redisStoreFailure_throws`: D1 정합성 — Redis 다운 시 login 자체 실패 (5xx)
+- `UserServiceTest.Reissue.storedRtMissing_throws401`: signout 후 reissue 시도 → 401 '로그아웃되었습니다' (RT revoke 검증 핵심)
+- `UserServiceTest.Reissue.cookieRtMismatchesStored_throws401`: 위조 RT 차단 동결
+- `UserServiceTest.Signout.redisDeleteFailure_continuesWithCookieDeletion`: D1-bis best-effort — delete 실패해도 쿠키 만료 진행 (warn 로그만)
+
+**진단/결정 + 가정 정정 사례 (5번째)**:
+- **JwtUser 메서드명 정정 (5번째 진단 가정 정정)**: 빌드 fail로 발견 — `getUserNo()` 가정 → 실제 `getSignedUserNo()`. Lombok `@Getter` 동작 확인 후 정정. 누적: ① 4-A ResultResponse, ② 4-B build.gradle, ③ 4-B 헤더, ④ 4-B CorsFilter, ⑤ 4-C JwtUser 필드명.
+- **D1 throw vs D1-bis best-effort 분리 결정**: 시작점(login)은 정합성 우선(throw), 종료점(signout)은 UX 우선(best-effort). 한 항목 = 한 개념(W-2 교훈) 적용.
+- **D2 분리 호출 (mmg-common 영향 0)**: `JwtTokenManager.issue` 시그니처 변경 회피 → UserService에서 `generateAccessToken/RefreshToken` 한 번만 호출 + `setAccessTokenInCookie/setRefreshTokenInCookie` 분리 호출. JwtTokenProvider.generateToken은 매 호출 다른 토큰 생성하므로 한 번만 generate해서 쿠키+Redis 같은 RT 동기화.
+- **날씨/Pub-Sub 의도 제외 (옵션 A)**: 사용처 부재 인프라 도입은 dead config. NAJACKS 변종 회피. Phase 5 펫(날씨)/라이더+챗봇(Pub-Sub) 도입 시 함께.
+- **AT/RT 만료 그대로 15일/15일 유지 (Q3 a)**: 운영값(30분/14일) 변경은 Phase 1 JwtTokenProviderTest 영향 가능 + 별도 결정 트리거. 학원 발표 후.
+- **mock RedisTemplate (Q4 a)**: Spring Boot 4 호환 안전. embedded-redis/Testcontainers 회피. 4-A InternalUserController 패턴(mock 위주) 일관.
+- code-reviewer Warning 3건(cosmetic): W-1 issueAndStoreTokens 쿠키-Redis 순서(Servlet spec 보장이지만 발표 전 리허설 권장), W-2 reissue 메시지 부분 일치 검증 정확도, W-3 docker-compose Redis 비밀번호 (개발 환경 무방, 운영 전환 시).
+
 ---
 
 ## 다음 단계
 
-**Phase 3 백필 종결.** 진행 흐름: 4-C → 라이더 정리 → 5 → 학원 발표 (최종 마일스톤).
+**Phase 4-C 종결 (Redis 토큰 저장만).** 진행 흐름: 라이더 정리 → 5 → 학원 발표 (최종 마일스톤).
 
-- **Phase 4-C** — 4-B 다음 정상 진행. Redis 토큰 저장 (auth) + 날씨 캐시 (main) + Pub/Sub
-- **라이더 정리 단계** — 4-C 후. mmg-rider-service 사전 설계 (서비스 경계 / 데이터 모델 / 통신 패턴(Feign vs 메시지 큐) / 상태 머신 / 위치 추적 / Pub-Sub 활용). 산출물: 라이더 모듈 ADR + 인터페이스 명세.
-- **Phase 5** — 라이더 정리 후. 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 잔존 도메인 경계 정리. *팀원 합류는 진행 조건 아님.*
-- **학원 발표** — Phase 5 종결 후 최종 마일스톤. 진행 조건 아님.
+- **라이더 정리 단계** (다음): mmg-rider-service 사전 설계 — 서비스 경계 / 데이터 모델 / 통신 패턴(Feign vs Pub-Sub) / 상태 머신(배차→픽업→이동→완료) / 위치 추적 / Phase 4-C Redis 인프라 활용 방안. 산출물: 라이더 모듈 ADR + 인터페이스 명세.
+- **Phase 5** — 라이더 정리 후. 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 날씨 클라이언트(Phase 4-C 의도 제외분) + Pub-Sub 인프라. *팀원 합류는 진행 조건 아님.*
+- **학원 발표** — Phase 5 종결 후 최종 마일스톤. 발표 전 Redis docker compose 사전 띄우기 + RT revoke 시뮬레이션 리허설 권장.
