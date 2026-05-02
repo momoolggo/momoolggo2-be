@@ -20,13 +20,13 @@ import java.util.List;
 @Configuration
 public class GatewayCorsConfig {
 
-    @Value("#{'${cors.allowed-origins:http://localhost:5173}'.split(',')}")
-    private List<String> allowedOrigins;
+    @Value("${cors.allowed-origins:http://localhost:5173}")
+    private String rawAllowedOrigins;
 
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(allowedOrigins);
+        cfg.setAllowedOrigins(parseAllowedOrigins(rawAllowedOrigins));
         cfg.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cfg.setAllowedHeaders(Arrays.asList("*"));
         cfg.setAllowCredentials(true);
@@ -34,5 +34,19 @@ public class GatewayCorsConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cfg);
         return new CorsFilter(source);
+    }
+
+    /**
+     * env CORS_ALLOWED_ORIGINS 파싱 — 콤마 분리 + 공백 trim + 빈 항목 제거.
+     *
+     * <p>Phase 4-B 백필: 기존 SpEL `'...'.split(',')`은 trim 미적용. 환경변수에
+     * "a, b" 형태(콤마 뒤 공백)가 들어오면 " b" 공백 포함 origin으로 등록되어
+     * setAllowedOrigins 매칭 실패 위험. 이 메서드로 안전 처리.</p>
+     */
+    static List<String> parseAllowedOrigins(String raw) {
+        return Arrays.stream(raw.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 }
