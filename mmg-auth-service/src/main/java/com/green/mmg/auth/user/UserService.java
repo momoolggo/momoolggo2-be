@@ -104,12 +104,23 @@ public class UserService {
 
     // ── AT 재발급 (RT 검증 후 새 AT만 발급, RT는 그대로)
     // RT 부재 → BusinessException(401) / RT 만료·위변조 → JwtException → GlobalExceptionHandler가 401로 응답
+    // Phase 4-C: 저장소 RT 비교 추가 — signout 후 또는 위조 시도 시 401 (revoke 가능성 보장)
     public void reissue(HttpServletRequest req, HttpServletResponse res) {
-        String refreshToken = myCookieUtil.getValue(req, constJwt.getRefreshTokenCookieName());
-        if (refreshToken == null) {
+        String cookieRefreshToken = myCookieUtil.getValue(req, constJwt.getRefreshTokenCookieName());
+        if (cookieRefreshToken == null) {
             throw new BusinessException("리프레시 토큰이 없습니다.", HttpStatus.UNAUTHORIZED);
         }
-        JwtUser jwtUser = jwtTokenProvider.getJwtUserFromToken(refreshToken);
+        JwtUser jwtUser = jwtTokenProvider.getJwtUserFromToken(cookieRefreshToken);
+
+        // Phase 4-C: 저장 RT == 쿠키 RT 비교. 부재(signout 후)/불일치(위조) 시 401, 재로그인 강제.
+        String storedRefreshToken = refreshTokenStore.get(jwtUser.getSignedUserNo())
+                .orElseThrow(() -> new BusinessException(
+                        "리프레시 토큰이 만료되었거나 로그아웃되었습니다.", HttpStatus.UNAUTHORIZED));
+        if (!cookieRefreshToken.equals(storedRefreshToken)) {
+            throw new BusinessException(
+                    "리프레시 토큰이 유효하지 않습니다. 재로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
+        }
+
         jwtTokenManager.setAccessTokenInCookie(res, jwtUser);
     }
 

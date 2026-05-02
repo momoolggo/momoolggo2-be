@@ -303,20 +303,57 @@ class UserServiceTest {
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("reissue — AT 재발급 (Step 1-A 핵심 검증)")
+    @DisplayName("reissue — AT 재발급 + Phase 4-C 저장 RT 비교 (revoke 가능성)")
     class Reissue {
         @Test
-        @DisplayName("happy path: RT 검증 후 새 AT만 쿠키에 셋팅 (RT는 그대로)")
+        @DisplayName("happy path: 쿠키 RT == 저장 RT → 새 AT만 쿠키 셋팅 (RT는 그대로)")
         void happyPath() {
             JwtUser jwtUser = new JwtUser(42L, "CUSTOMER", null, "준하");
             when(constJwt.getRefreshTokenCookieName()).thenReturn("refresh-token");
             when(myCookieUtil.getValue(httpReq, "refresh-token")).thenReturn("valid-rt");
             when(jwtTokenProvider.getJwtUserFromToken("valid-rt")).thenReturn(jwtUser);
+            when(refreshTokenStore.get(42L)).thenReturn(Optional.of("valid-rt"));
 
             userService.reissue(httpReq, httpRes);
 
+            verify(refreshTokenStore).get(42L);
             verify(jwtTokenManager).setAccessTokenInCookie(httpRes, jwtUser);
-            verify(jwtTokenManager, never()).issue(any(), any());  // RT 재발급 X
+            verify(jwtTokenManager, never()).setRefreshTokenInCookie(any(HttpServletResponse.class), anyString());
+            verify(refreshTokenStore, never()).save(anyLong(), anyString(), any(Duration.class));
+        }
+
+        @Test
+        @DisplayName("저장 RT 부재 (signout 후 또는 만료) → BusinessException(401) '재로그인 강제'")
+        void storedRtMissing_throws401() {
+            JwtUser jwtUser = new JwtUser(42L, "CUSTOMER", null, "준하");
+            when(constJwt.getRefreshTokenCookieName()).thenReturn("refresh-token");
+            when(myCookieUtil.getValue(httpReq, "refresh-token")).thenReturn("valid-rt");
+            when(jwtTokenProvider.getJwtUserFromToken("valid-rt")).thenReturn(jwtUser);
+            when(refreshTokenStore.get(42L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userService.reissue(httpReq, httpRes))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("로그아웃되었습니다")
+                    .extracting("status").isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            verify(jwtTokenManager, never()).setAccessTokenInCookie(any(HttpServletResponse.class), any(JwtUser.class));
+        }
+
+        @Test
+        @DisplayName("쿠키 RT != 저장 RT (위조 또는 stale) → BusinessException(401) '유효하지 않습니다'")
+        void cookieRtMismatchesStored_throws401() {
+            JwtUser jwtUser = new JwtUser(42L, "CUSTOMER", null, "준하");
+            when(constJwt.getRefreshTokenCookieName()).thenReturn("refresh-token");
+            when(myCookieUtil.getValue(httpReq, "refresh-token")).thenReturn("forged-rt");
+            when(jwtTokenProvider.getJwtUserFromToken("forged-rt")).thenReturn(jwtUser);
+            when(refreshTokenStore.get(42L)).thenReturn(Optional.of("real-rt"));
+
+            assertThatThrownBy(() -> userService.reissue(httpReq, httpRes))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("유효하지 않습니다")
+                    .extracting("status").isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            verify(jwtTokenManager, never()).setAccessTokenInCookie(any(HttpServletResponse.class), any(JwtUser.class));
         }
 
         @Test
