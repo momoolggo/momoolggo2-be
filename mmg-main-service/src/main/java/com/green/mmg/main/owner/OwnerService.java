@@ -136,7 +136,10 @@ public class OwnerService {
         List<Long> userNos = orders.stream()
                 .map(OwnerOrderRes::getUserNo)
                 .distinct().collect(Collectors.toList());
-        Map<Long, UserBriefDto> userMap = authFeignClient.getUsers(userNos).stream()
+        // Phase 4-A-1 백필: Feign batch null 처리 (A-4 패턴 전파 — getStoreReviews와 동일)
+        // null 응답 시 빈 Map → 누락된 userNo의 customerName/tel은 미설정 fallback
+        List<UserBriefDto> users = authFeignClient.getUsers(userNos);
+        Map<Long, UserBriefDto> userMap = (users == null ? List.<UserBriefDto>of() : users).stream()
                 .collect(Collectors.toMap(UserBriefDto::getUserNo, u -> u));
 
         orders.forEach(o -> {
