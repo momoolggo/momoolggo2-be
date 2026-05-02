@@ -279,4 +279,31 @@ class StoreServiceTest {
             verifyNoInteractions(storeMapper);
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Phase 3-Backfill-C-2: storeSearchList 입력 검증 동결
+    // ─────────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("storeSearchList — null/blank early return")
+    class StoreSearchList {
+
+        @Test
+        @DisplayName("searchText null → 빈 리스트 + StoreMapper 미호출 (early return)")
+        void nullSearchText_returnsEmptyAndSkipsMapper() {
+            List<?> result = storeService.storeSearchList(null);
+
+            assertThat(result).isEmpty();
+            verifyNoInteractions(storeMapper);
+        }
+
+        @Test
+        @DisplayName("searchText 공백/blank → 빈 리스트 + StoreMapper 미호출 (trim 후 isEmpty)")
+        void blankSearchText_returnsEmptyAndSkipsMapper() {
+            List<?> result = storeService.storeSearchList("   ");
+
+            assertThat(result).isEmpty();
+            verifyNoInteractions(storeMapper);
+        }
+    }
 }
