@@ -611,12 +611,36 @@
 
 ---
 
+### 라이더 정리 ADR cosmetic 정정 + D11 추가 (2026-05-05)
+
+**code-reviewer Warning 4건 중 3건 정정 + admin 의존성 임시 우회 결정 (D11 옵션 A-1) — 4 커밋**:
+
+| 커밋 | 내용 |
+|---|---|
+| `06e2cc0` | ADR-001 헤더 Q2 추가 (W-3) + **D11 임시 운영 섹션 신설** — `rider.auto-approve` toggle (개발/발표 true / 운영 false) + RiderService.join() 명시 블록 + TODO 주석. Q2-B 결정 자체 변경 X (admin-service 의존성 임시 우회만). admin-service는 팀원 작업 영역으로 절대 건드리지 않음. |
+| `69398e5` | ADR-007/009 결정 섹션에 트랜잭션 정책 (readOnly/@Transactional) 명시 (W-1) — Phase 4-A InternalUserController + Phase 3 main B-1 패턴 일관 |
+| `7b98129` | ADR-006 헤더에 관련 Figma 필드 추가 (W-2) — 8건 형식 일관 (직접 매핑 없음 명시 + ADR-003/005 참조 안내) |
+| (이 커밋) | PROGRESS 갱신 (cosmetic 정정 박제 + Phase 5-R1 범위 정정) |
+
+**W-4 (MainInternalClient `GET /internal/order/{orderId}` 미명세)**: Phase 5-R4 진입 직전 처리 — 라이더 본격 작업 시 자연 통합. 지금 별도 처리 X.
+
+**Phase 5-R1 작업 범위 정정 (D11 반영)**:
+- 원안: ① RIDER role 가입/로그인 + ② tech-debt cleanup
+- 정정: ① RIDER role 가입/로그인 (auth-service 분기, license_type/vehicle_type 포함) + ② **`rider.auto-approve` toggle 구현 (RiderProperties + application.yml + 명시 블록 + TODO 주석)** + ③ tech-debt cleanup (gateway timeout, getUsers empty 통합 테스트, GatewayIntegrationTest cosmetic 2건)
+- 실제 구현: rider 브랜치 checkout 후 (라이더 정리 결과 + Phase 4-C 머지 선행)
+
+**D11 결정 매트릭스 추가**:
+- D11 (옵션 A-1) Q2-B의 admin-service 의존성 임시 우회 — `rider.auto-approve` toggle. admin endpoint 도입 시 toggle false + 임시 블록 제거로 해소. **admin-service 절대 건드리지 않음 (팀원 작업 영역)**
+
+---
+
 ## 다음 단계
 
-**라이더 정리 종결.** 진행 흐름: Phase 5-R1 → R9 → 학원 발표 (최종 마일스톤).
+**라이더 정리 종결 (cosmetic W-1·W-2·W-3 정정 완료, W-4는 Phase 5-R4와 함께).** 진행 흐름: Phase 5-R1 → R9 → 학원 발표 (최종 마일스톤).
 
-- **Phase 5-R1** (다음): RIDER role 가입/로그인 (auth-service 분기, license_type/vehicle_type 포함) + tech-debt cleanup (gateway timeout, getUsers empty 통합 테스트, GatewayIntegrationTest cosmetic).
+- **Phase 5-R1** (다음): RIDER role 가입/로그인 (auth-service 분기, license_type/vehicle_type) + **`rider.auto-approve` toggle 구현 (D11)** + tech-debt cleanup (gateway timeout, getUsers empty, GatewayIntegrationTest cosmetic 2건).
   - 진입 시점: `git checkout rider` (기존 브랜치) + `git fetch origin` 동기화 점검 + develop 머지 필요 여부 확인.
   - 라이더 정리 결과 + Phase 4-C 결과를 rider 브랜치에 머지 후 진행.
-- **Phase 5 후속** — R2~R9 (mmg_rider DDL → 상태 머신 → Internal API → 위치 추적 → 외부 endpoint → 정산 → 근무 세션 → 공지). R5/R6 병렬 가능. R7~R9 학원 발표 데모 시간 여유 시.
+  - **admin-service 절대 건드리지 않음** (팀원 작업 영역).
+- **Phase 5 후속** — R2~R9 (mmg_rider DDL → 상태 머신 → Internal API → 위치 추적 → 외부 endpoint → 정산 → 근무 세션 → 공지). R5/R6 병렬 가능. R4 진입 직전 W-4 정리. R7~R9 학원 발표 데모 시간 여유 시.
 - **학원 발표** — Phase 5 종결 후 최종 마일스톤. Redis docker compose + RT revoke + WebSocket+STOMP 시연 사전 리허설 권장.
