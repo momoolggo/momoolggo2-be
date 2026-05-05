@@ -25,6 +25,14 @@ server:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
 
+# === D11 임시 운영 (admin-service 도입 전) ===
+# auto-approve: 가입 직후 자동 ACTIVE 전환
+# - local / dev / 학원 발표: true (env 미설정 시 기본값)
+# - prod (admin 도입 후): RIDER_AUTO_APPROVE=false 명시
+# 관련 ADR: docs/adr/rider/ADR-001-service-boundary.md "임시 운영" 섹션
+rider:
+  auto-approve: ${RIDER_AUTO_APPROVE:true}
+
 # mmg-common ConstJwt 바인딩용 — 시크릿/만료는 .env에서 주입 (auth-service와 공유)
 constants:
   jwt:
