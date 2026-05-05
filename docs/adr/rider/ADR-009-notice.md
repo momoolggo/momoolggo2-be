@@ -58,6 +58,12 @@ api-spec 명세:
 
 ## 결정 (Decision)
 
+### 트랜잭션 정책 (Phase 1~3 누적 패턴 일관)
+
+- 조회 메서드 (`NoticeService.findVisible`, `findByCategory` 등): `@Transactional(readOnly=true)`
+- 쓰기 메서드 (`create`, `update`, `delete` — Internal endpoint): `@Transactional`
+- Phase 4-A `InternalUserController.readOnly` + Phase 3 main-service B-1 패턴 그대로
+
 ### notice 엔티티 (ADR-002 참조)
 
 ```
