@@ -555,12 +555,68 @@
 - **mock RedisTemplate (Q4 a)**: Spring Boot 4 호환 안전. embedded-redis/Testcontainers 회피. 4-A InternalUserController 패턴(mock 위주) 일관.
 - code-reviewer Warning 3건(cosmetic): W-1 issueAndStoreTokens 쿠키-Redis 순서(Servlet spec 보장이지만 발표 전 리허설 권장), W-2 reissue 메시지 부분 일치 검증 정확도, W-3 docker-compose Redis 비밀번호 (개발 환경 무방, 운영 전환 시).
 
+### 라이더 정리 단계 결과 (2026-05-05) — ADR 9개 + 인터페이스 명세 + Figma 정정 박제
+
+**코드 0 / 문서 산출물만 / 12 커밋 / develop 브랜치 그대로**:
+
+| Step | 내용 | 산출물 | 커밋 |
+|---|---|---|---|
+| 0 | develop 116 커밋 미푸시 처리 (학원 데모 자료 손실 방지) | git push | `c6f6cd8..ee0a9f3` |
+| 0 | .gitignore에 .claude/agent-memory/ 추가 + Figma 10장 추가 + 추가 push | settings + assets | `066dcb3`, `ca6e3c7` |
+| 1 | Figma 분석 결과 + 진단 정정 10건 + 결정 매트릭스 (Q1~Q8 + D5~D10) 박제 | `docs/adr/rider/README.md` + `figma-analysis.md` | `5cd0500` |
+| 2 | ADR-001 서비스 경계 (Q1-C: auth만 + 추가정보 별도 endpoint) | ADR-001 | `94803d6` |
+| 3 | ADR-002 데이터 모델 + DB 분리 (mmg_rider 6 테이블, Figma 정정 1·4·5·6·8·9·10·11) | ADR-002 | `e4b0b02` |
+| 4 | ADR-003 통신 패턴 (Feign + WebSocket+STOMP, Q4-X Pub/Sub 미도입) | ADR-003 | `13104b4` |
+| 5 | ADR-004 상태 머신 7개 (정정 2·3, Q5-A 낙관적 락, D5 HTTP 409) | ADR-004 | `836b49c` |
+| 6 | ADR-005 위치 추적 (Q6-A Redis KV TTL 30s, D6 5s/10s, STOMP) | ADR-005 | `e78c1fc` |
+| 7 | ADR-006 Redis 활용 (KV만, Pub/Sub/Geospatial/RT 이관 미도입) | ADR-006 | `f7a1ab2` |
+| 8 | ADR-007 정산 (정정 5 MVP 격상, D10-b admin 수동 confirm) | ADR-007 | `1489676` |
+| 9 | ADR-008 근무 세션 + 토글 (정정 6·7, D8 EATING 차단, D9 종료=세션) | ADR-008 | `3b26bce` |
+| 10 | ADR-009 공지사항 (정정 8, admin → rider Feign broadcast) | ADR-009 | `1a9b8c0` |
+| 11 | Feign 인터페이스 명세 (구현 0, Phase 5-R1~R9에서 작성) | `interfaces.md` | `67b567a` |
+| 12 | 라이더 정리 단계 완료 표시 | 본 갱신 + tech-debt | (이 커밋) |
+
+**전체 산출물**: `docs/adr/rider/` 디렉토리 — README + figma-analysis + ADR-001~009 + interfaces (총 12 파일)
+
+**핵심 결정 매트릭스 요약**:
+- Q1-C 가입: auth만 + 추가정보 별도 / Q2-B 면허/승인: PENDING→admin / Q3-A account 합침 / Q4-X Pub/Sub MVP 미도입
+- Q5-A 낙관적 락 / Q6-A Redis KV / Q7 작업 R1~R9 그대로 / Q8 tech-debt 5-R1과 함께
+- D5 충돌 HTTP 409 / D6 5s 발표/10s 운영 / D7-a 평문 전화번호 / D8-a EATING 차단 / D9-a 업무 종료=세션 / D10-b admin 수동 confirm
+
+**진단/결정 + 가정 정정 사례 (라이더 정리에서 4건 추가, 누적 9건)**:
+- ⚠6 Role enum 부재 (JwtUser.role은 String 필드)
+- ⚠7 main에 /internal/order/** 부재 (Rider→Main 상태 전파 흐름 미구현)
+- ⚠8 mmg_rider DDL / main에 rider/delivery 테이블 부재 (orders 컬럼만)
+- ⚠9 Gateway rider 라우트 이미 정의됨 (Phase 4-B에서 선반영)
+- ⚠10 Figma 13장이 아닌 10장 (Step 3 정정)
+- 누적: 4-A·4-B·4-C 5건 + 라이더 4건 = 9건. 원칙 정착.
+
+**Figma 정정 사항 10건 박제 (figma-analysis.md 상세)**:
+1. rider 필드 추가 (license_type, vehicle_type, account_holder)
+2. delivery 상태 5→7 (ARRIVED_AT_STORE, AWAITING_PICKUP 추가)
+3. orders.delivery_state 매핑 정정 (ADR-004)
+4. 배달료 base_fee + extra_fee 분리
+5. 정산 도메인 MVP 포함 격상 (ADR-007)
+6. work_session 도메인 신설 (ADR-008)
+7. 상태 토글 라벨 분리 (내부 ACTIVE/EATING vs UI "배달중/식사중")
+8. 공지사항 도메인 신설 (ADR-009)
+9. delivery_no ≠ order_id 분리
+10. 전달 완료 사유 분류 (DIRECT/CUSTOMER_REQUEST/CUSTOMER_ABSENT) + 사진
+
+**Phase 5 작업 분할 (R1~R9)** — figma-analysis.md / README.md 참조
+
+**tech-debt 갱신 (라이더 정리에서 발견)**:
+- 폐기: RefreshTokenStore mmg-common 이관 (Q1-C 결과로 라이더 별도 RT 불필요)
+- 신규: Pub/Sub Y 옵션 (다중 Main 진입 시) / Redis Geospatial (가용 라이더 매칭) / 위치 사후 분석 / 손님 전화번호 마스킹 (D7-a) / 사가 패턴 (Q1-C 사후) / 정산 자동 배치 (D10-b 사후) / rider_account 분리 + audit (Q3-A 사후)
+
 ---
 
 ## 다음 단계
 
-**Phase 4-C 종결 (Redis 토큰 저장만).** 진행 흐름: 라이더 정리 → 5 → 학원 발표 (최종 마일스톤).
+**라이더 정리 종결.** 진행 흐름: Phase 5-R1 → R9 → 학원 발표 (최종 마일스톤).
 
-- **라이더 정리 단계** (다음): mmg-rider-service 사전 설계 — 서비스 경계 / 데이터 모델 / 통신 패턴(Feign vs Pub-Sub) / 상태 머신(배차→픽업→이동→완료) / 위치 추적 / Phase 4-C Redis 인프라 활용 방안. 산출물: 라이더 모듈 ADR + 인터페이스 명세.
-- **Phase 5** — 라이더 정리 후. 펫/룰렛/챗봇/SSE/Rider/Admin + TossPaymentClient + 날씨 클라이언트(Phase 4-C 의도 제외분) + Pub-Sub 인프라. *팀원 합류는 진행 조건 아님.*
-- **학원 발표** — Phase 5 종결 후 최종 마일스톤. 발표 전 Redis docker compose 사전 띄우기 + RT revoke 시뮬레이션 리허설 권장.
+- **Phase 5-R1** (다음): RIDER role 가입/로그인 (auth-service 분기, license_type/vehicle_type 포함) + tech-debt cleanup (gateway timeout, getUsers empty 통합 테스트, GatewayIntegrationTest cosmetic).
+  - 진입 시점: `git checkout rider` (기존 브랜치) + `git fetch origin` 동기화 점검 + develop 머지 필요 여부 확인.
+  - 라이더 정리 결과 + Phase 4-C 결과를 rider 브랜치에 머지 후 진행.
+- **Phase 5 후속** — R2~R9 (mmg_rider DDL → 상태 머신 → Internal API → 위치 추적 → 외부 endpoint → 정산 → 근무 세션 → 공지). R5/R6 병렬 가능. R7~R9 학원 발표 데모 시간 여유 시.
+- **학원 발표** — Phase 5 종결 후 최종 마일스톤. Redis docker compose + RT revoke + WebSocket+STOMP 시연 사전 리허설 권장.
