@@ -3,6 +3,40 @@ spring:
     name: mmg-rider-service
   config:
     import: "optional:file:.env[.properties]"
+  datasource:
+    url: ${RIDER_DB_URL}
+    username: ${DATASOURCE_USERNAME}
+    password: ${DATASOURCE_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate          # validate 외 값 절대 금지 (스키마 변경 X — Phase 1 원칙)
+      naming.physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+    open-in-view: false           # Lazy proxy 트랜잭션 밖 사용 차단
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MariaDBDialect
+        format_sql: true
+    show-sql: true
 
 server:
   port: 8082
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+# mmg-common ConstJwt 바인딩용 — 시크릿/만료는 .env에서 주입 (auth-service와 공유)
+constants:
+  jwt:
+    issuer: ${JWT_ISSUER}
+    bearer-format: JWT
+    claim-key: signedUser
+    secret-key: ${JWT_SECRET}
+    access-token-cookie-name: access-token
+    access-token-cookie-path: /
+    access-token-cookie-validity-seconds: 1296000
+    access-token-validity-milliseconds: ${JWT_ACCESS_TOKEN_VALIDITY_MS}
+    refresh-token-cookie-name: refresh-token
+    refresh-token-cookie-path: /api/user/reissue
+    refresh-token-cookie-validity-seconds: 1296000
+    refresh-token-validity-milliseconds: ${JWT_REFRESH_TOKEN_VALIDITY_MS}
