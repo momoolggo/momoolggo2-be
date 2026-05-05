@@ -1,7 +1,7 @@
 # ADR-001: 라이더 서비스 경계
 
-> **상태**: Accepted (2026-05-05)
-> **관련 결정**: Q1 (가입 위치)
+> **상태**: Accepted (2026-05-05) — D11 임시 운영 추가 (2026-05-05)
+> **관련 결정**: Q1 (가입 위치), Q2 (면허/승인 흐름), D11 (admin 의존성 임시 우회)
 > **관련 Figma**: `../../figma/` 회원가입/로그인 화면 (figma-analysis.md ADR-001 매핑)
 
 ---
@@ -100,8 +100,64 @@
 
 ---
 
+## 임시 운영 (admin-service 도입 전) — D11
+
+Q2-B 결정 (PENDING → admin 승인 → ACTIVE)은 admin-service의 승인 endpoint
+(`POST /internal/rider/{riderNo}/approve`, interfaces.md §3.1)에 의존한다.
+
+**제약**: admin-service는 다른 팀원 작업 영역으로 현재 상태 미상. 충돌 회피 위해
+rider-service에서는 admin-service에 어떤 endpoint도 추가/수정/삭제하지 않는다.
+
+### 임시 처리 (D11 옵션 A-1: profile toggle)
+
+`rider-service` `application.yml`에 `rider.auto-approve` toggle 추가:
+- 개발 / 학원 발표: `true` → 가입 직후 자동 ACTIVE 전환
+- 운영 (admin 도입 후): `false` → PENDING 정상 흐름, admin approve 대기
+
+`RiderService.join()` 내 명시적 블록 + TODO 주석 (Phase 5-R1에서 구현):
+
+```java
+public void join(RiderProfileRequest req, long callerUserNo) {
+    Rider rider = new Rider(callerUserNo, req);
+    rider.setStatus(RiderStatus.PENDING);
+    rider = riderRepository.save(rider);
+
+    // === 임시: admin-service 미도입 시 자동 ACTIVE (D11 옵션 A-1) ===
+    // TODO: admin-service approve endpoint 도입 후 이 블록 제거
+    //       + application.yml `rider.auto-approve: false`
+    if (riderProperties.isAutoApprove()) {
+        rider.setStatus(RiderStatus.ACTIVE);
+        riderRepository.save(rider);
+    }
+}
+```
+
+```yaml
+# rider-service application.yml
+rider:
+  auto-approve: ${RIDER_AUTO_APPROVE:true}   # 개발/발표 기본 true, 운영 false
+```
+
+### admin 통합 시점 (해소 절차)
+
+admin-service의 승인 endpoint 도입 시:
+1. `application.yml`: `rider.auto-approve: false`
+2. `RiderService.join()` 내 임시 블록 제거 (TODO 주석 trigger)
+3. PENDING 상태 라이더는 admin approve 후 ACTIVE 전환 — interfaces.md §3.1 그대로 활용
+4. tech-debt 해소 표시 — 본 D11 임시 처리 완료
+
+**중요**: 이 임시 처리는 **Q2-C(자동 승인) 결정 변경이 아닌 Q2-B 흐름의 임시 우회**.
+PENDING 상태 자체는 정상 저장되어 admin endpoint 도입 시 즉시 통합 가능.
+
+### tech-debt 등재
+
+- D11 임시 처리 — admin-service approve endpoint 도입 후 `rider.auto-approve: false` 전환 + 임시 블록 제거 (Phase 5 admin-service 진행 동기화 시점)
+
+---
+
 ## 관련 메모리
 
 - `feedback_dead_config_avoidance.md` — 사가 인프라 도입 보류 근거
 - `feedback_verify_diagnostic_assumptions.md` — Role enum 부재 검증 (정정 #6)
 - `project_phase4a_backfill_state.md` — InternalUserController 패턴 재사용 근거
+- `project_phase_rider_cleanup_state.md` — D11 결정 박제 (admin 의존성 우회)
