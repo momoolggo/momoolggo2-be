@@ -127,3 +127,4 @@ docs/ddl/backup-*.sql
 # Claude Code 작업 흔적 (선택)
 # ============================================
 # .claude/
+.claude/agent-memory/
