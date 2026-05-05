@@ -2,6 +2,7 @@
 
 > **상태**: Accepted (2026-05-05)
 > **관련 결정**: Q4-X (Pub/Sub 미도입), Q6-A (위치 KV)
+> **관련 Figma**: 직접 매핑 없음 (Redis는 인프라 통합 결정 — 사용처 화면은 ADR-003 실시간 위치 / ADR-005 지도 화면 참조)
 > **메모리**: `feedback_dead_config_avoidance.md` (NAJACKS 변종 회피 원칙)
 
 ---
