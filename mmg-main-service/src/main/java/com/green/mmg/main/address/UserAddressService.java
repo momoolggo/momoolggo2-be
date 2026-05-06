@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Phase 3-D-B: 전 6 SQL JPA 전환 + UserAddressMapper / Address.xml 제거.
@@ -37,18 +38,23 @@ public class UserAddressService {
         userAddressRepository.save(entity);
     }
 
+    @Transactional(readOnly = true)
     public List<UserAddressRes> findAll(long userNo) {
         return userAddressRepository.findAllByUserNo(userNo);
     }
 
     @Transactional
-    public void update(long userNo, UserAddressReq req) {
-        if (req.getDefaultAd() != null && req.getDefaultAd() == 1) {
-            userAddressRepository.resetDefault(userNo);
-            userAddressRepository.flush();
-        }
+    public void update(long callerUserNo, UserAddressReq req) {
         UserAddress entity = userAddressRepository.findById(req.getAddressId())
                 .orElseThrow(() -> new BusinessException("주소를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        // Phase 3-Backfill-A-5: 소유자 검증 (delete 패턴 일관 적용)
+        if (!Objects.equals(entity.getUserNo(), callerUserNo)) {
+            throw new BusinessException("본인 주소만 수정 가능합니다.", HttpStatus.FORBIDDEN);
+        }
+        if (req.getDefaultAd() != null && req.getDefaultAd() == 1) {
+            userAddressRepository.resetDefault(callerUserNo);
+            userAddressRepository.flush();
+        }
         entity.setAddress(req.getAddress());
         entity.setAddressDetail(req.getAddressDetail());
         entity.setLatitude(req.getLatitude());
@@ -57,8 +63,14 @@ public class UserAddressService {
         // dirty checking으로 자동 UPDATE
     }
 
-    public void delete(long addressId) {
-        userAddressRepository.deleteById(addressId);
+    @Transactional
+    public void delete(long callerUserNo, long addressId) {
+        UserAddress entity = userAddressRepository.findById(addressId)
+                .orElseThrow(() -> new BusinessException("주소를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!Objects.equals(entity.getUserNo(), callerUserNo)) {
+            throw new BusinessException("본인 주소만 삭제 가능합니다.", HttpStatus.FORBIDDEN);
+        }
+        userAddressRepository.delete(entity);
     }
 
     @Transactional

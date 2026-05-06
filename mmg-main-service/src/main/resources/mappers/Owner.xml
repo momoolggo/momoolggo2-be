@@ -353,6 +353,40 @@
         DELETE FROM orders WHERE order_id = #{orderId}
     </delete>
 
+    <!-- ============================================================ -->
+    <!-- Phase 2-Backfill-D-bis: 권한 검증 헬퍼 4개 -->
+    <!-- ============================================================ -->
+
+    <!-- (1) store_id → owner_id -->
+    <select id="findStoreOwnerByStoreId" resultType="java.lang.Long">
+        SELECT owner_id FROM store WHERE store_id = #{storeId}
+    </select>
+
+    <!-- (2) order_id → orders.store_id → store.owner_id -->
+    <select id="findStoreOwnerByOrderId" resultType="java.lang.Long">
+        SELECT s.owner_id
+        FROM orders o
+        JOIN store s ON o.store_id = s.store_id
+        WHERE o.order_id = #{orderId}
+    </select>
+
+    <!-- (3) menu_id → menu.category_id → menu_category.store_id → store.owner_id -->
+    <select id="findStoreOwnerByMenuId" resultType="java.lang.Long">
+        SELECT s.owner_id
+        FROM menu m
+        JOIN menu_category mc ON m.category_id = mc.category_id
+        JOIN store s ON mc.store_id = s.store_id
+        WHERE m.menu_id = #{menuId}
+    </select>
+
+    <!-- (4) category_id → menu_category.store_id → store.owner_id -->
+    <select id="findStoreOwnerByCategoryId" resultType="java.lang.Long">
+        SELECT s.owner_id
+        FROM menu_category mc
+        JOIN store s ON mc.store_id = s.store_id
+        WHERE mc.category_id = #{categoryId}
+    </select>
+
     <!-- 가게 리뷰 조회 — Phase 4-A: user JOIN 제거, OwnerService에서 Feign batch 합성 -->
     <select id="getStoreReviews" resultType="map">
         SELECT

@@ -4,6 +4,7 @@ import com.green.mmg.auth.user.UserRepository;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,6 +30,7 @@ public class InternalUserController {
     private final UserRepository userRepository;
 
     /** 단건 조회 — 가게 상세에 사장 이름 등 1명에 대한 fetch */
+    @Transactional(readOnly = true)
     @GetMapping("/user/{userNo}")
     public UserBriefDto getUser(@PathVariable long userNo) {
         return userRepository.findBriefByUserNo(userNo)
@@ -36,6 +38,7 @@ public class InternalUserController {
     }
 
     /** Batch 조회 — N+1 회피용 (1회 호출 최대 100개 권장) */
+    @Transactional(readOnly = true)
     @GetMapping("/users")
     public List<UserBriefDto> getUsers(@RequestParam("ids") List<Long> userNos) {
         if (userNos == null || userNos.isEmpty()) return List.of();
@@ -43,6 +46,7 @@ public class InternalUserController {
     }
 
     /** 사장 정보 — 현재는 user와 동일 응답. Phase 5에서 OwnerInfoDto로 확장 가능 */
+    @Transactional(readOnly = true)
     @GetMapping("/owner/{userNo}")
     public UserBriefDto getOwner(@PathVariable long userNo) {
         return userRepository.findBriefByUserNo(userNo)

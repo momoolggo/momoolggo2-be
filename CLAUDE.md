@@ -289,6 +289,29 @@ rider-service, admin-service가 이 API를 Feign으로 호출.
 
 ---
 
+## 6.5 테스트 작성 규칙 (NAJACKS 재발 방지)
+
+### 가짜 테스트 금지
+- `assertNotNull`만으로 끝나는 테스트 금지
+- 각 테스트는 다음 중 최소 하나를 정확히 검증해야 함:
+  - 반환값 (`assertEquals`, `assertThat` 등)
+  - 발생한 예외의 타입 + 메시지
+  - DB 상태 변화 (저장 여부, 변경된 필드 값)
+  - 외부 호출 발생 여부 (Mockito `verify`)
+
+### 최소 커버리지
+- 새 Service 메서드: happy path + 정상 경계 + 예외 케이스 (최소 3개)
+- 새 Controller 엔드포인트: 200 / 4xx / 5xx 시나리오
+- 외부 호출(Feign, Gemini API): 성공 + 실패 + timeout
+
+### 완료 정의 (Definition of Done)
+"코드 작성 완료" ≠ "작업 완료". 다음을 모두 충족해야 완료:
+1. `./gradlew :{module}:test` 실행하여 통과
+2. 테스트가 실제로 의미 있는 검증인지 `@code-reviewer`로 검증
+3. `docs/PROGRESS.md`에 검증 결과(테스트 N개 추가, 통과 여부) 기록
+
+---
+
 ## 7. 핵심 도메인 요약
 
 ### 🐾 펫 시스템 (mmg-main / pet)

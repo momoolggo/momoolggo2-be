@@ -1,6 +1,7 @@
 package com.green.mmg.common.exception;
 
 import com.green.mmg.common.dto.ResultResponse;
+import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.http.HttpStatus;
@@ -52,6 +53,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ResultResponse<Void>> handleNoResource(NoResourceFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ResultResponse<>("리소스를 찾을 수 없습니다.", null));
+    }
+
+    /**
+     * JWT 검증 실패(만료/서명 위변조/구조 오류 등) → 401.
+     * `JwtException extends RuntimeException` 이므로 handleRuntime보다 위에 두어 우선 매칭.
+     * 만료 RT는 정상 시나리오 — 500 아닌 401로 응답해 프론트가 재로그인 분기 가능.
+     */
+    @ExceptionHandler(JwtException.class)
+    public ResponseEntity<ResultResponse<Void>> handleJwt(JwtException e) {
+        log.info("JwtException: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ResultResponse<>("토큰이 만료됐거나 유효하지 않습니다.", null));
     }
 
     /** 그 외 RuntimeException → 500 (메시지는 그대로 — 운영에선 마스킹 검토) */

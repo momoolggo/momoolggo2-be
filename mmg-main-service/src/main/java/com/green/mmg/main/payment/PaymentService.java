@@ -54,7 +54,7 @@ public class PaymentService {
 
     @Transactional
     public void confirmPayment(PaymentConfirmReq req) throws Exception {
-
+        // 1) 주문 검증 (존재/금액/중복결제)
         Long orderId = Long.parseLong(req.getOrderId());
         Orders order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("존재하지 않는 주문입니다."));
@@ -64,16 +64,44 @@ public class PaymentService {
             throw new RuntimeException("결제 금액이 일치하지 않습니다.");
         }
 
-        boolean alreadyPaid = paymentMapper.existsByOrderId(orderId);
-        if (alreadyPaid) {
+        if (paymentMapper.existsByOrderId(orderId)) {
             throw new RuntimeException("이미 결제된 주문입니다.");
         }
 
+        // 2) 토스 결제 검증 (외부 호출) — 실패 시 즉시 throw, 이후 로컬 변경 0
+        callTossConfirm(req);
+
+        // 3) 결제 row 저장
+        PaymentEntity payment = new PaymentEntity();
+        payment.setOrderId(orderId);
+        payment.setPaymentKey(req.getPaymentKey());
+        payment.setAmount(req.getAmount());
+        payment.setPayState(req.getPayState());
+        paymentRepository.save(payment);
+
+        // 4) 주문 상태 = 결제완료 (dirty checking)
+        order.setPayState(2);
+
+        // 5) 장바구니 정리 — 결제 완료 후 비움 (앞 단계 모두 성공한 뒤에만 도달)
+        Long userNo = order.getUserNo();
+        if (userNo != null) {
+            cartRepository.findByUserNo(userNo).ifPresent(cart -> {
+                cartDetailRepository.deleteByCartId(cart.getCartId());
+                cartRepository.delete(cart);
+            });
+        }
+    }
+
+    /**
+     * 토스 결제 확인 호출. 200 외 응답은 RuntimeException(응답 message).
+     * 단위 테스트에서 Spy로 stub 가능하도록 protected.
+     * Phase 5 예정: TossPaymentClient 컴포넌트 추출 + RestTemplate/WebClient 전환 + timeout.
+     */
+    protected JSONObject callTossConfirm(PaymentConfirmReq req) throws Exception {
         JSONObject requestBody = new JSONObject();
         requestBody.put("paymentKey", req.getPaymentKey());
         requestBody.put("orderId",    req.getOrderId());
         requestBody.put("amount",     req.getAmount());
-
         log.info("토스 요청 바디: {}", requestBody.toJSONString());
 
         String encoded = Base64.getEncoder()
@@ -97,35 +125,15 @@ public class PaymentService {
                 ? connection.getInputStream()
                 : connection.getErrorStream();
 
-        JSONParser parser = new JSONParser();
         JSONObject response;
         try (Reader reader = new InputStreamReader(responseStream, StandardCharsets.UTF_8)) {
-            response = (JSONObject) parser.parse(reader);
+            response = (JSONObject) new JSONParser().parse(reader);
         }
         log.info("토스 응답 바디: {}", response.toJSONString());
-
-        if (code == 200) {
-            Long userNo = order.getUserNo();
-            if (userNo != null) {
-                cartRepository.findByUserNo(userNo).ifPresent(cart -> {
-                    cartDetailRepository.deleteByCartId(cart.getCartId());
-                    cartRepository.delete(cart);
-                });
-            }
-        }
 
         if (code != 200) {
             throw new RuntimeException((String) response.get("message"));
         }
-
-        // dirty checking: 영속 entity 직접 setter — UPDATE orders SET pay_state=2
-        order.setPayState(2);
-
-        PaymentEntity payment = new PaymentEntity();
-        payment.setOrderId(orderId);
-        payment.setPaymentKey(req.getPaymentKey());
-        payment.setAmount(req.getAmount());
-        payment.setPayState(req.getPayState());
-        paymentRepository.save(payment);
+        return response;
     }
 }

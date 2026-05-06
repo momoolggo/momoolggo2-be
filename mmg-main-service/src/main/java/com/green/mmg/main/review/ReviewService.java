@@ -57,6 +57,7 @@ public class ReviewService {
         }
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> getReviews(GetReviewReq req) {
         int totalCount = reviewMapper.countReviews(req.getUserNo());
         List<ReviewRes> list = reviewMapper.getReviews(req);
@@ -76,6 +77,7 @@ public class ReviewService {
         reviewMapper.updateStoreRating(storeId);
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> getReviewById(long reviewId) {
         Map<String, Object> review = reviewMapper.getReviewById(reviewId);
         if (review == null) throw new BusinessException("리뷰를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);

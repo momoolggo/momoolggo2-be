@@ -58,8 +58,15 @@
         ]]>
     </select>
 
+    <!--
+      Phase 2-Backfill-A: 파라미터 orderId → storeId. 이전에는 서브쿼리로
+      orders.order_id에서 store_id를 도출했으나, deleteOrder가 orders row를
+      삭제한 직후 calSumOrder가 호출되면 서브쿼리가 빈 결과 → store.order_count
+      미갱신. 호출자가 storeId를 미리 확보해서 넘기도록 단순화.
+    -->
     <update id="calSumOrder">
-        update store set order_count = (select count(*) from orders where store_id = (select store_id from orders where order_id=#{id}) )
-        where store_id = (select store_id from orders where order_id=#{id})
+        update store
+           set order_count = (select count(*) from orders where store_id = #{storeId})
+         where store_id = #{storeId}
     </update>
 </mapper>

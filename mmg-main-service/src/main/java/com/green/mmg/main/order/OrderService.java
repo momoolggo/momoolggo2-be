@@ -1,5 +1,6 @@
 package com.green.mmg.main.order;
 
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.address.UserAddressRepository;
 import com.green.mmg.main.cart.CartMapper;
@@ -8,10 +9,12 @@ import com.green.mmg.main.cart.model.Cart;
 import com.green.mmg.main.cart.model.CartItemRes;
 import com.green.mmg.main.order.model.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Phase 3-C-1: Order/OrderDetail 단순 CRUD JPA 전환 + 하이브리드.
@@ -48,6 +51,7 @@ public class OrderService {
     private static final int DELIVERY_FEE = 1500;
 
     // 주문 화면 초기 데이터 조회
+    @Transactional(readOnly = true)
     public OrderInfoRes getOrderInfo(Long userNo) {
         Cart cart = cartRepository.findByUserNo(userNo)
                 .orElseThrow(() -> new RuntimeException("장바구니가 비어있습니다."));
@@ -57,7 +61,12 @@ public class OrderService {
 
         String storeName = cartMapper.findStoreNameByStoreId(cart.getStoreId());
 
-        String tel = authFeignClient.getUser(userNo).getTel();
+        // Phase 3-Backfill-A-4: Feign null 처리 (StoreService.storeOneGet 패턴 전파)
+        com.green.mmg.common.dto.feign.UserBriefDto user = authFeignClient.getUser(userNo);
+        if (user == null) {
+            throw new BusinessException("사용자 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        String tel = user.getTel();
         OrderAddressInfo addr = userAddressRepository.findFirstDefaultByUserNo(userNo).orElse(null);
 
         int menuTotal = items.stream()
@@ -116,15 +125,35 @@ public class OrderService {
             detail.setMenuPrice(item.getPrice());
             orderDetailRepository.save(detail);
         }
+
+        // 가게 누적 주문 수(store.order_count) 갱신 — 같은 트랜잭션 내 처리
+        orderMapper.calSumOrder(cart.getStoreId());
         return uniqueId;
     }
 
     @Transactional
-    public int deleteOrder(long id) {
-        return orderRepository.deleteByOrderIdAndPayStateUnpaid(id);
+    public int deleteOrder(long callerUserNo, long orderId) {
+        // 삭제 전 order 조회: storeId 확보 + 소유자 검증 (Phase 3-Backfill-A-1: 보안)
+        // 미존재 orderId는 기존 동작 유지 (return 0 → "삭제실패") — 응답 스펙 동결
+        Orders order = orderRepository.findById(orderId).orElse(null);
+        if (order == null) return 0;
+        if (!Objects.equals(order.getUserNo(), callerUserNo)) {
+            throw new BusinessException("본인 주문만 삭제할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
+        Long storeId = order.getStoreId();
+        int affected = orderRepository.deleteByOrderIdAndPayStateUnpaid(orderId);
+        if (affected > 0 && storeId != null) {
+            orderMapper.calSumOrder(storeId);
+        }
+        return affected;
     }
 
-    public List<OrderHistoryDto> getOrderHistory(OrderHistoryReq req) {
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDto> getOrderHistory(long callerUserNo, OrderHistoryReq req) {
+        // Phase 3-Backfill-A-3: req.userId 위조 방지 (옵션 B — 명시적 403 throw)
+        if (!Objects.equals(req.getUserId(), callerUserNo)) {
+            throw new BusinessException("본인 주문 내역만 조회 가능합니다.", HttpStatus.FORBIDDEN);
+        }
         // 복잡 SQL (DATE_FORMAT + 서브쿼리 hasReview) — MyBatis 영구 잔존
         List<OrderHistoryDto> orders = orderMapper.findOrdersByUserId(req);
 
@@ -135,18 +164,26 @@ public class OrderService {
         return orders;
     }
 
-    public OrderHistoryDto orderHistoryDetail(long id) {
-        OrderHistoryDto result = orderMapper.orderHistoryDetail(id);  // 복잡 DATE_FORMAT — 잔존
-        result.setItems(orderDetailRepository.findItemsByOrderId(id));
+    @Transactional(readOnly = true)
+    public OrderHistoryDto orderHistoryDetail(long callerUserNo, long orderId) {
+        // Phase 3-Backfill-A-3: 본인 주문 검증
+        Orders order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!Objects.equals(order.getUserNo(), callerUserNo)) {
+            throw new BusinessException("본인 주문만 조회 가능합니다.", HttpStatus.FORBIDDEN);
+        }
+        OrderHistoryDto result = orderMapper.orderHistoryDetail(orderId);  // 복잡 DATE_FORMAT — 잔존
+        result.setItems(orderDetailRepository.findItemsByOrderId(orderId));
         return result;
     }
 
-    public int maxHistoryPage(long id) {
+    @Transactional(readOnly = true)
+    public int maxHistoryPage(long callerUserNo, long userId) {
+        // Phase 3-Backfill-A-3: path userId 위조 방지 (옵션 B)
+        if (!Objects.equals(userId, callerUserNo)) {
+            throw new BusinessException("본인 주문 내역만 조회 가능합니다.", HttpStatus.FORBIDDEN);
+        }
         // 응답 동결: 기존 OrderMapper.maxHistoryPage가 int 반환 → 동일 타입 유지
-        return (int) orderRepository.countByUserNo(id);
-    }
-
-    public int calSumOrder(long id) {
-        return orderMapper.calSumOrder(id);  // store 테이블 cross-table UPDATE — 영구 잔존
+        return (int) orderRepository.countByUserNo(userId);
     }
 }

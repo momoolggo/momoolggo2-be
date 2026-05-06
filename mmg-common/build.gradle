@@ -19,4 +19,16 @@ dependencies {
     api         'io.jsonwebtoken:jjwt-api:0.13.0'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
+
+    // 테스트 (JUnit 5 + Mockito + AssertJ)
+    // starter-test/web/security: production에서 compileOnly로 잡은 의존성을 test classpath에 노출
+    // (Jackson 3 tools.jackson.databind, SecurityFilterChain 등 production에서 사용하므로 테스트에도 필요)
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-web'
+    testImplementation 'org.springframework.boot:spring-boot-starter-security'
+    testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }

@@ -18,6 +18,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AddressSearchService {
 
+    private final RestTemplate restTemplate;  // Phase 2-Backfill-D-2-B: 싱글톤 Bean 주입 (timeout 적용)
+
     @Value("${naver.client-id}")
     private String clientId;
 
@@ -53,7 +55,7 @@ public class AddressSearchService {
             headers.set("X-Naver-Client-Id", searchClientId);
             headers.set("X-Naver-Client-Secret", searchClientSecret);
 
-            ResponseEntity<Map> response = new RestTemplate()
+            ResponseEntity<Map> response = restTemplate
                     .exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
 
             List<Map<String, Object>> items =
@@ -93,7 +95,7 @@ public class AddressSearchService {
             headers.set("X-NCP-APIGW-API-KEY-ID", clientId);
             headers.set("X-NCP-APIGW-API-KEY", clientSecret);
 
-            ResponseEntity<Map> response = new RestTemplate()
+            ResponseEntity<Map> response = restTemplate
                     .exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
 
             List<Map<String, Object>> addresses =
@@ -132,7 +134,7 @@ public class AddressSearchService {
             headers.set("X-NCP-APIGW-API-KEY-ID", clientId);
             headers.set("X-NCP-APIGW-API-KEY", clientSecret);
 
-            ResponseEntity<Map> response = new RestTemplate()
+            ResponseEntity<Map> response = restTemplate
                     .exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
 
             List<Map<String, Object>> results =

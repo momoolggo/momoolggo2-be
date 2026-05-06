@@ -30,38 +30,40 @@ public class OrderController {
         return ResponseEntity.ok(Map.of("resultData", res));
     }
 
-    // 주문 확정
+    // 주문 확정 — calSumOrder는 OrderService.placeOrder 내부에서 호출 (트랜잭션 일체화)
     @PostMapping
     public ResponseEntity<?> placeOrder(@AuthenticationPrincipal UserPrincipal principal,
             @RequestBody OrderReqDto dto) {
         long orderId = orderService.placeOrder(principal.getSignedUserNo(), dto);
-        orderService.calSumOrder(orderId);
         return ResponseEntity.ok(Map.of("result", "success","orderId", orderId));
     }
 
+    // 삭제 — calSumOrder는 OrderService.deleteOrder 내부에서 처리 (storeId 사전 확보 후 호출)
     @DeleteMapping("/{id}")
-    public ResultResponse<?> deleteOrder(@PathVariable  long id){
-        int result= orderService.deleteOrder(id);
-        orderService.calSumOrder(id);
-        return new ResultResponse<>(result==1 ? "삭제성공": "삭제실패", "ㅇㅇ");
+    public ResultResponse<?> deleteOrder(@AuthenticationPrincipal UserPrincipal principal,
+                                         @PathVariable long id){
+        int result = orderService.deleteOrder(principal.getSignedUserNo(), id);
+        return new ResultResponse<>(result==1 ? "삭제성공": "삭제실패", null);
     }
 
     //주문내역
     @GetMapping("/history")
-    public ResponseEntity<List<OrderHistoryDto>> getOrderHistory(@ModelAttribute OrderHistoryReq req) {
-        return ResponseEntity.ok(orderService.getOrderHistory(req));
+    public ResponseEntity<List<OrderHistoryDto>> getOrderHistory(@AuthenticationPrincipal UserPrincipal principal,
+                                                                  @ModelAttribute OrderHistoryReq req) {
+        return ResponseEntity.ok(orderService.getOrderHistory(principal.getSignedUserNo(), req));
     }
 
     //주문상세
     @GetMapping("/history/{id}")
-    public ResponseEntity<OrderHistoryDto> orderHistoryDetail(@PathVariable long id){
-        return ResponseEntity.ok(orderService.orderHistoryDetail(id));
+    public ResponseEntity<OrderHistoryDto> orderHistoryDetail(@AuthenticationPrincipal UserPrincipal principal,
+                                                              @PathVariable long id){
+        return ResponseEntity.ok(orderService.orderHistoryDetail(principal.getSignedUserNo(), id));
     }
     //주문내역 맥스페이지
     @GetMapping("/history/max/{id}")
-    public ResultResponse<?> maxHistoryPage(@PathVariable long id){
-        int result = orderService.maxHistoryPage(id);
-        System.out.println(result);
+    public ResultResponse<?> maxHistoryPage(@AuthenticationPrincipal UserPrincipal principal,
+                                            @PathVariable long id){
+        int result = orderService.maxHistoryPage(principal.getSignedUserNo(), id);
         return new ResultResponse<>("조회성공",result);
     }
 
