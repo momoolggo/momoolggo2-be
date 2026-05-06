@@ -64,3 +64,20 @@ CREATE TABLE IF NOT EXISTS `delivery` (
   KEY `idx_delivery_order_id` (`order_id`),
   KEY `idx_delivery_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 3) delivery_log 테이블 (상태 이력)
+-- 외부 참조: delivery_log.delivery_no → delivery.delivery_no (논리 FK, 물리 FK 제약 X)
+-- ADR-002 line 119-131 + ADR-004 line 116-120 (DeliveryService.updateStatus 같은 트랜잭션 자동 INSERT)
+-- BaseEntity 미상속 (이력 본질, INSERT 후 변경 0) — Q-R2b-BaseEntity (a)
+-- 인덱스 1건: delivery_no (R2-a Q-R2a2 (나) 자동 적용, 2026-05-06)
+CREATE TABLE IF NOT EXISTS `delivery_log` (
+  `log_no`         BIGINT      NOT NULL AUTO_INCREMENT             COMMENT '이력 PK',
+  `delivery_no`    VARCHAR(20) NOT NULL                            COMMENT '논리 FK → delivery.delivery_no',
+  `from_status`    VARCHAR(30) DEFAULT NULL                        COMMENT '이전 상태 (최초 INSERT 시 NULL)',
+  `to_status`      VARCHAR(30) NOT NULL                            COMMENT '변경 후 상태 (ADR-004 7 enum)',
+  `actor_role`     VARCHAR(20) NOT NULL                            COMMENT 'RIDER / SYSTEM / ADMIN',
+  `actor_user_no`  BIGINT      DEFAULT NULL                        COMMENT '변경 주체 user_no (SYSTEM 시 NULL)',
+  `changed_at`     DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '변경 시각',
+  PRIMARY KEY (`log_no`),
+  KEY `idx_delivery_log_delivery_no` (`delivery_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
