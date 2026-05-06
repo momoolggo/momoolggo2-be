@@ -5,7 +5,6 @@ import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.store.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.ibatis.annotations.Param;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
