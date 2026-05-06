@@ -94,13 +94,13 @@
 |---|---|---|---|
 | **mmg-rider-service** | 본인 | ✅ 직접 수정 | — |
 | **mmg-auth-service** | 팀원 | ❌ 직접 수정 금지 | 발견 부채는 `docs/team-handoff.md` 등재 |
-| **mmg-main-service** | 팀원 추정 | ❓ 본인 확인 필요 | TODO: 본인 영역 확인 후 갱신 |
+| **mmg-main-service** | 팀원 | ❌ 직접 수정 금지 | 발견 부채는 `docs/team-handoff.md` 등재 |
 | **mmg-admin-service** | 팀원 | ❌ 직접 수정 금지 | 라이더 정리 ADR D11 일관 (admin-service 절대 X) |
-| **mmg-gateway** | 영역 미상 | ❓ 본인 확인 필요 | TODO: 본인 영역 확인 후 갱신 |
-| **mmg-common** | 영역 미상 (공용 라이브러리?) | ❓ 본인 확인 필요 | §3 모듈 의존성 그래프 line 55-68 참조. TODO: 영역 확인 |
+| **mmg-gateway** | 팀원 | ❌ 직접 수정 금지 | 발견 부채는 `docs/team-handoff.md` 등재 |
+| **mmg-common** | 팀원 (공용 라이브러리) | ❌ 직접 수정 금지 | 사용 OK / 수정 X — §3 모듈 의존성 그래프 line 55-68 참조 |
 | **docs/** | 프로젝트 레벨 | ✅ 본인 항목 수정 가능 | 디렉토리 레벨, 본인이 작성한 메모리/문서만 |
 
-⚠️ ❓ 항목 3건(main / gateway / common)은 본인 확인 후 갱신 예정.
+✅ 영역 매트릭스 확정 (2026-05-06) — main / gateway / common 모두 팀원. 본인 영역 = mmg-rider-service + docs/ 단독.
 
 ---
 
