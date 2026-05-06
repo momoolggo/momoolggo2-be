@@ -41,4 +41,11 @@ public class ChatbotInquiry extends BaseEntity {
 
     @Column(name = "answered_at")
     private LocalDateTime answeredAt;
+
+    // 답변 등록
+    public void reply(String answer) {
+        this.answer = answer;
+        this.answeredAt = LocalDateTime.now();
+        this.state = InquiryStatus.RESOLVED;
+    }
 }

@@ -1,4 +1,4 @@
 package com.green.mmg.admin.feign;
 
-public class RiderFeignClient {
+public interface RiderFeignClient {
 }

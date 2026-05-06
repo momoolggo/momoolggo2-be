@@ -62,4 +62,15 @@ public class Settlement {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    // 정산 상태 변경 (pending → done)
+    public void complete() {
+        this.status = SettlementsStatus.DONE;
+        this.paidAt = LocalDateTime.now();
+    }
+
+    // 정산 보류
+    public void hold() {
+        this.status = SettlementsStatus.HELD;
+    }
 }
