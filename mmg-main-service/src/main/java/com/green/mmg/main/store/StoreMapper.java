@@ -19,6 +19,7 @@ public interface StoreMapper {
     List<StoreGetRes> favoriteList(StoreFavoriteReq req);
 
     List<StoreGetRes> searchStore(@Param("searchText") String searchText);
+    List<MenuGetRes> menuSearchInStore(@Param("storeId") Long storeId, @Param("searchText") String searchText);
     List<StoreGetRes> findNearby(@Param("lat") double lat, @Param("lng") double lng);
 
     //가게 리뷰 조회

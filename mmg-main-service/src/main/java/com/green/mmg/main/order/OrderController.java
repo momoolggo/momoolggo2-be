@@ -59,7 +59,7 @@ public class OrderController {
                                                               @PathVariable long id){
         return ResponseEntity.ok(orderService.orderHistoryDetail(principal.getSignedUserNo(), id));
     }
-    //주무내역 맥스페이지
+    //주문내역 맥스페이지
     @GetMapping("/history/max/{id}")
     public ResultResponse<?> maxHistoryPage(@AuthenticationPrincipal UserPrincipal principal,
                                             @PathVariable long id){

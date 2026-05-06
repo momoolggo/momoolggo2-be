@@ -6,7 +6,6 @@ import com.green.mmg.common.feign.AuthFeignClient;
 import com.green.mmg.main.store.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.ibatis.annotations.Param;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -103,7 +102,15 @@ public class StoreService {
         return storeMapper.searchStore(searchText);
     }
 
-    @Transactional(readOnly = true)
+
+    public List<MenuGetRes> menuSearchInStore(long storeId, String searchText) {
+        if(  searchText == null || searchText.trim().isEmpty()) {
+            return List.of();
+        }
+        return storeMapper.menuSearchInStore(storeId,searchText);
+    }
+
+   @Transactional(readOnly = true)
     public List<StoreGetRes> findNearbyStores(double lat, double lng) {
         return storeMapper.findNearby(lat, lng);
     }
