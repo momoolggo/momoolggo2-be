@@ -88,6 +88,20 @@
 > 예: `my_mmg_main.orders.user_no` → `my_mmg_auth.user.user_no`는 논리 FK,
 > 데이터 정합성은 애플리케이션 레벨(Feign 호출)에서 보장.
 
+### 모듈 영역 (작업 권한)
+
+| 모듈 | 영역 | 작업 가능 | 비고 |
+|---|---|---|---|
+| **mmg-rider-service** | 본인 | ✅ 직접 수정 | — |
+| **mmg-auth-service** | 팀원 | ❌ 직접 수정 금지 | 발견 부채는 `docs/team-handoff.md` 등재 |
+| **mmg-main-service** | 팀원 추정 | ❓ 본인 확인 필요 | TODO: 본인 영역 확인 후 갱신 |
+| **mmg-admin-service** | 팀원 | ❌ 직접 수정 금지 | 라이더 정리 ADR D11 일관 (admin-service 절대 X) |
+| **mmg-gateway** | 영역 미상 | ❓ 본인 확인 필요 | TODO: 본인 영역 확인 후 갱신 |
+| **mmg-common** | 영역 미상 (공용 라이브러리?) | ❓ 본인 확인 필요 | §3 모듈 의존성 그래프 line 55-68 참조. TODO: 영역 확인 |
+| **docs/** | 프로젝트 레벨 | ✅ 본인 항목 수정 가능 | 디렉토리 레벨, 본인이 작성한 메모리/문서만 |
+
+⚠️ ❓ 항목 3건(main / gateway / common)은 본인 확인 후 갱신 예정.
+
 ---
 
 ## 4. 패키지 구조
@@ -286,6 +300,13 @@ rider-service, admin-service가 이 API를 Feign으로 호출.
     - ERD vs 코드 충돌 시 ERD 따라감. 단, ERD 오타 의심 시 사용자 결정 받고 decisions.md에 기록.
     - 컬럼명/타입도 ERD 기준 (단순 별칭 차이라도). Phase 2/3에서 같이 정리.
     - **이 원칙은 Phase 1-B-3에서 user_address를 잘못 my_mmg_auth로 보낸 일을 계기로 명문화함 (Phase 1-B-3.5에서 정정).**
+
+12. **팀원 영역 모듈 직접 수정 금지 (영역 경계 = team boundary)**
+    - §3 모듈 영역 표가 진실의 원천. 작업 전 모듈 영역 확인 필수.
+    - 본인 영역(✅) 외 모듈은 직접 수정 금지. 팀원 영역(❌) 작업 발견 시 `docs/team-handoff.md` 등재.
+    - ❓ 영역 미상 모듈은 본인 확인 후 진행. 추정으로 진행 금지.
+    - 영역 침범 발견 시 즉시 멈춤 + revert + 본인 보고. NAJACKS 변종 회피.
+    - **이 원칙은 R1-A 종결 시점 박제된 R1-B 명세가 mmg-auth-service(팀원 영역)를 B-1/B-3에서 침범한 사건(2026-05-06 revert)을 계기로 명문화함. `feedback_verify_spec_assumptions.md` 1건째 사례.**
 
 ---
 
