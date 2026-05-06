@@ -131,7 +131,10 @@ Figma 분석 후 정정:
 | `to_status` | VARCHAR(30) NOT NULL | |
 | `actor_role` | VARCHAR(20) NOT NULL | RIDER / SYSTEM / ADMIN |
 | `actor_user_no` | BIGINT | |
-| `changed_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | |
+| `changed_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP | |
+
+> 인덱스 (R2-a Q-R2a2 (나) 자동 적용, 2026-05-06):
+> - `KEY idx_delivery_log_delivery_no (delivery_no)` — 특정 delivery 이력 시간순 조회 (R3 DeliveryService / R6 외부 endpoint)
 
 > 주의: 상태 변경 시 application 레벨에서 자동 INSERT (DeliveryService).
 
