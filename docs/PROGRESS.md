@@ -634,13 +634,68 @@
 
 ---
 
+### Phase 5-R1-A 중간 종결 (2026-05-05) — 단위 7건 PASS, 통합/A-7/R1-B/Z 다음 세션 이월
+
+**rider 브랜치 작업** (develop fast-forward 머지 후 R1-A 진입). R1-A Step A-1 ~ A-6 (단위)까지 완료, 통합 테스트는 학원 DB 사전 조건 대기 — **7 커밋 + Q-DB 미결정**:
+
+| Step | 커밋 | 내용 |
+|---|---|---|
+| (인프라) | `919ce06..035dbae` | rider 브랜치를 develop으로 fast-forward 머지 + push (origin/rider 동기화) |
+| A-1 | `721c011` | rider-service build.gradle: data-jpa + security + mysql-connector |
+| A-2 | `03c03c2` | DDL `docs/ddl/rider-schema.sql` (rider 테이블만, R1 범위) |
+| A-2 | `417742c` | Rider 엔티티 + RiderRepository + datasource yml + RiderApplication @EnableJpaAuditing |
+| A-3 | `eee2a68` | RiderProperties + auto-approve toggle (D11) — `rider.auto-approve: ${RIDER_AUTO_APPROVE:true}` |
+| A-4 | `de27710` | RiderService.joinProfile + auto-approve 임시 블록 + TODO 주석 |
+| A-5 | `c403f29` | RiderController PUT /profile + GET /me + RiderSecurityConfig (hasRole RIDER) |
+| A-6 단위 | `4c7a87e` | RiderServiceTest 7건 PASS (가짜 0건) — JoinProfile 5 + FindProfile 2 |
+
+**단위 테스트 결과 (7건 PASS)**:
+- JoinProfile: autoApprove true (ArgumentCaptor + ACTIVE 검증) / false (PENDING 유지) / 중복 CONFLICT 409 / vehicleType 화이트리스트 위반 / blank 검증
+- FindProfile: happy (dto 전수 검증) / NOT_FOUND
+- 가짜 0건 원칙 일관 — assertEquals + assertThatThrownBy + ArgumentCaptor + verify(never)
+
+**진단 가정 정정 (R1-A 진단에서 ⚠11 추가, 누적 10건)**:
+- ⚠11 InternalUserController 경로 `/internal/users` 가정 → 실제 `/internal/auth/user/{userNo}` + `/internal/auth/users` (auth prefix). interfaces.md §5 정정 필요 — Q-W11 결정 (R4 진입 직전 처리)
+
+**사용자 결정 매트릭스 (Phase 5-R1)**:
+
+| ID | 결정 | 상태 |
+|---|---|---|
+| Q-B | (A) ADR-001 Q1-C 그대로 | ✅ 채택 + 구현 (A-4) |
+| Q-Toggle | (A) rider-service | ✅ 채택 + 구현 (A-3, A-4) |
+| Q-Timeout | (A) 모든 라우트 일괄 | 🟡 채택, 미구현 (R1-B) |
+| Q-Split | (2) R1-A / R1-B | ✅ 채택 |
+| Q-Sec | (b) tech-debt + ADMIN 임시 가드 | 🟡 채택, 미구현 (R1-B) |
+| Q-Status | (b) status=null + DB lookup | ✅ 채택 + 명시 (RiderService docstring) |
+| Q-W11 | (b) R4 진입 직전 처리 | ⏳ 채택, 미구현 (R4) |
+| **Q-DB** | **미결정 — 학원 DB schema/권한** | **⏳ 다음 세션 (가/나/다)** |
+
+**보류 (다음 세션)**:
+- **Step A-6 (통합 테스트)**: 학원 DB 사전 조건 대기 — `CREATE SCHEMA my_mmg_rider` + `GRANT ALL PRIVILEGES TO 'green2'@'%'` + `docs/ddl/rider-schema.sql` 실행 + `.env`의 `RIDER_DB_URL` 학원 DB 값 설정
+- **Step A-7 (code-reviewer)**: A-6 통합 테스트 후
+- **R1-B 전체 (Step B-1 ~ B-5)**: ADMIN 가드 (Q-Sec) + gateway timeout (Q-Timeout) + getUsers empty 통합 (4-A W-2) + GatewayIntegrationTest cosmetic 2건 + reviewer
+- **Z 단계 (Z-1 ~ Z-4)**: 빌드/테스트 / PROGRESS·tech-debt·MEMORY 갱신 / push / develop 머지 결정
+
+**Q-DB 옵션 (다음 세션 결정)**:
+- (가) 학원 DB 작업 완료 → A-6 통합 테스트 진행 → A-7 reviewer → R1-B
+- (나) DBA 응답 대기 → R1-B 우선 진입 (Step B-1 ~ B-5)
+- (다) 단위 7건만으로 종결 + 통합은 R6 외부 endpoint 작업 시 자연 통합 ← 권장
+
+**추가 발견 (R1-A 진행 중)**:
+- HelloController (Phase 0-B 잔재) 그대로 유지 — `/api/rider/hello` hasRole(RIDER) 보호, 외부 노출 X
+- validation starter 미도입 — auth/main 기존 패턴 일관 (Service 명시 if 검증)
+- `accountNo` 본인 한정 노출 (RiderProfileRes 평문) — Phase 6+ 마스킹 검토 (D7 패턴 일관, tech-debt 등재 권장)
+
+---
+
 ## 다음 단계
 
-**라이더 정리 종결 (cosmetic W-1·W-2·W-3 정정 완료, W-4는 Phase 5-R4와 함께).** 진행 흐름: Phase 5-R1 → R9 → 학원 발표 (최종 마일스톤).
+**Phase 5-R1-A 중간 종결.** 진행 흐름: R1-A 잔여 (Q-DB 결정 후) → R1-B → R2~R9 → 학원 발표.
 
-- **Phase 5-R1** (다음): RIDER role 가입/로그인 (auth-service 분기, license_type/vehicle_type) + **`rider.auto-approve` toggle 구현 (D11)** + tech-debt cleanup (gateway timeout, getUsers empty, GatewayIntegrationTest cosmetic 2건).
-  - 진입 시점: `git checkout rider` (기존 브랜치) + `git fetch origin` 동기화 점검 + develop 머지 필요 여부 확인.
-  - 라이더 정리 결과 + Phase 4-C 결과를 rider 브랜치에 머지 후 진행.
-  - **admin-service 절대 건드리지 않음** (팀원 작업 영역).
+- **다음 세션 시작점**: Q-DB 결정 (가/나/다)
+  - (가) 학원 DB 작업 완료 → A-6 통합 테스트 진행 (4건 이상)
+  - (나) DBA 응답 대기 → **R1-B 우선 진입** (Step B-1 ~ B-5)
+  - (다) 단위만으로 R1-A 종결 → R1-B 진입 → R6에서 통합 테스트 자연 통합
 - **Phase 5 후속** — R2~R9 (mmg_rider DDL → 상태 머신 → Internal API → 위치 추적 → 외부 endpoint → 정산 → 근무 세션 → 공지). R5/R6 병렬 가능. R4 진입 직전 W-4 정리. R7~R9 학원 발표 데모 시간 여유 시.
 - **학원 발표** — Phase 5 종결 후 최종 마일스톤. Redis docker compose + RT revoke + WebSocket+STOMP 시연 사전 리허설 권장.
+- **admin-service 절대 건드리지 않음** (D11 일관, 팀원 작업 영역).
