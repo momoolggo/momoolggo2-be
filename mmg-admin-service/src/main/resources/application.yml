@@ -39,3 +39,11 @@ constants:
     refresh-token-cookie-path: /api/user/reissue
     refresh-token-cookie-validity-seconds: 1296000
     refresh-token-validity-milliseconds: ${JWT_REFRESH_TOKEN_VALIDITY_MS}
+
+feign:
+  auth-service:
+    url: ${AUTH_SERVICE_URL:http://localhost:8081}
+  main-service:
+    url: ${MAIN_SERVICE_URL:http://localhost:8080}
+  rider-service:
+    url: ${RIDER_SERVICE_URL:http://localhost:8082}
