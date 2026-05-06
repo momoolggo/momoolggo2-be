@@ -1,6 +1,6 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
-> 작성: 2026-04-28 / 최종 갱신: **2026-05-02 Phase 4-C 신규 기능 완료 (266 PASS — common 9 + auth 50 + main 178 + gateway 29)**
+> 작성: 2026-04-28 / 최종 갱신: **2026-05-06 Phase 5-R1-A 종결 + R2-a/b 적용 (rider 10건 PASS + DeliveryLog 3건, 학원 DB my_mmg_rider 3 테이블 적용 / Q-DB (다) → (가) 전환)**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).
 
@@ -87,7 +87,7 @@
 |---|---|---|---|
 | **my_mmg_auth** | user (1개) | 15 | 회원/JWT |
 | **my_mmg_main** | store, store_category, menu, menu_category, category, likedstore, cart, cart_detail, orders, order_detail, payment, review, review_reply, **address** (14개) | ~452 | 가게/메뉴/주문/리뷰/결제/주소 |
-| **my_mmg_rider** | (빈 schema) | 0 | Phase 5에 rider_profile 등 |
+| **my_mmg_rider** | rider, delivery, delivery_log (3개) | 0 | Phase 5-R1-A/R2-a/b 적용 (2026-05-06) — Q-DB (다) → (가) 전환, validate PASS |
 | **my_mmg_admin** | (빈 schema) | 0 | Phase 5에 FAQ, penalty 등 |
 
 **외부 FK 5개 DROP**: store/likedstore/cart/orders/review_reply의 user 참조 (Saga/Outbox는 Phase 4-D/6).
