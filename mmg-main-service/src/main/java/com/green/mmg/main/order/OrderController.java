@@ -57,7 +57,7 @@ public class OrderController {
     public ResponseEntity<OrderHistoryDto> orderHistoryDetail(@PathVariable long id){
         return ResponseEntity.ok(orderService.orderHistoryDetail(id));
     }
-    //주무내역 맥스페이지
+    //주문내역 맥스페이지
     @GetMapping("/history/max/{id}")
     public ResultResponse<?> maxHistoryPage(@PathVariable long id){
         int result = orderService.maxHistoryPage(id);

@@ -47,7 +47,7 @@ public class StoreController {
     }
 
     @GetMapping("/{storeid}/menu/search")// 가게 내에서 특정 메뉴 검색
-    public ResultResponse<?> menuSearchInStore(@PathVariable long storeId,
+    public ResultResponse<?> menuSearchInStore(@PathVariable("storeid") long storeId,
             @RequestParam ("search_text") String searchText ){
         List<MenuGetRes> result = storeService.menuSearchInStore(storeId, searchText);
         return new ResultResponse<>("", result);
