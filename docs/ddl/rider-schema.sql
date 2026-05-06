@@ -28,3 +28,39 @@ CREATE TABLE IF NOT EXISTS `rider` (
   PRIMARY KEY (`rider_no`),
   UNIQUE KEY `uq_rider_user_no` (`user_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2) delivery 테이블 (배달 단건)
+-- 외부 참조: delivery.order_id → my_mmg_main.orders.order_id (논리 FK, 물리 FK 제약 X)
+--           delivery.rider_no → rider.rider_no (논리 FK)
+-- ADR-002 데이터 모델 + ADR-004 상태 머신 7개 (WAITING_ASSIGN/ASSIGNED/ARRIVED_AT_STORE/AWAITING_PICKUP/PICKED_UP/DELIVERING/DELIVERED)
+-- 인덱스 3건: rider_no / order_id / status (Q-R2a2 (나), 2026-05-06)
+CREATE TABLE IF NOT EXISTS `delivery` (
+  `delivery_no`         VARCHAR(20)    NOT NULL                                COMMENT '배차번호 PK (형식 00001ABC, application 생성 — Figma 정정 9)',
+  `order_id`            VARCHAR(20)    NOT NULL                                COMMENT '논리 FK → my_mmg_main.orders.order_id (형식 000001A) — Figma 정정 9',
+  `rider_no`            BIGINT         DEFAULT NULL                            COMMENT '논리 FK → rider.rider_no (NULL = WAITING_ASSIGN)',
+  `status`              VARCHAR(30)    NOT NULL                                COMMENT '7개 상태 enum — ADR-004',
+  `pickup_phone`        VARCHAR(20)    DEFAULT NULL                            COMMENT '가게 전화 snapshot — Figma 정정 11 평문',
+  `customer_phone`      VARCHAR(20)    DEFAULT NULL                            COMMENT '손님 전화 snapshot — D7-a 평문 (정정 11)',
+  `pickup_address`      VARCHAR(200)   DEFAULT NULL                            COMMENT '가게 주소 snapshot',
+  `pickup_lat`          DECIMAL(16,13) DEFAULT NULL                            COMMENT '가게 위도',
+  `pickup_lng`          DECIMAL(16,13) DEFAULT NULL                            COMMENT '가게 경도',
+  `delivery_address`    VARCHAR(200)   DEFAULT NULL                            COMMENT '배달 주소 snapshot',
+  `delivery_lat`        DECIMAL(16,13) DEFAULT NULL                            COMMENT '배달 위도',
+  `delivery_lng`        DECIMAL(16,13) DEFAULT NULL                            COMMENT '배달 경도',
+  `base_fee`            INT            NOT NULL                                COMMENT '기본 배달료 — Figma 정정 4',
+  `extra_fee`           INT            NOT NULL DEFAULT 0                      COMMENT '추가 배달료 — Figma 정정 4',
+  `delivered_method`    VARCHAR(30)    DEFAULT NULL                            COMMENT 'DIRECT/CUSTOMER_REQUEST/CUSTOMER_ABSENT — Figma 정정 10',
+  `delivered_photo_url` VARCHAR(500)   DEFAULT NULL                            COMMENT '사진 URL (main-service /uploads/delivery/) — Figma 정정 10',
+  `assigned_at`         DATETIME       DEFAULT NULL                            COMMENT '배차 시각',
+  `arrived_at_store_at` DATETIME       DEFAULT NULL                            COMMENT '가게 도착 시각',
+  `picked_at`           DATETIME       DEFAULT NULL                            COMMENT '픽업 완료 시각',
+  `delivering_at`       DATETIME       DEFAULT NULL                            COMMENT '이동 시작 시각',
+  `delivered_at`        DATETIME       DEFAULT NULL                            COMMENT '배달 완료 시각',
+  `version`             BIGINT         NOT NULL DEFAULT 0                      COMMENT '@Version 낙관적 락 (Q5-A, ADR-004 D5)',
+  `created_at`          DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`          DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`delivery_no`),
+  KEY `idx_delivery_rider_no` (`rider_no`),
+  KEY `idx_delivery_order_id` (`order_id`),
+  KEY `idx_delivery_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
