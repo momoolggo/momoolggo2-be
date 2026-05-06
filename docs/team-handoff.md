@@ -2,6 +2,8 @@
 
 본인이 발견한 부채 중 **팀원 영역 모듈** 작업이 필요한 항목 박제. 본인 처리 X (CLAUDE.md §6 #12).
 
+> 영역 매트릭스 확정: 2026-05-06 (CLAUDE.md §3 line 91 참조)
+
 > 작성 원칙: 영역(`mmg-auth-service` / `mmg-gateway` 등) 명시. 권장 처리 방향 + 인용 가능한 R1-A 패턴 + 위치(파일:라인) 박제.
 
 ---
@@ -35,7 +37,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| **영역** | `mmg-gateway` ❓ 영역 미상 (확인 필요) |
+| **영역** | `mmg-gateway` ❌ 팀원 |
 | **위치** | `mmg-gateway/src/main/resources/application.yml` |
 | **경위** | Phase 4-A Feign timeout 패턴 일관 검토 시 발견 |
 | **현재 동작** | 모든 라우트 timeout 0 — 백엔드 다운 시 60s 기본 (시한폭탄) |
@@ -57,7 +59,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| **영역** | `mmg-gateway` ❓ 영역 미상 (확인 필요) |
+| **영역** | `mmg-gateway` ❌ 팀원 |
 | **위치** | `mmg-gateway/.../GatewayIntegrationTest.java:99-111` |
 | **경위** | Phase 4-B reviewer Warning 잔존 (cosmetic) |
 | **권장 처리** | lambda → `status().is(not(403))` 또는 AssertJ |
@@ -67,7 +69,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| **영역** | `mmg-gateway` ❓ 영역 미상 (확인 필요) |
+| **영역** | `mmg-gateway` ❌ 팀원 |
 | **위치** | `mmg-gateway/.../GatewayIntegrationTest.java:40-41` |
 | **경위** | Phase 4-B reviewer Warning 잔존 (cosmetic) |
 | **현재 상태** | `"Step 4·5 추가 예정"` 잔존 주석 (Step 4·5 이미 구현됨) |
