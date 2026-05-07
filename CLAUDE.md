@@ -99,8 +99,10 @@
 | **mmg-gateway** | 팀원 | ❌ 직접 수정 금지 | 발견 부채는 `docs/team-handoff.md` 등재 |
 | **mmg-common** | 팀원 (공용 라이브러리) | ❌ 직접 수정 금지 | 사용 OK / 수정 X — §3 모듈 의존성 그래프 line 55-68 참조 |
 | **docs/** | 프로젝트 레벨 | ✅ 본인 항목 수정 가능 | 디렉토리 레벨, 본인이 작성한 메모리/문서만 |
+| **momoolggo2-fe** (별도 repo `C:\codding\project\momoolggo2-fe`) | rider 부분만 본인 | ✅ `views/rider/**`, 라이더 라우트/스토어/서비스 / ❌ 그 외 (auth/main/admin/customer/owner) | 2026-05-07 신설. BE rider + FE rider 단독 일관. 기존 화면 base 보존(수정 금지). 작업 브랜치 `kjh` |
 
 ✅ 영역 매트릭스 확정 (2026-05-06) — main / gateway / common 모두 팀원. 본인 영역 = mmg-rider-service + docs/ 단독.
+✅ FE 영역 추가 (2026-05-07) — `momoolggo2-fe/src/views/rider/**` + 라이더 라우트/스토어/서비스 단독.
 
 ---
 
