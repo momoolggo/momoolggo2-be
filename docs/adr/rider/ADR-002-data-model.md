@@ -178,9 +178,14 @@ Figma 분석 후 정정:
 | `confirmed_by_admin_no` | BIGINT | admin이 confirm 시 기록 |
 | `confirmed_at` | DATETIME | |
 | `paid_at` | DATETIME | NULL = 미입금. 다음 주 월요일 입금 |
-| `created_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | |
+| `created_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP | BaseEntity 상속 (R2-a 패턴 일관) |
+| `updated_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | BaseEntity Auditing (admin confirm 시 갱신) |
+
+**인덱스 (Q-R2a2 (나) 자동 적용, R2-d 시점 2026-05-07 박제)**:
+- `idx_settlement_rider_no` (rider_no) — R7 진입 시 라이더별 정산 조회 (status 인덱스는 카디널리티 2 약함, R7 결정 시 재검토)
 
 > 주의: 주간 집계 트리거는 admin 수동 (D10-b). Phase 6+ 자동 배치.
+> SettlementStatus enum 신규 (PENDING/CONFIRMED) — DeliveryStatus 재사용 X (의미 다름).
 
 #### 6. `notice` — 공지사항 (정정 8, ADR-009 별건)
 
