@@ -99,3 +99,32 @@ CREATE TABLE IF NOT EXISTS `work_session` (
   PRIMARY KEY (`session_no`),
   KEY `idx_work_session_rider_no` (`rider_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 5) settlement 테이블 (정산 트랜잭션, ADR-002 정정 5 + ADR-007)
+-- 외부 참조: settlement.rider_no → rider.rider_no (논리 FK, 물리 FK 제약 X)
+--           settlement.confirmed_by_admin_no → my_mmg_admin.admin (논리 FK, NULLABLE)
+-- BaseEntity 상속 (R2-a 패턴 일관, UPDATE 다수: admin confirm + paid_at)
+-- 인덱스 1건: rider_no (R7 진입 시 라이더별 정산 조회, Q-R2a2 (나) 자동 적용 — 2026-05-07)
+-- 신규 enum: SettlementStatus (PENDING / CONFIRMED) — D10-b admin 수동 confirm
+CREATE TABLE IF NOT EXISTS `settlement` (
+  `settlement_no`         BIGINT      NOT NULL AUTO_INCREMENT             COMMENT '정산 PK',
+  `rider_no`              BIGINT      NOT NULL                            COMMENT '논리 FK → rider.rider_no',
+  `period_start`          DATE        NOT NULL                            COMMENT '정산 기간 시작 (월요일)',
+  `period_end`            DATE        NOT NULL                            COMMENT '정산 기간 종료 (일요일)',
+  `delivery_count`        INT         NOT NULL                            COMMENT '배달 건수',
+  `total_distance_m`      INT         NOT NULL DEFAULT 0                  COMMENT '총 이동 거리 (m) — Phase 5-R7 산출 방식 별도',
+  `total_base_fee`        INT         NOT NULL                            COMMENT 'base_fee 합계',
+  `total_extra_fee`       INT         NOT NULL                            COMMENT 'extra_fee 합계',
+  `commission`            INT         NOT NULL                            COMMENT '수수료',
+  `tax`                   INT         NOT NULL                            COMMENT '세금 (3.3%)',
+  `insurance`             INT         NOT NULL                            COMMENT '보험료',
+  `payout`                INT         NOT NULL                            COMMENT '실 수령액 = base+extra-commission-tax-insurance',
+  `status`                VARCHAR(20) NOT NULL DEFAULT 'PENDING'          COMMENT 'PENDING / CONFIRMED — D10-b SettlementStatus enum',
+  `confirmed_by_admin_no` BIGINT      DEFAULT NULL                        COMMENT 'admin이 confirm 시 기록 (논리 FK → my_mmg_admin.admin)',
+  `confirmed_at`          DATETIME    DEFAULT NULL                        COMMENT 'admin confirm 시각',
+  `paid_at`               DATETIME    DEFAULT NULL                        COMMENT '실 입금 시각 (NULL = 미입금)',
+  `created_at`            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`settlement_no`),
+  KEY `idx_settlement_rider_no` (`rider_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
