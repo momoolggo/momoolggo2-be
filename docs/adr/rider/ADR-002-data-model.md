@@ -197,9 +197,14 @@ Figma 분석 후 정정:
 | `content` | TEXT NOT NULL | |
 | `published_at` | DATETIME NOT NULL | 발송 시점 (즉시/예약) |
 | `sender_admin_no` | BIGINT NOT NULL | admin user_no (논리 FK → my_mmg_admin.admin) |
-| `created_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | |
+| `created_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP | BaseEntity 상속 (R2-a 패턴 일관) |
+| `updated_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | BaseEntity Auditing (admin 수정 시 갱신) |
+
+**인덱스 (Q-R2a2 (나) 자동 적용, R2-e 시점 2026-05-07 박제)**:
+- `idx_notice_published_at` (published_at) — 라이더 조회 시 가시성 필터 (`WHERE published_at <= NOW()`), ADR-009 line 201 명시
 
 > 주의: admin → rider broadcast 단방향. 라이더는 GET만.
+> NoticeCategory enum 신규 (IMPORTANT/SAFETY/GENERAL) — Figma 정정 8 일관.
 
 ---
 
