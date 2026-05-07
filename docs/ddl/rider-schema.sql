@@ -81,3 +81,21 @@ CREATE TABLE IF NOT EXISTS `delivery_log` (
   PRIMARY KEY (`log_no`),
   KEY `idx_delivery_log_delivery_no` (`delivery_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4) work_session 테이블 (근무 세션, ADR-002 정정 6 + ADR-008)
+-- 외부 참조: work_session.rider_no → rider.rider_no (논리 FK, 물리 FK 제약 X)
+-- BaseEntity 상속 (R2-a Delivery 패턴 일관, UPDATE 다수: work_seconds 누적 / ended_at 기록)
+-- 인덱스 1건: rider_no (R3 진입 시 오늘 세션/주간 합계 조회 패턴, Q-R2a2 (나) 자동 적용 — 2026-05-07)
+CREATE TABLE IF NOT EXISTS `work_session` (
+  `session_no`     BIGINT      NOT NULL AUTO_INCREMENT             COMMENT '근무 세션 PK',
+  `rider_no`       BIGINT      NOT NULL                            COMMENT '논리 FK → rider.rider_no',
+  `vehicle_type`   VARCHAR(20) NOT NULL                            COMMENT '세션 시작 시점 vehicle snapshot — Figma 정정 6',
+  `started_at`     DATETIME    NOT NULL                            COMMENT '세션 시작 시각',
+  `ended_at`       DATETIME    DEFAULT NULL                        COMMENT '세션 종료 시각 (NULL = 진행 중) — D9-a',
+  `work_seconds`   INT         NOT NULL DEFAULT 0                  COMMENT '누적 배달 시간 (초)',
+  `break_seconds`  INT         NOT NULL DEFAULT 0                  COMMENT '누적 휴게 시간 (초) — EATING 합산',
+  `created_at`     DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`     DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`session_no`),
+  KEY `idx_work_session_rider_no` (`rider_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
