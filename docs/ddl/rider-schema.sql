@@ -128,3 +128,22 @@ CREATE TABLE IF NOT EXISTS `settlement` (
   PRIMARY KEY (`settlement_no`),
   KEY `idx_settlement_rider_no` (`rider_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6) notice 테이블 (라이더 공지사항, ADR-002 정정 8 + ADR-009)
+-- 외부 참조: notice.sender_admin_no → my_mmg_admin.admin (논리 FK, 물리 FK 제약 X)
+-- 작성 흐름: admin-service Feign 호출 → rider-service POST /internal/notice → INSERT (ADR-009 흐름)
+-- BaseEntity 상속 (R2-a 패턴 일관, UPDATE 다수: admin PUT/DELETE 가능)
+-- 인덱스 1건: published_at (라이더 조회 시 가시성 필터 WHERE published_at <= NOW(), ADR-009 line 201 명시)
+-- 신규 enum: NoticeCategory (IMPORTANT / SAFETY / GENERAL) — Figma 정정 8
+CREATE TABLE IF NOT EXISTS `notice` (
+  `notice_no`        BIGINT       NOT NULL AUTO_INCREMENT             COMMENT '공지 PK',
+  `category`         VARCHAR(20)  NOT NULL                            COMMENT 'IMPORTANT/SAFETY/GENERAL — NoticeCategory enum',
+  `title`            VARCHAR(200) NOT NULL                            COMMENT '공지 제목',
+  `content`          TEXT         NOT NULL                            COMMENT '공지 본문',
+  `published_at`     DATETIME     NOT NULL                            COMMENT '발송 시점 (즉시 = now, 예약 = 미래)',
+  `sender_admin_no`  BIGINT       NOT NULL                            COMMENT '논리 FK → my_mmg_admin.admin',
+  `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`notice_no`),
+  KEY `idx_notice_published_at` (`published_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
