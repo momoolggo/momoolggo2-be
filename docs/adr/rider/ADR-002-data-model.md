@@ -147,10 +147,16 @@ Figma 분석 후 정정:
 | `vehicle_type` | VARCHAR(20) NOT NULL | snapshot at session start |
 | `started_at` | DATETIME NOT NULL | |
 | `ended_at` | DATETIME | NULL = 진행 중 (D9) |
-| `work_seconds` | INT DEFAULT 0 | 누적 배달 시간 (초) |
-| `break_seconds` | INT DEFAULT 0 | 누적 휴게 시간 (초) — EATING 상태 합산 |
+| `work_seconds` | INT NOT NULL DEFAULT 0 | 누적 배달 시간 (초) |
+| `break_seconds` | INT NOT NULL DEFAULT 0 | 누적 휴게 시간 (초) — EATING 상태 합산 |
+| `created_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP | BaseEntity 상속 (R2-a 패턴 일관) |
+| `updated_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | BaseEntity Auditing |
+
+**인덱스 (Q-R2a2 (나) 자동 적용, R2-c 시점 2026-05-07 박제)**:
+- `idx_work_session_rider_no` (rider_no) — R3 진입 시 조회 패턴 (오늘 세션 / 주간 합계)
 
 > 주의: ended_at 기록 시점 = "업무 종료" 버튼 (D9-a). 로그인 세션은 별개 (signout 호출 무관).
+> work_seconds/break_seconds NOT NULL — 생성자에서 0 초기화 (R2-a Delivery extra_fee 패턴 일관).
 
 #### 5. `settlement` — 정산 트랜잭션 (정정 5)
 
