@@ -81,3 +81,69 @@ CREATE TABLE IF NOT EXISTS `delivery_log` (
   PRIMARY KEY (`log_no`),
   KEY `idx_delivery_log_delivery_no` (`delivery_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4) work_session 테이블 (근무 세션, ADR-002 정정 6 + ADR-008)
+-- 외부 참조: work_session.rider_no → rider.rider_no (논리 FK, 물리 FK 제약 X)
+-- BaseEntity 상속 (R2-a Delivery 패턴 일관, UPDATE 다수: work_seconds 누적 / ended_at 기록)
+-- 인덱스 1건: rider_no (R3 진입 시 오늘 세션/주간 합계 조회 패턴, Q-R2a2 (나) 자동 적용 — 2026-05-07)
+CREATE TABLE IF NOT EXISTS `work_session` (
+  `session_no`     BIGINT      NOT NULL AUTO_INCREMENT             COMMENT '근무 세션 PK',
+  `rider_no`       BIGINT      NOT NULL                            COMMENT '논리 FK → rider.rider_no',
+  `vehicle_type`   VARCHAR(20) NOT NULL                            COMMENT '세션 시작 시점 vehicle snapshot — Figma 정정 6',
+  `started_at`     DATETIME    NOT NULL                            COMMENT '세션 시작 시각',
+  `ended_at`       DATETIME    DEFAULT NULL                        COMMENT '세션 종료 시각 (NULL = 진행 중) — D9-a',
+  `work_seconds`   INT         NOT NULL DEFAULT 0                  COMMENT '누적 배달 시간 (초)',
+  `break_seconds`  INT         NOT NULL DEFAULT 0                  COMMENT '누적 휴게 시간 (초) — EATING 합산',
+  `created_at`     DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`     DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`session_no`),
+  KEY `idx_work_session_rider_no` (`rider_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 5) settlement 테이블 (정산 트랜잭션, ADR-002 정정 5 + ADR-007)
+-- 외부 참조: settlement.rider_no → rider.rider_no (논리 FK, 물리 FK 제약 X)
+--           settlement.confirmed_by_admin_no → my_mmg_admin.admin (논리 FK, NULLABLE)
+-- BaseEntity 상속 (R2-a 패턴 일관, UPDATE 다수: admin confirm + paid_at)
+-- 인덱스 1건: rider_no (R7 진입 시 라이더별 정산 조회, Q-R2a2 (나) 자동 적용 — 2026-05-07)
+-- 신규 enum: SettlementStatus (PENDING / CONFIRMED) — D10-b admin 수동 confirm
+CREATE TABLE IF NOT EXISTS `settlement` (
+  `settlement_no`         BIGINT      NOT NULL AUTO_INCREMENT             COMMENT '정산 PK',
+  `rider_no`              BIGINT      NOT NULL                            COMMENT '논리 FK → rider.rider_no',
+  `period_start`          DATE        NOT NULL                            COMMENT '정산 기간 시작 (월요일)',
+  `period_end`            DATE        NOT NULL                            COMMENT '정산 기간 종료 (일요일)',
+  `delivery_count`        INT         NOT NULL                            COMMENT '배달 건수',
+  `total_distance_m`      INT         NOT NULL DEFAULT 0                  COMMENT '총 이동 거리 (m) — Phase 5-R7 산출 방식 별도',
+  `total_base_fee`        INT         NOT NULL                            COMMENT 'base_fee 합계',
+  `total_extra_fee`       INT         NOT NULL                            COMMENT 'extra_fee 합계',
+  `commission`            INT         NOT NULL                            COMMENT '수수료',
+  `tax`                   INT         NOT NULL                            COMMENT '세금 (3.3%)',
+  `insurance`             INT         NOT NULL                            COMMENT '보험료',
+  `payout`                INT         NOT NULL                            COMMENT '실 수령액 = base+extra-commission-tax-insurance',
+  `status`                VARCHAR(20) NOT NULL DEFAULT 'PENDING'          COMMENT 'PENDING / CONFIRMED — D10-b SettlementStatus enum',
+  `confirmed_by_admin_no` BIGINT      DEFAULT NULL                        COMMENT 'admin이 confirm 시 기록 (논리 FK → my_mmg_admin.admin)',
+  `confirmed_at`          DATETIME    DEFAULT NULL                        COMMENT 'admin confirm 시각',
+  `paid_at`               DATETIME    DEFAULT NULL                        COMMENT '실 입금 시각 (NULL = 미입금)',
+  `created_at`            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`settlement_no`),
+  KEY `idx_settlement_rider_no` (`rider_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6) notice 테이블 (라이더 공지사항, ADR-002 정정 8 + ADR-009)
+-- 외부 참조: notice.sender_admin_no → my_mmg_admin.admin (논리 FK, 물리 FK 제약 X)
+-- 작성 흐름: admin-service Feign 호출 → rider-service POST /internal/notice → INSERT (ADR-009 흐름)
+-- BaseEntity 상속 (R2-a 패턴 일관, UPDATE 다수: admin PUT/DELETE 가능)
+-- 인덱스 1건: published_at (라이더 조회 시 가시성 필터 WHERE published_at <= NOW(), ADR-009 line 201 명시)
+-- 신규 enum: NoticeCategory (IMPORTANT / SAFETY / GENERAL) — Figma 정정 8
+CREATE TABLE IF NOT EXISTS `notice` (
+  `notice_no`        BIGINT       NOT NULL AUTO_INCREMENT             COMMENT '공지 PK',
+  `category`         VARCHAR(20)  NOT NULL                            COMMENT 'IMPORTANT/SAFETY/GENERAL — NoticeCategory enum',
+  `title`            VARCHAR(200) NOT NULL                            COMMENT '공지 제목',
+  `content`          TEXT         NOT NULL                            COMMENT '공지 본문',
+  `published_at`     DATETIME     NOT NULL                            COMMENT '발송 시점 (즉시 = now, 예약 = 미래)',
+  `sender_admin_no`  BIGINT       NOT NULL                            COMMENT '논리 FK → my_mmg_admin.admin',
+  `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`notice_no`),
+  KEY `idx_notice_published_at` (`published_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

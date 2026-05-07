@@ -699,3 +699,53 @@
 - **Phase 5 후속** — R2~R9 (mmg_rider DDL → 상태 머신 → Internal API → 위치 추적 → 외부 endpoint → 정산 → 근무 세션 → 공지). R5/R6 병렬 가능. R4 진입 직전 W-4 정리. R7~R9 학원 발표 데모 시간 여유 시.
 - **학원 발표** — Phase 5 종결 후 최종 마일스톤. Redis docker compose + RT revoke + WebSocket+STOMP 시연 사전 리허설 권장.
 - **admin-service 절대 건드리지 않음** (D11 일관, 팀원 작업 영역).
+
+---
+
+### Phase 5-R1 종결 (2026-05-06) — Q-DB (다) → (가) 전환
+
+R1-B 폐기(영역 침범) → R1-A 단독 종결 박제. 학원 DB my_mmg_rider 적용 + bootRun validate PASS.
+
+영역 매트릭스 확정 (CLAUDE.md §3): main/gateway/common 모두 팀원, 본인 영역 = mmg-rider-service + docs/ 단독.
+
+`docs/team-handoff.md` 5건 핸드오프 (Q-Sec / Q-Timeout / Q-W11 / GatewayIntegrationTest cosmetic 2건).
+
+---
+
+### Phase 5-R1-FE (2026-05-07) — momoolggo2-fe 신규 + 라이더 가입/로그인 화면
+
+FE 영역 결정: `momoolggo2-fe`(별도 repo) `views/rider/**` + 라이더 라우트/스토어/서비스 단독, 그 외 팀원.
+
+작업 결과 (FE 4 커밋 + BE 2 커밋, push 완료):
+- RiderSignupView (Figma 170121 추종, 1차 customer 패턴) + RiderSigninView (Figma 170125 1번째)
+- riderService + riderStore 스켈레톤 + 라우터 라이더 라우트 3건 추가
+- BE: CLAUDE.md §3 영역 표 갱신, figma-analysis.md 매핑 정정 4건
+- 시연 검증 4 endpoint PASS (BE 5 서비스 + FE Vite 동시 기동, Gateway 라우팅 OK)
+
+---
+
+### Phase 5-R2 종결 (2026-05-07) — 5 테이블 entity 일괄 도입 (R2-a ~ R2-e)
+
+라이더 도메인 5 테이블 entity + repository + 단위 테스트 + 학원 DB 적용 일괄. R3+ Service 진입 시 비즈니스 메서드 추가 박제.
+
+| Sub | 도메인 | 신규 enum | 인덱스 | 단위 테스트 | 커밋 |
+|---|---|---|---|---|---|
+| R2-a | delivery | DeliveryStatus 7값 (ADR-004) | 3건 (rider_no/order_id/status) | 3건 | 5 |
+| R2-b | delivery_log | (재사용 DeliveryStatus) | 1건 (delivery_no) | 3건 | 6 (tech-debt 1) |
+| R2-c | work_session | (없음) | 1건 (rider_no) | 3건 | 6 (tech-debt 1) |
+| R2-d | settlement | SettlementStatus 2값 (PENDING/CONFIRMED) | 1건 (rider_no) | 3건 | 5 |
+| R2-e | notice | NoticeCategory 3값 (IMPORTANT/SAFETY/GENERAL) | 1건 (published_at) | 3건 | 5 |
+
+**패턴 일관 (4 테이블)**: BaseEntity 상속 + 명시 생성자 + setter 0 + Mockito 단위만 (Q-R2a6-Test (iii)). delivery_log만 BaseEntity 미상속(이력 본질, R2-b 본질 차이 박제).
+
+**reviewer 결과**: R2-a/c/d/e 모두 PASS, Critical 0건. W-2 cosmetic 2건 → tech-debt 등재(actorRole / vehicleType R3 enum 도입).
+
+**학원 DB 적용 (Q-DB (가) 일관)**: my_mmg_rider 6 테이블 모두 박제 + rider-service bootRun validate PASS 4회 재기동.
+
+---
+
+## 다음 단계 (R2 종결 후)
+
+- **R3 진입 후보**: DeliveryService.updateStatus 상태 머신 (Q5-A 낙관적 락 + actorRole/vehicleType enum 도입과 함께 — tech-debt 2건 자연 해소)
+- **FE 진입 후보** (Q-FE-Timing (ii)): 라이더 메인 화면 / 배달현황 (Figma 170131/170137 추종)
+- **잔존 R 단계**: R4 Internal API / R5 위치 추적 STOMP / R6 외부 endpoint / R7 정산 / R8 근무 세션 / R9 공지

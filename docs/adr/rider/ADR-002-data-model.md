@@ -147,10 +147,16 @@ Figma 분석 후 정정:
 | `vehicle_type` | VARCHAR(20) NOT NULL | snapshot at session start |
 | `started_at` | DATETIME NOT NULL | |
 | `ended_at` | DATETIME | NULL = 진행 중 (D9) |
-| `work_seconds` | INT DEFAULT 0 | 누적 배달 시간 (초) |
-| `break_seconds` | INT DEFAULT 0 | 누적 휴게 시간 (초) — EATING 상태 합산 |
+| `work_seconds` | INT NOT NULL DEFAULT 0 | 누적 배달 시간 (초) |
+| `break_seconds` | INT NOT NULL DEFAULT 0 | 누적 휴게 시간 (초) — EATING 상태 합산 |
+| `created_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP | BaseEntity 상속 (R2-a 패턴 일관) |
+| `updated_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | BaseEntity Auditing |
+
+**인덱스 (Q-R2a2 (나) 자동 적용, R2-c 시점 2026-05-07 박제)**:
+- `idx_work_session_rider_no` (rider_no) — R3 진입 시 조회 패턴 (오늘 세션 / 주간 합계)
 
 > 주의: ended_at 기록 시점 = "업무 종료" 버튼 (D9-a). 로그인 세션은 별개 (signout 호출 무관).
+> work_seconds/break_seconds NOT NULL — 생성자에서 0 초기화 (R2-a Delivery extra_fee 패턴 일관).
 
 #### 5. `settlement` — 정산 트랜잭션 (정정 5)
 
@@ -172,9 +178,14 @@ Figma 분석 후 정정:
 | `confirmed_by_admin_no` | BIGINT | admin이 confirm 시 기록 |
 | `confirmed_at` | DATETIME | |
 | `paid_at` | DATETIME | NULL = 미입금. 다음 주 월요일 입금 |
-| `created_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | |
+| `created_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP | BaseEntity 상속 (R2-a 패턴 일관) |
+| `updated_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | BaseEntity Auditing (admin confirm 시 갱신) |
+
+**인덱스 (Q-R2a2 (나) 자동 적용, R2-d 시점 2026-05-07 박제)**:
+- `idx_settlement_rider_no` (rider_no) — R7 진입 시 라이더별 정산 조회 (status 인덱스는 카디널리티 2 약함, R7 결정 시 재검토)
 
 > 주의: 주간 집계 트리거는 admin 수동 (D10-b). Phase 6+ 자동 배치.
+> SettlementStatus enum 신규 (PENDING/CONFIRMED) — DeliveryStatus 재사용 X (의미 다름).
 
 #### 6. `notice` — 공지사항 (정정 8, ADR-009 별건)
 
@@ -186,9 +197,14 @@ Figma 분석 후 정정:
 | `content` | TEXT NOT NULL | |
 | `published_at` | DATETIME NOT NULL | 발송 시점 (즉시/예약) |
 | `sender_admin_no` | BIGINT NOT NULL | admin user_no (논리 FK → my_mmg_admin.admin) |
-| `created_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | |
+| `created_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP | BaseEntity 상속 (R2-a 패턴 일관) |
+| `updated_at` | DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | BaseEntity Auditing (admin 수정 시 갱신) |
+
+**인덱스 (Q-R2a2 (나) 자동 적용, R2-e 시점 2026-05-07 박제)**:
+- `idx_notice_published_at` (published_at) — 라이더 조회 시 가시성 필터 (`WHERE published_at <= NOW()`), ADR-009 line 201 명시
 
 > 주의: admin → rider broadcast 단방향. 라이더는 GET만.
+> NoticeCategory enum 신규 (IMPORTANT/SAFETY/GENERAL) — Figma 정정 8 일관.
 
 ---
 
