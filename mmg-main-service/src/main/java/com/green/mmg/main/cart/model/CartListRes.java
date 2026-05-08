@@ -11,5 +11,6 @@ public class CartListRes {
     private Long cartId;
     private Long storeId;
     private String storeName;
+    private Integer cartCount;
     private List<CartItemRes> items;
 }
