@@ -43,6 +43,12 @@ public class CartService {
         response.setStoreId(cart.getStoreId());
         response.setStoreName(storeName);
         response.setItems(items);
+
+        int totalCount = items.stream()
+                                .mapToInt(CartItemRes::getQuantity)
+                                .sum();
+        response.setCartCount(totalCount);
+
         return response;
     }
 
