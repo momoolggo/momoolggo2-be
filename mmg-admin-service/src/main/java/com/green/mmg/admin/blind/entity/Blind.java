@@ -44,11 +44,26 @@ public class Blind {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    // 블라인드 처리 생성자
-    public Blind(Long reviewNo, Long userNo, BlindReason reason) {
+    @Column(name = "store_name")
+    private String storeName;
+
+    @Column(name = "content")
+    private String content;
+
+    @Column(name = "rating")
+    private Double rating;
+
+    @Column(name = "writer")  // 작성자명
+    private String writer;
+
+    public Blind(Long reviewNo, Long userNo, BlindReason reason, String storeName, String content, Double rating, String writer) {
         this.reviewNo = reviewNo;
         this.userNo = userNo;
         this.reason = reason;
+        this.storeName = storeName;
+        this.content = content;
+        this.rating = rating;
+        this.writer = writer;
         this.durationDays = 7;
         this.startAt = LocalDateTime.now();
         this.endsAt = LocalDateTime.now().plusDays(7);
