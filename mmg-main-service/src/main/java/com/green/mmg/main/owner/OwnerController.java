@@ -145,6 +145,55 @@ public class OwnerController {
         return new ResultResponse<>("이미지 업로드 성공", imageUrl);
     }
 
+    // ========== 메뉴 옵션 관련 ==========
+     @PostMapping("/menu/option")
+     public ResultResponse<OwnerMenuOptionRes> registerOption(@AuthenticationPrincipal UserPrincipal principal,
+                                        @RequestBody OwnerMenuOptionReq req ) {
+        OwnerMenuOptionRes res = ownerService.registerOption(principal.getSignedUserNo(), req);
+        return new ResultResponse<>("옵션이 등록되었습니다", res);
+     }
+
+     @PutMapping("/menu/option/{optionId}")
+     public ResultResponse<OwnerMenuOptionRes> updateOption(@AuthenticationPrincipal UserPrincipal principal,
+                                                            @PathVariable Long optionId
+                                                            ,@RequestBody OwnerMenuOptionUpdateReq req ) {
+            req.setOptionId(optionId);
+         OwnerMenuOptionRes updateOption= ownerService.updateOption(principal.getSignedUserNo(), req);
+         return new ResultResponse<>("옵션이 수정되었습니다.", updateOption);
+     }
+
+     @DeleteMapping("/menu/option/{optionId}")
+     public ResultResponse<Long> deleteOption(@AuthenticationPrincipal UserPrincipal principal,
+                                          @PathVariable Long optionId) {
+        Long deleteOptionId = ownerService.deleteOption(principal.getSignedUserNo(), optionId);
+        return new ResultResponse<>("옵션이 삭제되었습니다.", deleteOptionId);
+     }
+
+     @PostMapping("/menu/{menuId}/option_category")
+     public ResultResponse<OwnerMenuOptionCategoryRes> registerOptionCategory(@AuthenticationPrincipal UserPrincipal principal,
+                                                    @PathVariable Long menuId,
+                                                    @RequestBody OwnerMenuOptionCategoryRegReq req) {
+        req.setMenuId(menuId);
+        OwnerMenuOptionCategoryRes res = ownerService.registerOptionCategory(principal.getSignedUserNo(), req);
+        return new ResultResponse<>("옵션 카테고리 추가 성공", res);
+     }
+
+     @PutMapping("/menu/option_category/{optionCategoryNo}")
+     public ResultResponse<OwnerMenuOptionCategoryRes> updateOptionCategory(@AuthenticationPrincipal UserPrincipal principal,
+                                                  @PathVariable Long optionCategoryNo
+                                                  ,@RequestBody OwnerMenuOptionCategoryUpdateReq req){
+        req.setOptionCategoryNo(optionCategoryNo);
+        OwnerMenuOptionCategoryRes updateOptionCategory = ownerService.updateOptionCategory(principal.getSignedUserNo(), req);
+        return new ResultResponse<>("옵션 카테고리가 수정되었습니다.", updateOptionCategory);
+    }
+
+    @DeleteMapping("/menu/option_category/{optionCategoryNo}")
+    public ResultResponse<Long> deleteOptionCategory(@AuthenticationPrincipal UserPrincipal principal,
+                                                     @PathVariable Long optionCategoryNo) {
+        Long deleteOptionCategoryNo = ownerService.deleteOptionCategory(principal.getSignedUserNo(), optionCategoryNo);
+        return new ResultResponse<>("옵션 카테고리가 삭제되었습니다.", deleteOptionCategoryNo);
+    }
+
     // ========== 카테고리 관련 ==========
 
     @GetMapping("/category")

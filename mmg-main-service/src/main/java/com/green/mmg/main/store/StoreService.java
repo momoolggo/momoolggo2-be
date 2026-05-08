@@ -3,6 +3,10 @@ package com.green.mmg.main.store;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.owner.MenuOptionCategoryRepository;
+import com.green.mmg.main.owner.MenuOptionRepository;
+import com.green.mmg.main.owner.entity.MenuOption;
+import com.green.mmg.main.owner.entity.MenuOptionCategory;
 import com.green.mmg.main.store.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +27,8 @@ public class StoreService {
     private final StoreMapper storeMapper;
     private final LikedStoreRepository likedStoreRepository;  // Phase 3-B-2: 단순 CRUD
     private final AuthFeignClient authFeignClient;   // Phase 4-A: cross-schema user JOIN 대체
+    private final MenuOptionCategoryRepository menuOptionCategoryRepository;
+    private final MenuOptionRepository menuOptionRepository;
 
     @Transactional(readOnly = true)
     public List<StoreGetRes> storeListGet(StoreGetReq req){
@@ -49,6 +55,19 @@ public class StoreService {
 
     @Transactional(readOnly = true)
     public List<MenuGetRes> menuListGet(long id){ return storeMapper.menuAll(id);}
+
+    //가게 메뉴 옵션 조회
+    @Transactional(readOnly = true)
+    public List<MenuOptionCategoryRes> menuOption(long menuId) {
+        List<MenuOptionCategory> categories = menuOptionCategoryRepository.findByMenuId(menuId);
+        return categories.stream()
+                .map(category -> {
+                    List<MenuOption> options =
+                            menuOptionRepository.findByOptionCategoryNo(category.getOptionCategoryNo());
+                    return MenuOptionCategoryRes.from(category, options);
+                })
+                .toList();
+    }
 
     @Transactional
     public boolean wishToggle(long callerUserNo, FavoriteToggleReq req){
@@ -102,7 +121,7 @@ public class StoreService {
         return storeMapper.searchStore(searchText);
     }
 
-
+    @Transactional(readOnly = true)
     public List<MenuGetRes> menuSearchInStore(long storeId, String searchText) {
         if(  searchText == null || searchText.trim().isEmpty()) {
             return List.of();
@@ -134,5 +153,6 @@ public class StoreService {
                 nameMap.getOrDefault(((Number) r.get("userNo")).longValue(), "")));
         return rows;
     }
+
 
 }
