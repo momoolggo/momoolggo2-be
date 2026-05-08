@@ -1,16 +1,23 @@
 package com.green.mmg.admin.blind.service;
 
 import com.green.mmg.admin.blind.dto.BlindReq;
+import com.green.mmg.admin.blind.dto.BlindRes;
 import com.green.mmg.admin.blind.entity.Blind;
 import com.green.mmg.admin.blind.repository.BlindRepository;
 import com.green.mmg.admin.common.enums.BlindStatus;
+import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.ResourceNotFoundException;
+import com.green.mmg.common.feign.AuthFeignClient;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -18,12 +25,41 @@ public class BlindService {
 
     private final BlindRepository blindRepository;
 
+    @Autowired(required = false)
+    private AuthFeignClient authFeignClient;
+
     // 블라인드 목록 조회
-    public List<Blind> getBlindList(BlindStatus status) {
-        if (status != null) {
-            return blindRepository.findByStatus(status);
+    public List<BlindRes> getBlindList(BlindStatus status) {
+        List<Blind> blinds = status != null
+                ? blindRepository.findByStatus(status)
+                : blindRepository.findAll();
+
+        List<Long> userNos = blinds.stream()
+                .map(Blind::getUserNo)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // AuthFeignClient 없거나 목록 비어있으면 빈 맵
+        Map<Long, UserBriefDto> userMap = Collections.emptyMap();
+        if (authFeignClient != null && !userNos.isEmpty()) {
+            userMap = authFeignClient.getUsers(userNos)
+                    .stream()
+                    .collect(Collectors.toMap(UserBriefDto::getUserNo, u -> u));
         }
-        return blindRepository.findAll();
+
+        final Map<Long, UserBriefDto> finalUserMap = userMap;
+
+        return blinds.stream().map(b -> {
+            UserBriefDto user = finalUserMap.get(b.getUserNo());
+            return new BlindRes(
+                    b.getBlindId(), b.getReviewNo(), b.getUserNo(),
+                    b.getReason(), b.getDurationDays(), b.getStatus(),
+                    b.getStartAt(), b.getEndsAt(), b.getCreatedAt(),
+                    b.getStoreName(), b.getContent(), b.getRating(), b.getWriter(),
+                    user != null ? user.getName() : null,
+                    user != null ? user.getTel() : null
+            );
+        }).collect(Collectors.toList());
     }
 
     // 블라인드 상세 조회
@@ -35,9 +71,11 @@ public class BlindService {
     // 블라인드 처리
     @Transactional
     public void blindReview(BlindReq req) {
-        Blind blind = new Blind(req.getReviewNo(), req.getUserNo(), req.getReason());
+        Blind blind = new Blind(
+                req.getReviewNo(), req.getUserNo(), req.getReason(),
+                req.getStoreName(), req.getContent(), req.getRating(), req.getWriter()
+        );
         blindRepository.save(blind);
-        // TODO: 알림 발송 (Redis Pub/Sub - Phase 4)
     }
 
     // 블라인드 확정 (REVIEWING → BLINDED)
@@ -49,7 +87,7 @@ public class BlindService {
         // TODO: 고객에게 소명 알림 발송 (Phase 4 - Redis Pub/Sub)
     }
 
-    // 블라인드 해제 (리뷰 수정 시 자동)
+    // 블라인드 해제
     @Transactional
     public void releaseBlind(Long blindId) {
         Blind blind = blindRepository.findById(blindId)

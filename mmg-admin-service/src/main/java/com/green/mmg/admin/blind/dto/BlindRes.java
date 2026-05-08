@@ -18,4 +18,10 @@ public class BlindRes {
     private LocalDateTime startAt;
     private LocalDateTime endsAt;
     private LocalDateTime createdAt;
+    private String storeName;  // 추가
+    private String content;    // 추가
+    private Double rating;     // 추가
+    private String writer;     // 추가
+    private String userName;
+    private String userTel;
 }

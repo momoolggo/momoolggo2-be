@@ -23,8 +23,9 @@ public class SettlementService {
     public SettlementSummaryRes getSummary() {
         Integer expectedAmount = settlementRepository.sumExpectedAmount();
         Integer completedAmount = settlementRepository.sumCompletedAmount();
+        Long completedCount = settlementRepository.countByStatus(SettlementsStatus.COMPLETED);  // 추가
         Long pendingCount = settlementRepository.countByStatus(SettlementsStatus.PENDING);
-        return new SettlementSummaryRes(expectedAmount, completedAmount, pendingCount);
+        return new SettlementSummaryRes(expectedAmount, completedAmount, completedCount, pendingCount);
     }
 
     // 정산 목록 조회
