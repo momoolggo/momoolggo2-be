@@ -56,7 +56,12 @@ public class Blind {
     @Column(name = "writer")  // 작성자명
     private String writer;
 
-    public Blind(Long reviewNo, Long userNo, BlindReason reason, String storeName, String content, Double rating, String writer) {
+    @Column(name = "extra_description", length = 500)
+    private String extraDescription;
+
+    public Blind(Long reviewNo, Long userNo, BlindReason reason,
+                 String storeName, String content, Double rating,
+                 String writer) {
         this.reviewNo = reviewNo;
         this.userNo = userNo;
         this.reason = reason;
@@ -69,6 +74,7 @@ public class Blind {
         this.endsAt = LocalDateTime.now().plusDays(7);
         this.status = BlindStatus.BLINDED;
         this.createdAt = LocalDateTime.now();
+
     }
 
     // 블라인드 확정 (REVIEWING → BLINDED)
