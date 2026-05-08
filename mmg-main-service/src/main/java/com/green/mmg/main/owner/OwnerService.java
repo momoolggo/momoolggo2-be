@@ -4,6 +4,8 @@ package com.green.mmg.main.owner;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.owner.entity.MenuOption;
+import com.green.mmg.main.owner.entity.MenuOptionCategory;
 import com.green.mmg.main.owner.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
@@ -28,6 +31,8 @@ public class OwnerService {
 
     private final OwnerMapper ownerMapper;
     private final AuthFeignClient authFeignClient;   // Phase 4-A: cross-schema customerName/tel 합성
+    private final MenuOptionRepository menuOptionRepository;
+    private final MenuOptionCategoryRepository menuOptionCategoryRepository;
 
     // ========== 이미지 업로드 (공통) ==========
 
@@ -197,6 +202,87 @@ public class OwnerService {
         return menuId;
     }
 
+    @Transactional
+    public OwnerMenuOptionRes registerOption(long callerOwnerNo, OwnerMenuOptionReq req) {
+        verifyOptionCategoryOwner(callerOwnerNo, req.getOptionCategoryNo());
+        MenuOption menuOption = new MenuOption(
+                req.getOptionCategoryNo(),
+                req.getName(),
+                req.getPrice(),
+                req.getSoldOut()
+        );
+        MenuOption saved = menuOptionRepository.save(menuOption);
+
+        return OwnerMenuOptionRes.from(saved);
+    }
+
+    @Transactional
+    public OwnerMenuOptionRes updateOption(long callerOwnerNo, OwnerMenuOptionUpdateReq req){
+        verifyOptionOwner(callerOwnerNo, req.getOptionId());
+        MenuOption menuOption = menuOptionRepository.findById(req.getOptionId())
+                .orElseThrow(() -> new BusinessException("옵션을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        menuOption.update(req.getName(), req.getPrice(), req.getSoldOut());
+        return OwnerMenuOptionRes.from(menuOption);
+    }
+
+    @Transactional
+    public Long deleteOption(long callerOwnerNo, long optionId) {
+        verifyOptionOwner(callerOwnerNo, optionId);
+        menuOptionRepository.deleteById(optionId);
+        return optionId;
+    }
+
+    @Transactional
+    public OwnerMenuOptionCategoryRes registerOptionCategory(long callerOwnerNo, OwnerMenuOptionCategoryRegReq req) {
+        verifyMenuOwner(callerOwnerNo, req.getMenuId());
+
+        if (req.getOptions() == null || req.getOptions().isEmpty()) {
+            throw new BusinessException("옵션은 최소 1개 이상 등록해야 합니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        MenuOptionCategory category = new MenuOptionCategory(
+                req.getMenuId(),
+                req.getOptionCategoryName(),
+                req.getIsRequired(),
+                req.getMaxSelect()
+        );
+
+        MenuOptionCategory savedCategory = menuOptionCategoryRepository.save(category);
+
+        List<MenuOption> options = req.getOptions().stream()
+                .map(opt -> new MenuOption(
+                        savedCategory.getOptionCategoryNo(),
+                        opt.getName(),
+                        opt.getPrice(),
+                        opt.getSoldOut()
+                ))
+                .toList();
+
+        List<MenuOption> savedOptions = menuOptionRepository.saveAll(options);
+
+        return OwnerMenuOptionCategoryRes.from(savedCategory, savedOptions);
+    }
+
+    @Transactional
+    public OwnerMenuOptionCategoryRes updateOptionCategory(long callerOwnerNo, OwnerMenuOptionCategoryUpdateReq req) {
+        verifyOptionCategoryOwner(callerOwnerNo, req.getOptionCategoryNo());
+        MenuOptionCategory menuOptionCategory = menuOptionCategoryRepository.findById(req.getOptionCategoryNo())
+                .orElseThrow(() -> new BusinessException("옵션 카테고리를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        menuOptionCategory.update(req.getOptionCategoryName(), req.getIsRequired(), req.getMaxSelect());
+        List<MenuOption> options = menuOptionRepository.findByOptionCategoryNo(req.getOptionCategoryNo());
+
+        return OwnerMenuOptionCategoryRes.from(menuOptionCategory, options);
+    }
+
+    @Transactional
+    public Long deleteOptionCategory(long callerOwnerNo, long optionCategoryNo) {
+        verifyOptionCategoryOwner(callerOwnerNo, optionCategoryNo);
+        menuOptionCategoryRepository.deleteById(optionCategoryNo);
+        return optionCategoryNo;
+    }
+
     @Transactional(readOnly = true)
     public List<OwnerMenuRes> getMenusByStoreId(long callerOwnerNo, Long storeId) {
         verifyStoreOwner(callerOwnerNo, storeId);
@@ -261,6 +347,25 @@ public class OwnerService {
         if (!Objects.equals(ownerId, callerOwnerNo)) {
             throw new BusinessException("본인 가게의 카테고리만 접근 가능합니다.", HttpStatus.FORBIDDEN);
         }
+    }
+
+    /** optioncategory의 store가 callerOwnerNo 소유인지. */
+    private void verifyOptionCategoryOwner(long callerOwnerNo, long optionCategoryNo) {
+        Long menuId = menuOptionCategoryRepository.findMenuByOptionCategoryNo(optionCategoryNo);
+        if (menuId == null) {
+            throw new BusinessException("옵션카테고리를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        verifyMenuOwner(callerOwnerNo, menuId);
+    }
+
+    /**option의 store가 callerOwnerNo 소유인지 */
+    private void verifyOptionOwner(long callerOwnerNo, long optionId) {
+        Long optionCategoryNo = menuOptionRepository.findOptionCategoryNoByOptionId(optionId);
+        if (optionCategoryNo == null) {
+
+            throw new BusinessException("옵션을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        verifyOptionCategoryOwner(callerOwnerNo, optionCategoryNo);
     }
 
     // ========== 카테고리 관련 (D-bis 그룹 ㅁ: 권한 분기 추가) ==========
