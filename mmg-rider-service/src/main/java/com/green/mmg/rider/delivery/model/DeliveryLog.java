@@ -42,8 +42,9 @@ public class DeliveryLog {
     @Column(name = "to_status", length = 30, nullable = false)
     private DeliveryStatus toStatus;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "actor_role", length = 20, nullable = false)
-    private String actorRole;
+    private ActorRole actorRole;
 
     @Column(name = "actor_user_no")
     private Long actorUserNo;
@@ -58,7 +59,7 @@ public class DeliveryLog {
      * fromStatus nullable (최초 INSERT 시 null), actorUserNo nullable (SYSTEM 시 null).
      */
     public DeliveryLog(String deliveryNo, DeliveryStatus fromStatus,
-                       DeliveryStatus toStatus, String actorRole, Long actorUserNo) {
+                       DeliveryStatus toStatus, ActorRole actorRole, Long actorUserNo) {
         this.deliveryNo = deliveryNo;
         this.fromStatus = fromStatus;
         this.toStatus = toStatus;
