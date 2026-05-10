@@ -38,7 +38,7 @@ orders.delivery_state는 응답 동결 (CLAUDE.md §6 규칙 7) — 프론트가
 
 ### 동시 변경 충돌 시 응답 (D5)
 
-- **a. 메시지 + HTTP 409 Conflict** (`OptimisticLockException` → `ConflictException`)
+- **a. 메시지 + HTTP 409 Conflict** (`OptimisticLockException` → `BusinessException(HttpStatus.CONFLICT)` — R1-A 정착 패턴 일관)
 - b. 500 Internal Server Error (그대로 propagate)
 
 → **a 채택** (D5)
@@ -101,17 +101,18 @@ orders.delivery_state는 응답 동결 (CLAUDE.md §6 규칙 7) — 프론트가
 
 - delivery entity에 `@Version private Long version`
 - DeliveryService.updateStatus 시 dirty checking → JPA가 UPDATE WHERE version=? 자동 생성
-- 충돌 시 Hibernate `ObjectOptimisticLockingFailureException` → `@RestControllerAdvice`에서 `ConflictException` 변환 → HTTP 409
+- 충돌 시 Hibernate `ObjectOptimisticLockingFailureException` → `BusinessException(HttpStatus.CONFLICT)` 변환 후 throw → mmg-common `GlobalExceptionHandler`가 `e.getStatus()` 동적 매핑으로 HTTP 409 응답 (별도 `@RestControllerAdvice` 추가 X — R1-A `RiderService.java:57` + `GlobalExceptionHandler.java:26-31` 정착 패턴 일관)
 
 ### 충돌 응답 (D5-a)
 
 ```json
 {
-  "resultCode": "CONFLICT",
   "resultMessage": "동시 변경 충돌이 발생했습니다. 새로고침 후 다시 시도하세요.",
   "resultData": null
 }
 ```
+
+> 응답 형식: 실측 `ResultResponse` 2-key(message/data). `resultCode` 필드 부재 — `GlobalExceptionHandler.java:30` `new ResultResponse<>(e.getMessage(), null)` 정착 (사례 #17-B 정정).
 
 ### delivery_log 자동 INSERT
 
@@ -127,7 +128,7 @@ public void updateStatus(String deliveryNo, DeliveryStatus to, long callerUserNo
 
     // 권한: rider 본인만 (Objects.equals 패턴)
     if (!Objects.equals(delivery.getRiderNo(), riderRepo.findByUserNo(callerUserNo).getRiderNo())) {
-        throw new ForbiddenException(...);
+        throw new BusinessException("본인 배달이 아닙니다.", HttpStatus.FORBIDDEN);
     }
 
     // 화이트리스트 검증
@@ -158,8 +159,8 @@ public void updateStatus(String deliveryNo, DeliveryStatus to, long callerUserNo
 
 - 7개 상태 전이 화이트리스트 통과 케이스 (6건)
 - 비정상 전이 BusinessException 케이스 (12건 — 각 상태에서 비허용 to)
-- 권한 위반 ForbiddenException 케이스 (1건)
-- 낙관적 락 충돌 시 ConflictException 케이스 (1건 — `@Version` 수동 변조 또는 동시 변경 시뮬)
+- 권한 위반 BusinessException(HttpStatus.FORBIDDEN) 케이스 (1건)
+- 낙관적 락 충돌 시 BusinessException(HttpStatus.CONFLICT) 케이스 (1건 — `@Version` 수동 변조 또는 동시 변경 시뮬)
 - delivery_log 같은 트랜잭션 INSERT 케이스 (1건)
 - orders.delivery_state 매핑 통합 테스트 (3건 — WAITING/PICKED/DELIVERED)
 
