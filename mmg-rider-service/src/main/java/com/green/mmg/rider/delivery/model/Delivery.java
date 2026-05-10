@@ -134,6 +134,16 @@ public class Delivery extends BaseEntity {
     }
 
     /**
+     * 배차 시점 riderNo 박제 (R4 RiderInternalController.assign 진입 시점 호출).
+     *
+     * <p>setter 0 정착 패턴 일관 — 외부에서 riderNo 직접 변경 X, 명시 메서드로만 변경.
+     * R4 assign endpoint = WAITING_ASSIGN 생성 → assignRider → changeStatus(ASSIGNED) 3단계 흐름.</p>
+     */
+    public void assignRider(Long riderNo) {
+        this.riderNo = riderNo;
+    }
+
+    /**
      * 상태 전환 + 단계별 시각 자동 기록 (R3-b DeliveryService.updateStatus 진입 시점 호출).
      *
      * <p>화이트리스트 검증은 Service 책임 (결정 7 (가) ALLOWED_TRANSITIONS Map).

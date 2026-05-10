@@ -5,8 +5,12 @@ import com.green.mmg.rider.delivery.model.ActorRole;
 import com.green.mmg.rider.delivery.model.Delivery;
 import com.green.mmg.rider.delivery.model.DeliveryLog;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
+import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
+import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
+import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
 import com.green.mmg.rider.rider.RiderRepository;
 import com.green.mmg.rider.rider.model.Rider;
+import com.green.mmg.rider.rider.model.RiderStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -17,9 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * 배달 도메인 서비스 — Phase 5-R3-b 범위 (상태 머신 + 낙관적 락 + delivery_log INSERT).
@@ -111,5 +117,77 @@ public class DeliveryService {
 
         // log 기록 (같은 트랜잭션, callerActorRole 매개변수 직접 사용)
         deliveryLogRepository.save(new DeliveryLog(deliveryNo, from, to, callerActorRole, callerUserNo));
+    }
+
+    /**
+     * 배차 요청 처리 — interfaces.md §1.1 (Main → Rider).
+     * Rider ACTIVE 검증 + Delivery 생성(WAITING_ASSIGN → ASSIGNED 즉시 전환) + delivery_log INSERT.
+     * actorRole = SYSTEM (자동 처리, actorUserNo = null).
+     */
+    @Transactional
+    public RiderInternalAssignRes assignDelivery(Long riderNo, RiderInternalAssignReq req) {
+        Rider rider = riderRepository.findById(riderNo)
+                .orElseThrow(() -> new BusinessException("라이더를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (rider.getStatus() != RiderStatus.ACTIVE) {
+            throw new BusinessException(
+                    "라이더가 배차 가능 상태가 아닙니다 (현재: " + rider.getStatus() + ").",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        String deliveryNo = generateDeliveryNo();
+        Delivery delivery = new Delivery(
+                deliveryNo, req.orderId(),
+                req.storePhone(), req.customerPhone(),
+                req.storeAddress(), req.storeLat(), req.storeLng(),
+                req.deliveryAddress(), req.deliveryLat(), req.deliveryLng(),
+                req.baseFee());
+        delivery.assignRider(riderNo);
+        LocalDateTime now = LocalDateTime.now();
+        delivery.changeStatus(DeliveryStatus.ASSIGNED, now);
+
+        try {
+            deliveryRepository.saveAndFlush(delivery);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            throw new BusinessException(
+                    "동시 배차 충돌이 발생했습니다. 새로고침 후 다시 시도하세요.",
+                    HttpStatus.CONFLICT);
+        }
+
+        deliveryLogRepository.save(new DeliveryLog(
+                deliveryNo, null, DeliveryStatus.ASSIGNED, ActorRole.SYSTEM, null));
+
+        return new RiderInternalAssignRes(true, deliveryNo, riderNo, now);
+    }
+
+    /**
+     * 라이더 상태 조회 — interfaces.md §1.3 (Main/Admin → Rider).
+     * Rider.status + 진행 중 배달 1건 조회 (ASSIGNED~DELIVERING 5 상태 중, 가장 최근 배차).
+     */
+    @Transactional(readOnly = true)
+    public RiderInternalStatusRes getRiderInternalStatus(Long riderNo) {
+        Rider rider = riderRepository.findById(riderNo)
+                .orElseThrow(() -> new BusinessException("라이더를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        List<DeliveryStatus> inProgress = List.of(
+                DeliveryStatus.ASSIGNED,
+                DeliveryStatus.ARRIVED_AT_STORE,
+                DeliveryStatus.AWAITING_PICKUP,
+                DeliveryStatus.PICKED_UP,
+                DeliveryStatus.DELIVERING);
+
+        String currentDeliveryNo = deliveryRepository
+                .findFirstByRiderNoAndStatusInOrderByAssignedAtDesc(riderNo, inProgress)
+                .map(Delivery::getDeliveryNo)
+                .orElse(null);
+
+        return new RiderInternalStatusRes(riderNo, rider.getStatus().name(), currentDeliveryNo);
+    }
+
+    /** delivery_no 자동 생성 — 5자리 timestamp + 3자리 영문 (interfaces.md §1.1 박제 형식 예시 일관). */
+    private static String generateDeliveryNo() {
+        long ts = System.currentTimeMillis() % 100_000;
+        String alpha = UUID.randomUUID().toString().replaceAll("[^a-zA-Z]", "")
+                .substring(0, 3).toUpperCase();
+        return String.format("%05d%s", ts, alpha);
     }
 }

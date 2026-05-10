@@ -2,6 +2,7 @@ package com.green.mmg.rider.rider;
 
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.rider.config.RiderProperties;
+import com.green.mmg.rider.internal.dto.RiderInternalLocationRes;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderProfileReq;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
@@ -116,5 +117,20 @@ public class RiderService {
         if (value == null || value.isBlank()) {
             throw new BusinessException(field + "는 필수 입력값입니다.", HttpStatus.BAD_REQUEST);
         }
+    }
+
+    /**
+     * 라이더 위치 조회 — interfaces.md §1.2 (Main → Rider).
+     *
+     * <p>R4 시점 = R5 Redis 인프라 부재 stub. 항상 BusinessException(NOT_FOUND) — interfaces.md §1.2
+     * 박제 일관 ("Response 404 — TTL 만료 또는 위치 송신 0회"). R5 진입 시 LocationService 분리 +
+     * Redis GET {@code rider:loc:{riderNo}} 호출 후 dto 반환.</p>
+     *
+     * <p>리턴 타입은 R5 진입 후를 위한 시그니처 박제 — 현재 구현은 throw만.</p>
+     */
+    public RiderInternalLocationRes getInternalLocation(Long riderNo) {
+        throw new BusinessException(
+                "위치 송신 0회 또는 TTL 만료 (R5 Redis 인프라 도입 예정).",
+                HttpStatus.NOT_FOUND);
     }
 }
