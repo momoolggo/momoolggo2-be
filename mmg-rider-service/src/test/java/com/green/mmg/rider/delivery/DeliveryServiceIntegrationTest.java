@@ -157,6 +157,7 @@ class DeliveryServiceIntegrationTest {
         assertThat(log.getToStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
         assertThat(log.getActorRole()).isEqualTo(ActorRole.RIDER);
         assertThat(log.getActorUserNo()).isEqualTo(rider.getUserNo());
+        assertThat(log.getChangedAt()).isNotNull();
     }
 
     @Test
@@ -183,5 +184,6 @@ class DeliveryServiceIntegrationTest {
         assertThat(log.getToStatus()).isEqualTo(DeliveryStatus.DELIVERED);
         assertThat(log.getActorRole()).isEqualTo(ActorRole.RIDER);
         assertThat(log.getActorUserNo()).isEqualTo(rider.getUserNo());
+        assertThat(log.getChangedAt()).isNotNull();
     }
 }
