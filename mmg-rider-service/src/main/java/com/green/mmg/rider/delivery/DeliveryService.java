@@ -214,6 +214,17 @@ public class DeliveryService {
             throw new BusinessException("page는 0 이상이어야 합니다.", HttpStatus.BAD_REQUEST);
         }
 
+        // status 검증 먼저 (잘못된 요청 시 count 7회 낭비 회피, reviewer W-1)
+        Set<DeliveryStatus> group = null;
+        if (status != null && !status.isBlank()) {
+            group = MONITOR_GROUPS.get(status.toLowerCase(Locale.ROOT));
+            if (group == null) {
+                throw new BusinessException(
+                        "status는 waiting/assigned/delivering/completed 중 하나입니다.",
+                        HttpStatus.BAD_REQUEST);
+            }
+        }
+
         long waiting = deliveryRepository.countByStatus(DeliveryStatus.WAITING_ASSIGN);
         long assigned = deliveryRepository.countByStatus(DeliveryStatus.ASSIGNED)
                 + deliveryRepository.countByStatus(DeliveryStatus.ARRIVED_AT_STORE)
@@ -225,18 +236,9 @@ public class DeliveryService {
         Pageable pageable = PageRequest.of(page, MONITOR_PAGE_SIZE,
                 Sort.by(Sort.Direction.DESC, "assignedAt"));
 
-        Page<Delivery> result;
-        if (status == null || status.isBlank()) {
-            result = deliveryRepository.findAll(pageable);
-        } else {
-            Set<DeliveryStatus> group = MONITOR_GROUPS.get(status.toLowerCase(Locale.ROOT));
-            if (group == null) {
-                throw new BusinessException(
-                        "status는 waiting/assigned/delivering/completed 중 하나입니다.",
-                        HttpStatus.BAD_REQUEST);
-            }
-            result = deliveryRepository.findByStatusIn(group, pageable);
-        }
+        Page<Delivery> result = (group == null)
+                ? deliveryRepository.findAll(pageable)
+                : deliveryRepository.findByStatusIn(group, pageable);
 
         List<RiderInternalMonitorRes.DeliveryRow> rows = result.getContent().stream()
                 .map(d -> new RiderInternalMonitorRes.DeliveryRow(

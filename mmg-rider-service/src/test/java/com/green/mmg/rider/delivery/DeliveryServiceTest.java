@@ -573,14 +573,15 @@ class DeliveryServiceTest {
         }
 
         @Test
-        @DisplayName("invalid status → BusinessException BAD_REQUEST")
+        @DisplayName("invalid status → BusinessException BAD_REQUEST + count 미호출 (W-1 정정)")
         void monitor_invalidStatus_throwsBadRequest() {
-            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
-
             assertThatThrownBy(() -> deliveryService.getMonitor("xxx", 0))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getStatus())
                     .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).countByStatus(any(DeliveryStatus.class));
+            verify(deliveryRepository, never()).findAll(any(Pageable.class));
         }
 
         @Test

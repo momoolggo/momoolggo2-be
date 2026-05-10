@@ -155,4 +155,19 @@ class NoticeServiceTest {
                 .extracting(e -> ((BusinessException) e).getStatus())
                 .isEqualTo(HttpStatus.BAD_REQUEST);
     }
+
+    @Test
+    @DisplayName("targetType=SPECIFIC → BAD_REQUEST + save 미호출 (W-2 정정, R9 도입 예정)")
+    void specificTargetType_throwsBadRequest() {
+        RiderInternalNoticeReq req = new RiderInternalNoticeReq(
+                "제목", NoticeTargetType.SPECIFIC, "본문", NoticeSendType.NOW, null);
+
+        assertThatThrownBy(() -> noticeService.createNotice(req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("SPECIFIC")
+                .extracting(e -> ((BusinessException) e).getStatus())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        verify(noticeRepository, never()).save(any(Notice.class));
+    }
 }

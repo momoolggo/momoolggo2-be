@@ -69,6 +69,12 @@ public class NoticeService {
         if (req.targetType() == null) {
             throw new BusinessException("targetType은 필수입니다.", HttpStatus.BAD_REQUEST);
         }
+        // SPECIFIC은 target_user_no 컬럼 + 라우팅 로직 부재 — R9 도입 예정 (reviewer W-2)
+        if (req.targetType() == NoticeTargetType.SPECIFIC) {
+            throw new BusinessException(
+                    "SPECIFIC 타겟은 R9 도입 예정입니다. 현재 미지원.",
+                    HttpStatus.BAD_REQUEST);
+        }
         if (req.sendType() == null) {
             throw new BusinessException("sendType은 필수입니다.", HttpStatus.BAD_REQUEST);
         }
