@@ -51,7 +51,7 @@ Response 200:
 Response 4xx:
   - 400 BusinessException — rider not available (EATING/REST/SUSPENDED) — D8-a
   - 404 BusinessException — rider not found
-  - 409 ConflictException — 동시 배차 충돌 (낙관적 락) — D5
+  - 409 BusinessException(HttpStatus.CONFLICT) — 동시 배차 충돌 (낙관적 락) — D5 (R3-a 정정 일관, R1-A `RiderService.java:57` 정착 패턴, mmg-common `GlobalExceptionHandler.java:26-31` `e.getStatus()` 동적 매핑)
 ```
 
 검증:
