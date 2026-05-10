@@ -24,7 +24,7 @@ import java.time.LocalDateTime;
  * <p>setter 미공개 — 상태 전환은 명시 메서드(R3 DeliveryService 진입 시 assign/arriveAtStore/pickup/deliver 등)로만 변경.
  * R2 시점은 entity 형태 + WAITING_ASSIGN 가입 시점 고정 생성자만 도입.</p>
  *
- * <p>{@code @Version} 낙관적 락 (Q5-A, ADR-004 D5) — 동시 변경 시 ConflictException 변환.</p>
+ * <p>{@code @Version} 낙관적 락 (Q5-A, ADR-004 D5-a) — 동시 변경 시 DeliveryService 내부 try-catch + saveAndFlush 패턴으로 BusinessException(HttpStatus.CONFLICT) 변환 (R3-a 정정 일관, R1-A 정착 패턴).</p>
  *
  * <p>{@code delivery_no} VARCHAR PK (8자 형식 {@code 00001ABC}) — application 생성 (Figma 정정 9, Phase 3-C Order 패턴).
  * generation 알고리즘은 R3 DeliveryService 진입 시 결정.</p>

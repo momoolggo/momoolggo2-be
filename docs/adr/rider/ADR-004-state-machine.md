@@ -130,22 +130,26 @@ public void updateStatus(String deliveryNo, DeliveryStatus to,
     Delivery delivery = repo.findById(deliveryNo)
             .orElseThrow(() -> new BusinessException("배달을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
-    // 권한: rider 본인만 (Objects.equals 패턴, ADMIN 액터는 별도 분기 R7)
-    if (callerActorRole == ActorRole.RIDER &&
-            !Objects.equals(delivery.getRiderNo(), riderRepo.findByUserNo(callerUserNo).getRiderNo())) {
-        throw new BusinessException("본인 배달이 아닙니다.", HttpStatus.FORBIDDEN);
+    // 권한: RIDER 액터만 본인 배달 검증 (Objects.equals 패턴). ADMIN/SYSTEM은 검증 X (R7 강제 변경 / 자동 처리)
+    if (callerActorRole == ActorRole.RIDER) {
+        Rider caller = riderRepo.findByUserNo(callerUserNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        if (!Objects.equals(delivery.getRiderNo(), caller.getRiderNo())) {
+            throw new BusinessException("본인 배달이 아닙니다.", HttpStatus.FORBIDDEN);
+        }
     }
 
     // 화이트리스트 검증
-    if (!ALLOWED_TRANSITIONS.get(delivery.getStatus()).contains(to)) {
-        throw new BusinessException("invalid state transition: " + delivery.getStatus() + " → " + to,
+    DeliveryStatus from = delivery.getStatus();
+    if (!ALLOWED_TRANSITIONS.get(from).contains(to)) {
+        throw new BusinessException(
+                "invalid state transition: " + from + " -> " + to,
                 HttpStatus.BAD_REQUEST);
     }
 
-    // 상태 변경 (낙관적 락 자동)
-    DeliveryStatus from = delivery.getStatus();
-    delivery.setStatus(to);
-    setTimestampField(delivery, to);  // assigned_at, picked_at 등
+    // 상태 변경 + 단계별 시각 자동 기록 (Delivery.changeStatus 단일 비즈니스 메서드)
+    delivery.changeStatus(to, LocalDateTime.now());
 
     // saveAndFlush + try-catch — OptimisticLockException 메서드 내부 즉시 발생 + 변환 (사례 #19 결정 11 (i))
     try {
@@ -186,7 +190,7 @@ public void updateStatus(String deliveryNo, DeliveryStatus to,
 - delivery 부재 시 BusinessException(HttpStatus.NOT_FOUND) 케이스 — 1건 (`findById.orElseThrow`)
 - delivery_log 같은 트랜잭션 INSERT 케이스 — 1건 (ArgumentCaptor verify)
 - orders.delivery_state 매핑 통합 테스트 — 3건 (WAITING/PICKED/DELIVERED, R3-c 분리)
-- **R3-b 단위 합계 = 22건 (7+12+1+1+1+1)** + R3-c 통합 3건 = R3 전체 25건
+- **R3-b 단위 합계 = 23건 (7 합법 + 12 비합법 + 1 권한 + 1 충돌 + 1 NOT_FOUND + 1 log INSERT)** + R3-c 통합 3건 = R3 전체 26건
 
 ### Phase 5-R6 (외부 endpoint)
 
