@@ -117,10 +117,12 @@ class RiderInternalControllerIntegrationTest {
     @DisplayName("POST /assign happy: 200 + delivery DB ASSIGNED + log INSERT(SYSTEM) + MainInternalClient 호출")
     void assign_happy() throws Exception {
         Rider rider = seedRider(true);
+        // 학원 공유 DB 잔존 데이터 격리 — UUID 기반 orderId 고정값 회피 (W-1 정정)
+        String orderId = "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
-                .thenReturn(new DeliveryStatusUpdateRes("ORD0001", 0, 1));
+                .thenReturn(new DeliveryStatusUpdateRes(orderId, 0, 1));
 
-        String reqJson = sampleReqJson("ORD0001");
+        String reqJson = sampleReqJson(orderId);
 
         mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
                         .contentType(APPLICATION_JSON).content(reqJson))
@@ -135,7 +137,7 @@ class RiderInternalControllerIntegrationTest {
 
         // Delivery DB 검증
         List<Delivery> deliveries = deliveryRepository.findAll().stream()
-                .filter(d -> "ORD0001".equals(d.getOrderId()))
+                .filter(d -> orderId.equals(d.getOrderId()))
                 .toList();
         assertThat(deliveries).hasSize(1);
         Delivery saved = deliveries.get(0);
@@ -157,7 +159,7 @@ class RiderInternalControllerIntegrationTest {
         assertThat(log.getChangedAt()).isNotNull();
 
         // Main 동기화 호출 검증
-        verify(mainInternalClient).updateDeliveryStatus(eq("ORD0001"), any(DeliveryStatusUpdateReq.class));
+        verify(mainInternalClient).updateDeliveryStatus(eq(orderId), any(DeliveryStatusUpdateReq.class));
     }
 
     @Test
