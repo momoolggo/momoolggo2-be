@@ -133,6 +133,23 @@ public class Delivery extends BaseEntity {
         this.extraFee = 0;
     }
 
-    // 비즈니스 메서드 (assignRider / arriveAtStore / pickup / deliver / changeStatus 등) — R3 DeliveryService 진입 시 추가.
-    // R2 범위는 entity 형태 + 명시 생성자만.
+    /**
+     * 상태 전환 + 단계별 시각 자동 기록 (R3-b DeliveryService.updateStatus 진입 시점 호출).
+     *
+     * <p>화이트리스트 검증은 Service 책임 (결정 7 (가) ALLOWED_TRANSITIONS Map).
+     * entity는 검증 후 단순 변경 + timestamp 분기.</p>
+     *
+     * <p>WAITING_ASSIGN / AWAITING_PICKUP는 시각 미기록 — DDL DEFAULT NULL 일관.</p>
+     */
+    public void changeStatus(DeliveryStatus newStatus, LocalDateTime at) {
+        this.status = newStatus;
+        switch (newStatus) {
+            case ASSIGNED -> this.assignedAt = at;
+            case ARRIVED_AT_STORE -> this.arrivedAtStoreAt = at;
+            case PICKED_UP -> this.pickedAt = at;
+            case DELIVERING -> this.deliveringAt = at;
+            case DELIVERED -> this.deliveredAt = at;
+            default -> { /* WAITING_ASSIGN, AWAITING_PICKUP — 시각 미기록 */ }
+        }
+    }
 }
