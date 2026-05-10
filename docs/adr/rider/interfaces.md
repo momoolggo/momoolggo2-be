@@ -440,10 +440,17 @@ Response 400:
 - **인증 방식**: §3/§4 X-Internal 패턴 준수 vs 강화 (Phase 6+ mTLS 일관)
 - **동기 vs 비동기 fanout**: 7.2 즉시/예약 발송 라이더 전체 push 채널 (SSE / STOMP / FCM 후보)
 - **400 케이스 확정**: 7.2 reservedAt 과거값 / sendType=RESERVED인데 reservedAt=null / 7.1 status 화이트리스트 / page 음수
-- **§4.1 vs 7.2 통합/정정**:
-  - §4.1 path `/internal/notice` + category(IMPORTANT/SAFETY/GENERAL) + publishedAt 기반 (DB 영속, ADR-009 R2-c)
-  - 7.2 path `/internal/rider/notice` + targetType + sendType(NOW/RESERVED) + reservedAt 기반 (fanout)
-  - R4 진입 시 본인 결정: 단일 endpoint 통합 vs 영속/fanout 분리 유지
+- **§4.1 vs §7.2 통합/정정** (R3-c 종결 시점 갱신, 2026-05-10 — 시점 분리 박제 일관):
+  - **데이터 모델 = R2-e (이미 종결)** / **입구 = R4 진입 시 결정**
+  - §4.1 path `/internal/notice` + category(IMPORTANT/SAFETY/GENERAL) + publishedAt 기반 (DB 영속, ADR-009 R2-e)
+  - §7.2 path `/internal/rider/notice` + targetType(ALL) + sendType(NOW/RESERVED) + reservedAt 기반 (fanout)
+  - **현 `notice` 테이블 컬럼** (R2-e 종결 박제, `rider-schema.sql:138-149`): notice_no / category / title / content / published_at / sender_admin_no
+  - **§7.2 요구 필드**: targetType / sendType / reservedAt **부재**
+  - R4 진입 시 본인 결정 (옵션 3개):
+    - **(a)** notice 테이블 컬럼 추가 (target_type / send_type / reserved_at, 스키마 마이그레이션 + Q-DB (가) 학원 DB ALTER TABLE 적용)
+    - **(b)** §7.2 명세 정정 (R2-e 컬럼만 추종, 화면 박제 의도 vs 실 명세 충돌 시 본인 결정)
+    - **(c)** 신설 별도 테이블 (notice_dispatch 등 발송 이력 분리, R2-e notice + R4 dispatch 분리 모델)
+  - Code 분석 추천 = R4 진입 시점에 결정 효과 분석 강제 절차(`feedback_decision_load_balance.md`) 작동 후 보고
 
 ### 7.4 R2-b 인덱스 설계 영향
 
