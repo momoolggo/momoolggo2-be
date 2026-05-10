@@ -6,6 +6,7 @@ import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderProfileReq;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
 import com.green.mmg.rider.rider.model.RiderStatus;
+import com.green.mmg.rider.rider.model.VehicleType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -74,7 +75,7 @@ class RiderServiceTest {
             Rider captured = riderCaptor.getValue();
             assertThat(captured.getUserNo()).isEqualTo(CALLER_USER_NO);
             assertThat(captured.getLicenseNo()).isEqualTo("11-22-333333-44");
-            assertThat(captured.getVehicleType()).isEqualTo("MOTORBIKE");
+            assertThat(captured.getVehicleType()).isEqualTo(VehicleType.MOTORBIKE);
 
             // approve() 적용 후 status ACTIVE
             assertThat(captured.getStatus()).isEqualTo(RiderStatus.ACTIVE);
@@ -133,6 +134,28 @@ class RiderServiceTest {
         }
 
         @Test
+        @DisplayName("vehicleType 4종(WALK/BICYCLE/MOTORBIKE/CAR) 모두 valueOf 변환 성공 + Rider 필드 enum 박제 (R3-a 마이그레이션)")
+        void allVehicleTypes_valueOfSuccess() {
+            when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
+            when(riderProperties.autoApprove()).thenReturn(false);
+
+            ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
+            when(riderRepository.save(riderCaptor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
+
+            for (VehicleType type : VehicleType.values()) {
+                RiderProfileReq req = new RiderProfileReq(
+                        "11-22-333333-44", "1종보통", type.name(),
+                        "신한은행", "110-123-456789", "홍길동");
+                riderService.joinProfile(CALLER_USER_NO, req);
+            }
+
+            verify(riderRepository, times(4)).save(any(Rider.class));
+            assertThat(riderCaptor.getAllValues())
+                    .extracting(Rider::getVehicleType)
+                    .containsExactly(VehicleType.WALK, VehicleType.BICYCLE, VehicleType.MOTORBIKE, VehicleType.CAR);
+        }
+
+        @Test
         @DisplayName("필수 필드 blank (licenseNo 빈 문자열): BusinessException BAD_REQUEST + save 미호출")
         void blankLicenseNo_throwsBadRequest() {
             when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
@@ -159,7 +182,7 @@ class RiderServiceTest {
         @Test
         @DisplayName("happy: 본인 rider 조회 → RiderProfileRes 반환")
         void happy_returnsDto() {
-            Rider rider = new Rider(CALLER_USER_NO, "11-22-333333-44", "2종보통", "MOTORBIKE",
+            Rider rider = new Rider(CALLER_USER_NO, "11-22-333333-44", "2종보통", VehicleType.MOTORBIKE,
                     "신한은행", "110-123-456789", "홍길동");
             rider.approve();  // ACTIVE
 

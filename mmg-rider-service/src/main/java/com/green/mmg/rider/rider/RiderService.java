@@ -5,13 +5,12 @@ import com.green.mmg.rider.config.RiderProperties;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderProfileReq;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
+import com.green.mmg.rider.rider.model.VehicleType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Set;
 
 /**
  * 라이더 도메인 서비스 — Phase 5-R1 범위.
@@ -30,10 +29,6 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class RiderService {
-
-    /** Figma 정정 1 — 배달수단 화이트리스트 */
-    private static final Set<String> ALLOWED_VEHICLE_TYPES =
-            Set.of("WALK", "BICYCLE", "MOTORBIKE", "CAR");
 
     private final RiderRepository riderRepository;
     private final RiderProperties riderProperties;
@@ -59,13 +54,14 @@ public class RiderService {
 
         // 2. 입력 검증 (auth/main 기존 패턴 — validation starter 미도입)
         validate(req);
+        VehicleType vehicleType = parseVehicleType(req.vehicleType());
 
         // 3. Rider INSERT (status=PENDING)
         Rider rider = new Rider(
                 callerUserNo,
                 req.licenseNo(),
                 req.licenseType(),
-                req.vehicleType(),
+                vehicleType,
                 req.accountBank(),
                 req.accountNo(),
                 req.accountHolder()
@@ -103,8 +99,13 @@ public class RiderService {
         requireNonBlank(req.accountBank(), "accountBank");
         requireNonBlank(req.accountNo(), "accountNo");
         requireNonBlank(req.accountHolder(), "accountHolder");
+    }
 
-        if (!ALLOWED_VEHICLE_TYPES.contains(req.vehicleType())) {
+    /** Figma 정정 1 — 배달수단 enum 변환 (R3-a 마이그레이션, valueOf IllegalArgumentException → BusinessException) */
+    private static VehicleType parseVehicleType(String value) {
+        try {
+            return VehicleType.valueOf(value);
+        } catch (IllegalArgumentException e) {
             throw new BusinessException(
                     "vehicleType는 WALK/BICYCLE/MOTORBIKE/CAR 중 하나여야 합니다.",
                     HttpStatus.BAD_REQUEST);
