@@ -2,8 +2,11 @@ package com.green.mmg.rider.delivery;
 
 import com.green.mmg.rider.delivery.model.Delivery;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,4 +24,10 @@ public interface DeliveryRepository extends JpaRepository<Delivery, String> {
      */
     Optional<Delivery> findFirstByRiderNoAndStatusInOrderByAssignedAtDesc(
             Long riderNo, List<DeliveryStatus> statuses);
+
+    /** monitor summary — 그룹별 카운트 (idx_delivery_status 활용). */
+    long countByStatus(DeliveryStatus status);
+
+    /** monitor deliveries — status 그룹 필터 (idx_delivery_status 활용). */
+    Page<Delivery> findByStatusIn(Collection<DeliveryStatus> statuses, Pageable pageable);
 }

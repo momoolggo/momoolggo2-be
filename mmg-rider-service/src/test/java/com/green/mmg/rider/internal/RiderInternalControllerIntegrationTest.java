@@ -9,6 +9,10 @@ import com.green.mmg.rider.delivery.model.DeliveryStatus;
 import com.green.mmg.rider.feign.MainInternalClient;
 import com.green.mmg.rider.feign.dto.DeliveryStatusUpdateReq;
 import com.green.mmg.rider.feign.dto.DeliveryStatusUpdateRes;
+import com.green.mmg.rider.notice.NoticeRepository;
+import com.green.mmg.rider.notice.model.Notice;
+import com.green.mmg.rider.notice.model.NoticeSendType;
+import com.green.mmg.rider.notice.model.NoticeTargetType;
 import com.green.mmg.rider.rider.RiderRepository;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.VehicleType;
@@ -66,6 +70,7 @@ class RiderInternalControllerIntegrationTest {
     @Autowired private RiderRepository riderRepository;
     @Autowired private DeliveryRepository deliveryRepository;
     @Autowired private DeliveryLogRepository deliveryLogRepository;
+    @Autowired private NoticeRepository noticeRepository;
     @Autowired private EntityManager em;
 
     @MockitoBean private MainInternalClient mainInternalClient;
@@ -215,5 +220,151 @@ class RiderInternalControllerIntegrationTest {
 
         mockMvc.perform(get("/internal/rider/" + riderNo + "/location"))
                 .andExpect(status().isNotFound());
+    }
+
+    // ============================================================
+    // monitor (4건) — summary 카운트 + status 필터 + page
+    // ============================================================
+
+    @Test
+    @DisplayName("GET /monitor: 200 + summary 4 필드 + deliveries 배열")
+    void monitor_returnsSummaryAndDeliveries() throws Exception {
+        Rider rider = seedRider(true);
+        when(mainInternalClient.updateDeliveryStatus(any(), any()))
+                .thenReturn(new DeliveryStatusUpdateRes("ORD", 0, 1));
+
+        // 1건 ASSIGNED 시드
+        String orderId = "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
+                        .contentType(APPLICATION_JSON).content(sampleReqJson(orderId)))
+                .andExpect(status().isOk());
+
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(get("/internal/rider/monitor"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.waiting").exists())
+                .andExpect(jsonPath("$.summary.assigned").exists())
+                .andExpect(jsonPath("$.summary.delivering").exists())
+                .andExpect(jsonPath("$.summary.completed").exists())
+                .andExpect(jsonPath("$.deliveries").isArray());
+    }
+
+    @Test
+    @DisplayName("GET /monitor?status=assigned: assigned 그룹 enum filter 동작")
+    void monitor_assignedFilter_returnsAssignedRows() throws Exception {
+        Rider rider = seedRider(true);
+        when(mainInternalClient.updateDeliveryStatus(any(), any()))
+                .thenReturn(new DeliveryStatusUpdateRes("ORD", 0, 1));
+
+        String orderId = "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
+                        .contentType(APPLICATION_JSON).content(sampleReqJson(orderId)))
+                .andExpect(status().isOk());
+
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(get("/internal/rider/monitor").param("status", "assigned"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deliveries").isArray())
+                .andExpect(jsonPath("$.deliveries[?(@.orderId == '" + orderId + "')].status")
+                        .value("ASSIGNED"));
+    }
+
+    @Test
+    @DisplayName("GET /monitor?status=invalid: 400 BAD_REQUEST")
+    void monitor_invalidStatus_returns400() throws Exception {
+        mockMvc.perform(get("/internal/rider/monitor").param("status", "xxx"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /monitor?page=-1: 400 BAD_REQUEST")
+    void monitor_negativePage_returns400() throws Exception {
+        mockMvc.perform(get("/internal/rider/monitor").param("page", "-1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ============================================================
+    // notice (3건) — NOW happy / RESERVED happy / RESERVED 과거 400
+    // ============================================================
+
+    private String noticeReqJson(String title, NoticeTargetType targetType, String content,
+                                 NoticeSendType sendType, String reservedAtIsoOrNull) {
+        String reservedField = reservedAtIsoOrNull == null
+                ? "null"
+                : "\"" + reservedAtIsoOrNull + "\"";
+        return String.format("""
+                {
+                  "title": "%s",
+                  "targetType": "%s",
+                  "content": "%s",
+                  "sendType": "%s",
+                  "reservedAt": %s
+                }
+                """, title, targetType.name(), content, sendType.name(), reservedField);
+    }
+
+    @Test
+    @DisplayName("POST /notice NOW happy: 200 + Notice DB INSERT (publishedAt=now)")
+    void notice_now_happy() throws Exception {
+        String title = "공지 " + UUID.randomUUID().toString().substring(0, 6);
+        String body = noticeReqJson(title, NoticeTargetType.ALL, "본문", NoticeSendType.NOW, null);
+
+        mockMvc.perform(post("/internal/rider/notice").contentType(APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultMessage").value("공지 발송 완료"))
+                .andExpect(jsonPath("$.resultData").value(nullValue()));
+
+        em.flush();
+        em.clear();
+
+        Notice saved = noticeRepository.findAll().stream()
+                .filter(n -> title.equals(n.getTitle()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(saved.getSendType()).isEqualTo(NoticeSendType.NOW);
+        assertThat(saved.getReservedAt()).isNull();
+        assertThat(saved.getPublishedAt()).isNotNull();
+        assertThat(saved.getTargetType()).isEqualTo(NoticeTargetType.ALL);
+    }
+
+    @Test
+    @DisplayName("POST /notice RESERVED happy: 200 + publishedAt=reservedAt 저장")
+    void notice_reserved_happy() throws Exception {
+        String title = "예약 " + UUID.randomUUID().toString().substring(0, 6);
+        java.time.LocalDateTime future = java.time.LocalDateTime.now().plusHours(2)
+                .withNano(0);
+        String body = noticeReqJson(title, NoticeTargetType.RIDER, "본문", NoticeSendType.RESERVED,
+                future.toString());
+
+        mockMvc.perform(post("/internal/rider/notice").contentType(APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultMessage").value("공지 발송 완료"));
+
+        em.flush();
+        em.clear();
+
+        Notice saved = noticeRepository.findAll().stream()
+                .filter(n -> title.equals(n.getTitle()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(saved.getSendType()).isEqualTo(NoticeSendType.RESERVED);
+        assertThat(saved.getReservedAt()).isEqualTo(future);
+        assertThat(saved.getPublishedAt()).isEqualTo(future);
+        assertThat(saved.getTargetType()).isEqualTo(NoticeTargetType.RIDER);
+    }
+
+    @Test
+    @DisplayName("POST /notice RESERVED 과거값: 400 BAD_REQUEST")
+    void notice_reserved_pastTime_returns400() throws Exception {
+        java.time.LocalDateTime past = java.time.LocalDateTime.now().minusMinutes(1);
+        String body = noticeReqJson("과거", NoticeTargetType.ALL, "본문", NoticeSendType.RESERVED,
+                past.toString());
+
+        mockMvc.perform(post("/internal/rider/notice").contentType(APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
     }
 }

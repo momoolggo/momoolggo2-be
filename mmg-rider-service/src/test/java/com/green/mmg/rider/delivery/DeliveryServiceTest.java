@@ -7,6 +7,7 @@ import com.green.mmg.rider.delivery.model.DeliveryLog;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
+import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
 import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
 import com.green.mmg.rider.rider.RiderRepository;
 import com.green.mmg.rider.rider.model.Rider;
@@ -20,10 +21,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -494,6 +500,115 @@ class DeliveryServiceTest {
 
             verify(deliveryRepository, never())
                     .findFirstByRiderNoAndStatusInOrderByAssignedAtDesc(any(), anyList());
+        }
+    }
+
+    @Nested
+    @DisplayName("Admin 모니터 (6건)")
+    class GetMonitor {
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("status=null happy: summary 4그룹 + findAll page0")
+        void monitor_noFilter_returnsSummaryAndAllDeliveries() {
+            when(deliveryRepository.countByStatus(DeliveryStatus.WAITING_ASSIGN)).thenReturn(2L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.ASSIGNED)).thenReturn(1L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.ARRIVED_AT_STORE)).thenReturn(2L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.AWAITING_PICKUP)).thenReturn(0L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.PICKED_UP)).thenReturn(3L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.DELIVERING)).thenReturn(1L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.DELIVERED)).thenReturn(7L);
+
+            Delivery d1 = deliveryWith(DeliveryStatus.ASSIGNED, 5L);
+            Delivery d2 = deliveryWith(DeliveryStatus.DELIVERING, 6L);
+            when(deliveryRepository.findAll(any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(d1, d2)));
+
+            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0);
+
+            assertThat(res.summary().waiting()).isEqualTo(2L);
+            assertThat(res.summary().assigned()).isEqualTo(3L); // 1+2+0
+            assertThat(res.summary().delivering()).isEqualTo(4L); // 3+1
+            assertThat(res.summary().completed()).isEqualTo(7L);
+            assertThat(res.deliveries()).hasSize(2);
+            assertThat(res.deliveries().get(0).status()).isEqualTo("ASSIGNED");
+            assertThat(res.deliveries().get(1).status()).isEqualTo("DELIVERING");
+
+            verify(deliveryRepository, never())
+                    .findByStatusIn(any(Collection.class), any(Pageable.class));
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("status=assigned: ASSIGNED+ARRIVED_AT_STORE+AWAITING_PICKUP 3 enum filter")
+        void monitor_assignedFilter_passesGroupSet() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+            ArgumentCaptor<Collection<DeliveryStatus>> captor = ArgumentCaptor.forClass(Collection.class);
+            when(deliveryRepository.findByStatusIn(captor.capture(), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of()));
+
+            deliveryService.getMonitor("assigned", 0);
+
+            assertThat(captor.getValue()).containsExactlyInAnyOrder(
+                    DeliveryStatus.ASSIGNED,
+                    DeliveryStatus.ARRIVED_AT_STORE,
+                    DeliveryStatus.AWAITING_PICKUP);
+            verify(deliveryRepository, never()).findAll(any(Pageable.class));
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("status=DELIVERING(대문자) lowercase 정규화 후 group 매칭")
+        void monitor_uppercase_normalizedToLowercase() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+            ArgumentCaptor<Collection<DeliveryStatus>> captor = ArgumentCaptor.forClass(Collection.class);
+            when(deliveryRepository.findByStatusIn(captor.capture(), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of()));
+
+            deliveryService.getMonitor("DELIVERING", 0);
+
+            assertThat(captor.getValue()).containsExactlyInAnyOrder(
+                    DeliveryStatus.PICKED_UP,
+                    DeliveryStatus.DELIVERING);
+        }
+
+        @Test
+        @DisplayName("invalid status → BusinessException BAD_REQUEST")
+        void monitor_invalidStatus_throwsBadRequest() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+
+            assertThatThrownBy(() -> deliveryService.getMonitor("xxx", 0))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("page<0 → BusinessException BAD_REQUEST")
+        void monitor_negativePage_throwsBadRequest() {
+            assertThatThrownBy(() -> deliveryService.getMonitor(null, -1))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).countByStatus(any(DeliveryStatus.class));
+        }
+
+        @Test
+        @DisplayName("PageRequest size=20 + assignedAt DESC sort 검증")
+        void monitor_pageRequestFixedSizeAndSort() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+            ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+            when(deliveryRepository.findAll(pageableCaptor.capture()))
+                    .thenReturn(new PageImpl<>(List.of()));
+
+            deliveryService.getMonitor(null, 3);
+
+            Pageable captured = pageableCaptor.getValue();
+            assertThat(captured.getPageSize()).isEqualTo(20);
+            assertThat(captured.getPageNumber()).isEqualTo(3);
+            assertThat(captured.getSort().getOrderFor("assignedAt").getDirection())
+                    .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
         }
     }
 }

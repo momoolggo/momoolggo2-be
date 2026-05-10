@@ -7,12 +7,17 @@ import com.green.mmg.rider.delivery.model.DeliveryLog;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
+import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
 import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
 import com.green.mmg.rider.rider.RiderRepository;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -22,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -181,6 +187,72 @@ public class DeliveryService {
                 .orElse(null);
 
         return new RiderInternalStatusRes(riderNo, rider.getStatus().name(), currentDeliveryNo);
+    }
+
+    /** monitor 페이지 사이즈 고정 (page만 query param). */
+    private static final int MONITOR_PAGE_SIZE = 20;
+
+    /** monitor status 그룹 매핑 — 4그룹 키워드 → DeliveryStatus enum 집합. */
+    private static final Map<String, Set<DeliveryStatus>> MONITOR_GROUPS = Map.of(
+            "waiting", EnumSet.of(DeliveryStatus.WAITING_ASSIGN),
+            "assigned", EnumSet.of(
+                    DeliveryStatus.ASSIGNED,
+                    DeliveryStatus.ARRIVED_AT_STORE,
+                    DeliveryStatus.AWAITING_PICKUP),
+            "delivering", EnumSet.of(
+                    DeliveryStatus.PICKED_UP,
+                    DeliveryStatus.DELIVERING),
+            "completed", EnumSet.of(DeliveryStatus.DELIVERED));
+
+    /**
+     * Admin 모니터 — GET /internal/rider/monitor.
+     * summary 4그룹 카운트 + status 필터 + page 목록.
+     */
+    @Transactional(readOnly = true)
+    public RiderInternalMonitorRes getMonitor(String status, int page) {
+        if (page < 0) {
+            throw new BusinessException("page는 0 이상이어야 합니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        long waiting = deliveryRepository.countByStatus(DeliveryStatus.WAITING_ASSIGN);
+        long assigned = deliveryRepository.countByStatus(DeliveryStatus.ASSIGNED)
+                + deliveryRepository.countByStatus(DeliveryStatus.ARRIVED_AT_STORE)
+                + deliveryRepository.countByStatus(DeliveryStatus.AWAITING_PICKUP);
+        long delivering = deliveryRepository.countByStatus(DeliveryStatus.PICKED_UP)
+                + deliveryRepository.countByStatus(DeliveryStatus.DELIVERING);
+        long completed = deliveryRepository.countByStatus(DeliveryStatus.DELIVERED);
+
+        Pageable pageable = PageRequest.of(page, MONITOR_PAGE_SIZE,
+                Sort.by(Sort.Direction.DESC, "assignedAt"));
+
+        Page<Delivery> result;
+        if (status == null || status.isBlank()) {
+            result = deliveryRepository.findAll(pageable);
+        } else {
+            Set<DeliveryStatus> group = MONITOR_GROUPS.get(status.toLowerCase(Locale.ROOT));
+            if (group == null) {
+                throw new BusinessException(
+                        "status는 waiting/assigned/delivering/completed 중 하나입니다.",
+                        HttpStatus.BAD_REQUEST);
+            }
+            result = deliveryRepository.findByStatusIn(group, pageable);
+        }
+
+        List<RiderInternalMonitorRes.DeliveryRow> rows = result.getContent().stream()
+                .map(d -> new RiderInternalMonitorRes.DeliveryRow(
+                        d.getDeliveryNo(),
+                        d.getOrderId(),
+                        d.getRiderNo(),
+                        d.getStatus().name(),
+                        d.getBaseFee(),
+                        d.getExtraFee(),
+                        d.getAssignedAt(),
+                        d.getDeliveredAt()))
+                .toList();
+
+        return new RiderInternalMonitorRes(
+                new RiderInternalMonitorRes.Summary(waiting, assigned, delivering, completed),
+                rows);
     }
 
     /** delivery_no 자동 생성 — 5자리 timestamp + 3자리 영문 (interfaces.md §1.1 박제 형식 예시 일관). */

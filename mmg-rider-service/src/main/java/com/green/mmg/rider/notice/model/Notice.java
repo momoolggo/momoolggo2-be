@@ -46,6 +46,17 @@ public class Notice extends BaseEntity {
     @Column(name = "content", columnDefinition = "TEXT", nullable = false)
     private String content;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target_type", length = 20, nullable = false)
+    private NoticeTargetType targetType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "send_type", length = 20, nullable = false)
+    private NoticeSendType sendType;
+
+    @Column(name = "reserved_at")
+    private LocalDateTime reservedAt;
+
     @Column(name = "published_at", nullable = false)
     private LocalDateTime publishedAt;
 
@@ -53,14 +64,18 @@ public class Notice extends BaseEntity {
     private Long senderAdminNo;
 
     /**
-     * 신규 INSERT 시점 생성자 — admin Feign 호출 시 R9 NoticeService 진입점.
-     * published_at: 즉시(NOW) = now() / 예약(RESERVE) = 미래 시각 (호출자 제어).
+     * 신규 INSERT 시점 생성자 — POST /internal/rider/notice 진입점.
+     * sendType=NOW: publishedAt=now, reservedAt=null. sendType=RESERVED: publishedAt=reservedAt, reservedAt=reservedAt (호출자 검증 후 전달).
      */
     public Notice(NoticeCategory category, String title, String content,
-                  LocalDateTime publishedAt, Long senderAdminNo) {
+                  NoticeTargetType targetType, NoticeSendType sendType,
+                  LocalDateTime reservedAt, LocalDateTime publishedAt, Long senderAdminNo) {
         this.category = category;
         this.title = title;
         this.content = content;
+        this.targetType = targetType;
+        this.sendType = sendType;
+        this.reservedAt = reservedAt;
         this.publishedAt = publishedAt;
         this.senderAdminNo = senderAdminNo;
     }

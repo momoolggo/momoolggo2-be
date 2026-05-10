@@ -140,10 +140,23 @@ CREATE TABLE IF NOT EXISTS `notice` (
   `category`         VARCHAR(20)  NOT NULL                            COMMENT 'IMPORTANT/SAFETY/GENERAL — NoticeCategory enum',
   `title`            VARCHAR(200) NOT NULL                            COMMENT '공지 제목',
   `content`          TEXT         NOT NULL                            COMMENT '공지 본문',
-  `published_at`     DATETIME     NOT NULL                            COMMENT '발송 시점 (즉시 = now, 예약 = 미래)',
+  `target_type`      VARCHAR(20)  NOT NULL DEFAULT 'ALL'              COMMENT 'ALL/RIDER/SPECIFIC — NoticeTargetType enum',
+  `send_type`        VARCHAR(20)  NOT NULL DEFAULT 'NOW'              COMMENT 'NOW/RESERVED — NoticeSendType enum',
+  `reserved_at`      DATETIME     DEFAULT NULL                        COMMENT '예약 발송 시각 (sendType=RESERVED 시 필수)',
+  `published_at`     DATETIME     NOT NULL                            COMMENT '발송 시점 (즉시 = now, 예약 = reservedAt)',
   `sender_admin_no`  BIGINT       NOT NULL                            COMMENT '논리 FK → my_mmg_admin.admin',
   `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`notice_no`),
   KEY `idx_notice_published_at` (`published_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================
+-- Migration: notice 컬럼 3개 추가 (target_type / send_type / reserved_at)
+-- POST /internal/rider/notice (즉시/예약 발송 분기)
+-- 학원 DB 적용 시 1회 실행. 이미 적용된 환경은 skip (재실행 안전).
+-- =============================================================
+ALTER TABLE `notice`
+  ADD COLUMN IF NOT EXISTS `target_type` VARCHAR(20) NOT NULL DEFAULT 'ALL' AFTER `content`,
+  ADD COLUMN IF NOT EXISTS `send_type`   VARCHAR(20) NOT NULL DEFAULT 'NOW' AFTER `target_type`,
+  ADD COLUMN IF NOT EXISTS `reserved_at` DATETIME       DEFAULT NULL          AFTER `send_type`;
