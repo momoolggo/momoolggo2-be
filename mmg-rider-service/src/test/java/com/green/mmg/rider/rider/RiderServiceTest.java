@@ -176,6 +176,23 @@ class RiderServiceTest {
     }
 
     @Nested
+    @DisplayName("GetInternalLocation (R4 §1.2 stub, R5 채움 예정)")
+    class GetInternalLocation {
+
+        @Test
+        @DisplayName("R4 시점 = R5 Redis 인프라 부재 → BusinessException NOT_FOUND throw")
+        void r4Stub_throwsNotFound() {
+            assertThatThrownBy(() -> riderService.getInternalLocation(5L))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("위치 송신 0회 또는 TTL 만료")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+
+            verifyNoInteractions(riderRepository, riderProperties);
+        }
+    }
+
+    @Nested
     @DisplayName("FindProfile")
     class FindProfile {
 
