@@ -30,6 +30,9 @@ public record RiderInternalMonitorRes(
             Integer baseFee,
             Integer extraFee,
             LocalDateTime assignedAt,
-            LocalDateTime deliveredAt
+            LocalDateTime deliveredAt,
+            String storeName,        // 관리자 배달관리 추가
+            Integer elapsedMinutes,  // 추가
+            Double distanceKm // 추가
     ) {}
 }

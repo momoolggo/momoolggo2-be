@@ -17,6 +17,9 @@ public record RiderInternalMonitorRes(
             Integer baseFee,
             Integer extraFee,
             LocalDateTime assignedAt,
-            LocalDateTime deliveredAt
+            LocalDateTime deliveredAt,
+            String storeName,
+            Integer elapsedMinutes,
+            Double distanceKm
     ) {}
 }
