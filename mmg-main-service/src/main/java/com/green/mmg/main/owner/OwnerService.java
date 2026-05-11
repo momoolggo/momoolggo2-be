@@ -3,7 +3,7 @@ package com.green.mmg.main.owner;
 
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
-import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.owner.entity.MenuOption;
 import com.green.mmg.main.owner.entity.MenuOptionCategory;
 import com.green.mmg.main.owner.model.*;
@@ -143,7 +143,7 @@ public class OwnerService {
                 .distinct().collect(Collectors.toList());
         // Phase 4-A-1 백필: Feign batch null 처리 (A-4 패턴 전파 — getStoreReviews와 동일)
         // null 응답 시 빈 Map → 누락된 userNo의 customerName/tel은 미설정 fallback
-        List<UserBriefDto> users = authFeignClient.getUsers(userNos);
+        List<UserBriefDto> users = authFeignClient.getUsers(userNos).getResultData();
         Map<Long, UserBriefDto> userMap = (users == null ? List.<UserBriefDto>of() : users).stream()
                 .collect(Collectors.toMap(UserBriefDto::getUserNo, u -> u));
 

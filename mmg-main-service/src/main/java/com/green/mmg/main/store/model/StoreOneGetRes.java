@@ -18,7 +18,10 @@ public class StoreOneGetRes {
     private String detailLocation;
     private String createdAt;
     private String notice;
-    private String business_number;
+    private String businessNumber;
+    private String bankName;
+    private String accountNumber;
+    private String accountHolder;
     private String storeTel;
     private int ratingAvg;
     private int ratingCount;

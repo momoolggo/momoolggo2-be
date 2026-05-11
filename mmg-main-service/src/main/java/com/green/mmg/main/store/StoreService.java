@@ -2,7 +2,7 @@ package com.green.mmg.main.store;
 
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
-import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.owner.MenuOptionCategoryRepository;
 import com.green.mmg.main.owner.MenuOptionRepository;
 import com.green.mmg.main.owner.entity.MenuOption;
@@ -39,7 +39,7 @@ public class StoreService {
     public StoreOneGetRes storeOneGet(long id){
         StoreOneGetRes res = storeMapper.findOne(id);
         if (res != null && res.getOwnerId() != null) {
-            UserBriefDto owner = authFeignClient.getOwner(res.getOwnerId());
+            UserBriefDto owner = authFeignClient.getOwnerInfo(res.getOwnerId()).getResultData();
             if (owner == null) {
                 throw new BusinessException("사장 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
             }
@@ -143,9 +143,9 @@ public class StoreService {
         List<Long> userNos = rows.stream()
                 .map(r -> ((Number) r.get("userNo")).longValue())
                 .distinct().collect(Collectors.toList());
-        // Phase 3-Backfill-A-4: Feign batch null 처리 (storeOneGet 패턴 전파)
+        // Phase 3I-Backfill-A-4: Feign batch null 처리 (storeOneGet 패턴 전파)
         // null 응답 시 빈 Map → 누락된 userNo는 review의 userName을 빈 문자열로 fallback
-        List<UserBriefDto> users = authFeignClient.getUsers(userNos);
+        List<UserBriefDto> users = authFeignClient.getUsers(userNos).getResultData();
         Map<Long, String> nameMap = (users == null ? List.<UserBriefDto>of() : users).stream()
                 .collect(Collectors.toMap(UserBriefDto::getUserNo, UserBriefDto::getName));
 

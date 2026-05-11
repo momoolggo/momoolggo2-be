@@ -5,7 +5,7 @@ import com.green.mmg.common.dto.feign.UserBriefDto;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,4 +30,18 @@ public interface UserRepository extends JpaRepository<User, Long> {
             WHERE u.userNo IN :ids
             """)
     List<UserBriefDto> findBriefsByUserNos(@Param("ids") List<Long> ids);
+
+    @Query("""
+            SELECT u
+            FROM User u
+            WHERE u.userNo = :userNo
+            """)
+
+    Optional<User> findInternalUserDetailByUserNo(@Param("userNo") long userNo);
+    long countByRole(String role);
+    long countByCreatedAtBetween(Date start, Date end);
+
+    @Query("SELECT u.userNo FROM User u WHERE u.role = :role")
+    List<Long> findAllUserNosByRole(@Param("role") String role);
+
 }
