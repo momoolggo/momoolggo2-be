@@ -2,6 +2,7 @@ package com.green.mmg.rider.delivery;
 
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.model.UserPrincipal;
+import com.green.mmg.rider.delivery.dto.DeliveryCancelReq;
 import com.green.mmg.rider.delivery.dto.DeliveryCompleteReq;
 import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
 import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
@@ -12,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -113,6 +115,21 @@ public class RiderOrderController {
                 deliveryNo, principal.getSignedUserNo(), req);
         notifyMain(result);
         return new ResultResponse<>("배달 완료 처리 성공", null);
+    }
+
+    /**
+     * R6-cancel: 라이더가 진행 중 배달을 사고/개인사유/기타로 반려.
+     * Main 동기화 시 reason 전달 X (decision-#35 (가)) — status=WAITING_ASSIGN 알림만.
+     */
+    @PostMapping("/{deliveryNo}/cancel")
+    public ResultResponse<Void> cancel(
+            @PathVariable String deliveryNo,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody DeliveryCancelReq req) {
+        DeliveryTransitionResult result = deliveryService.cancelDelivery(
+                deliveryNo, principal.getSignedUserNo(), req);
+        notifyMain(result);
+        return new ResultResponse<>("배달 반려 처리 성공", null);
     }
 
     /**
