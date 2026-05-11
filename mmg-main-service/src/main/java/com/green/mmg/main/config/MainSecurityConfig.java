@@ -39,6 +39,9 @@ public class MainSecurityConfig {
 
                         // 헬스/임시
                         .requestMatchers("/actuator/health").permitAll()
+                        // 서버간 통신 internal API
+                        .requestMatchers("/internal/**").permitAll()
+
 
                         .anyRequest().authenticated()
                 )
