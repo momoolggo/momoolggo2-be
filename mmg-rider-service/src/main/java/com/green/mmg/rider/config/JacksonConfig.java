@@ -7,10 +7,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Spring Boot 4.0 + spring-boot-starter-web에서 ObjectMapper 자동 등록 누락 대응.
+ * jackson-databind(Jackson 2, com.fasterxml) 직접 의존 시 Boot 자동설정 미포함 →
+ * JavaTimeModule + WRITE_DATES_AS_TIMESTAMPS=false 명시 등록.
  *
- * <p>R5 RedisRiderLocationStore가 ObjectMapper Bean inject — JavaTimeModule(LocalDateTime ISO-8601) +
- * WRITE_DATES_AS_TIMESTAMPS=false 설정 명시.</p>
+ * <p>Spring Boot 4.0 기본 자동설정은 Jackson 3(tools.jackson) ObjectMapper 대상.
+ * R5 RedisRiderLocationStore가 Jackson 2 ObjectMapper Bean inject — LocalDateTime ISO-8601
+ * 직렬화를 위해 JavaTimeModule 명시 필요.</p>
  */
 @Configuration
 public class JacksonConfig {
