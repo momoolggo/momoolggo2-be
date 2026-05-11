@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS `delivery_log` (
   `to_status`      VARCHAR(30) NOT NULL                            COMMENT '변경 후 상태 (ADR-004 7 enum)',
   `actor_role`     VARCHAR(20) NOT NULL                            COMMENT 'RIDER / SYSTEM / ADMIN',
   `actor_user_no`  BIGINT      DEFAULT NULL                        COMMENT '변경 주체 user_no (SYSTEM 시 NULL)',
+  `reason`         VARCHAR(20) DEFAULT NULL                        COMMENT 'cancel 시 박제 (ACCIDENT/PERSONAL/OTHER, R6-cancel) — 다른 transition NULL',
   `changed_at`     DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '변경 시각',
   PRIMARY KEY (`log_no`),
   KEY `idx_delivery_log_delivery_no` (`delivery_no`)
@@ -160,3 +161,12 @@ ALTER TABLE `notice`
   ADD COLUMN IF NOT EXISTS `target_type` VARCHAR(20) NOT NULL DEFAULT 'ALL' AFTER `content`,
   ADD COLUMN IF NOT EXISTS `send_type`   VARCHAR(20) NOT NULL DEFAULT 'NOW' AFTER `target_type`,
   ADD COLUMN IF NOT EXISTS `reserved_at` DATETIME       DEFAULT NULL          AFTER `send_type`;
+
+-- =============================================================
+-- Migration: delivery_log.reason 컬럼 추가 (R6-cancel)
+-- POST /api/rider/order/{deliveryNo}/cancel 사유 박제 (ACCIDENT/PERSONAL/OTHER)
+-- cancel 시만 박제, 다른 transition은 NULL.
+-- 학원 DB 적용 시 1회 실행. 이미 적용된 환경은 skip (재실행 안전).
+-- =============================================================
+ALTER TABLE `delivery_log`
+  ADD COLUMN IF NOT EXISTS `reason` VARCHAR(20) DEFAULT NULL AFTER `actor_user_no`;

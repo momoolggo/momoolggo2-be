@@ -49,6 +49,10 @@ public class DeliveryLog {
     @Column(name = "actor_user_no")
     private Long actorUserNo;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reason", length = 20)
+    private DeliveryCancelReason reason;
+
     @Column(name = "changed_at", insertable = false, updatable = false,
             nullable = false,
             columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
@@ -56,14 +60,24 @@ public class DeliveryLog {
 
     /**
      * 이력 INSERT 시점 생성자 — DeliveryService.updateStatus 내부 호출 (R3 진입 시).
-     * fromStatus nullable (최초 INSERT 시 null), actorUserNo nullable (SYSTEM 시 null).
+     * fromStatus nullable (최초 INSERT 시 null), actorUserNo nullable (SYSTEM 시 null), reason nullable (cancel 외 NULL).
      */
     public DeliveryLog(String deliveryNo, DeliveryStatus fromStatus,
                        DeliveryStatus toStatus, ActorRole actorRole, Long actorUserNo) {
+        this(deliveryNo, fromStatus, toStatus, actorRole, actorUserNo, null);
+    }
+
+    /**
+     * R6-cancel 시점 생성자 — reason 필수 (decision-#34 (가) enum 3종 단독).
+     */
+    public DeliveryLog(String deliveryNo, DeliveryStatus fromStatus,
+                       DeliveryStatus toStatus, ActorRole actorRole, Long actorUserNo,
+                       DeliveryCancelReason reason) {
         this.deliveryNo = deliveryNo;
         this.fromStatus = fromStatus;
         this.toStatus = toStatus;
         this.actorRole = actorRole;
         this.actorUserNo = actorUserNo;
+        this.reason = reason;
     }
 }
