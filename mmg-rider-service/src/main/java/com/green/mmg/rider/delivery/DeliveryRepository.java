@@ -30,4 +30,11 @@ public interface DeliveryRepository extends JpaRepository<Delivery, String> {
 
     /** monitor deliveries — status 그룹 필터 (idx_delivery_status 활용). */
     Page<Delivery> findByStatusIn(Collection<DeliveryStatus> statuses, Pageable pageable);
+
+    /** R6 라이더 측 진행 중 목록 — riderNo 본인 + status 그룹 (idx_delivery_rider_no + status). */
+    List<Delivery> findByRiderNoAndStatusInOrderByAssignedAtDesc(
+            Long riderNo, Collection<DeliveryStatus> statuses);
+
+    /** R6 대기 배달 목록 — WAITING_ASSIGN 전체, 가용 라이더 모두 대상 (rider_no NULL). */
+    List<Delivery> findByStatusOrderByCreatedAtAsc(DeliveryStatus status);
 }

@@ -144,6 +144,28 @@ public class Delivery extends BaseEntity {
     }
 
     /**
+     * 배차 반려 시점 riderNo NULL 처리 (R6 RiderOrderController.reject 진입 시점 호출).
+     *
+     * <p>assignRider 패턴 일관 — setter 0, 명시 메서드로만 변경.
+     * reject 흐름 = ASSIGNED → unassignRider → changeStatus(WAITING_ASSIGN) 3단계.</p>
+     */
+    public void unassignRider() {
+        this.riderNo = null;
+    }
+
+    /**
+     * 배달 완료 시점 메타데이터 박제 (R6 RiderOrderController.complete 진입 시점 호출).
+     *
+     * <p>DeliveryService.performRiderTransition 흐름: {@code beforeChange.accept(delivery)} (본 메서드)
+     * → {@code changeStatus(DELIVERED, now)} 순서. 두 메서드 독립 필드라 순서 영향 0.
+     * R3-a assignRider 패턴 일관 — entity 메서드 명시 추가.</p>
+     */
+    public void markDelivered(String deliveredMethod, String deliveredPhotoUrl) {
+        this.deliveredMethod = deliveredMethod;
+        this.deliveredPhotoUrl = deliveredPhotoUrl;
+    }
+
+    /**
      * 상태 전환 + 단계별 시각 자동 기록 (R3-b DeliveryService.updateStatus 진입 시점 호출).
      *
      * <p>화이트리스트 검증은 Service 책임 (결정 7 (가) ALLOWED_TRANSITIONS Map).

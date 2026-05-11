@@ -5,6 +5,9 @@ import com.green.mmg.rider.delivery.model.ActorRole;
 import com.green.mmg.rider.delivery.model.Delivery;
 import com.green.mmg.rider.delivery.model.DeliveryLog;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
+import com.green.mmg.rider.delivery.dto.DeliveryCompleteReq;
+import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
+import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
 import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
@@ -255,6 +258,159 @@ public class DeliveryService {
         return new RiderInternalMonitorRes(
                 new RiderInternalMonitorRes.Summary(waiting, assigned, delivering, completed),
                 rows);
+    }
+
+    // ========================================================================
+    // R6: 라이더 측 외부 endpoint 처리 (interfaces.md §6.2)
+    // 6 transition wrapper + 2 조회 메서드. updateStatus(R3-b)는 admin/system actor 그대로 보존.
+    // ========================================================================
+
+    /**
+     * 대기 배달 목록 — WAITING_ASSIGN 전체, 시간순. R6 §6.2 GET /api/rider/order/waiting.
+     *
+     * <p>caller가 ACTIVE 라이더인지 검증 (PENDING/EATING/SUSPENDED 거부, reviewer C-2 정정).
+     * PENDING 라이더가 가게/손님 평문 정보 조회 회피 — 보안 결함 차단.</p>
+     */
+    @Transactional(readOnly = true)
+    public List<DeliveryWaitingRowRes> getWaitingDeliveries(long callerUserNo) {
+        Rider caller = riderRepository.findByUserNo(callerUserNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        if (caller.getStatus() != RiderStatus.ACTIVE) {
+            throw new BusinessException(
+                    "ACTIVE 라이더만 대기 배달을 조회할 수 있습니다 (현재: " + caller.getStatus() + ").",
+                    HttpStatus.FORBIDDEN);
+        }
+        return deliveryRepository.findByStatusOrderByCreatedAtAsc(DeliveryStatus.WAITING_ASSIGN)
+                .stream().map(DeliveryService::toWaitingRow).toList();
+    }
+
+    /** 본인 진행 중 배달 목록 — ASSIGNED~DELIVERING 5 status. R6 §6.2 GET /api/rider/order/inprogress */
+    @Transactional(readOnly = true)
+    public List<DeliveryWaitingRowRes> getMyInProgressDeliveries(long callerUserNo) {
+        Rider caller = riderRepository.findByUserNo(callerUserNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        List<DeliveryStatus> inProgress = List.of(
+                DeliveryStatus.ASSIGNED,
+                DeliveryStatus.ARRIVED_AT_STORE,
+                DeliveryStatus.AWAITING_PICKUP,
+                DeliveryStatus.PICKED_UP,
+                DeliveryStatus.DELIVERING);
+        return deliveryRepository.findByRiderNoAndStatusInOrderByAssignedAtDesc(
+                        caller.getRiderNo(), inProgress)
+                .stream().map(DeliveryService::toWaitingRow).toList();
+    }
+
+    /** ASSIGNED → ARRIVED_AT_STORE. R6 §6.2 PUT /accept */
+    @Transactional
+    public DeliveryTransitionResult acceptDelivery(String deliveryNo, long callerUserNo) {
+        return performRiderTransition(deliveryNo, DeliveryStatus.ARRIVED_AT_STORE, callerUserNo, null);
+    }
+
+    /** ASSIGNED → WAITING_ASSIGN + unassignRider. R6 §6.2 PUT /reject */
+    @Transactional
+    public DeliveryTransitionResult rejectDelivery(String deliveryNo, long callerUserNo) {
+        return performRiderTransition(deliveryNo, DeliveryStatus.WAITING_ASSIGN, callerUserNo,
+                Delivery::unassignRider);
+    }
+
+    /** ARRIVED_AT_STORE → AWAITING_PICKUP. R6 §6.2 PUT /arrive */
+    @Transactional
+    public DeliveryTransitionResult arriveAtStore(String deliveryNo, long callerUserNo) {
+        return performRiderTransition(deliveryNo, DeliveryStatus.AWAITING_PICKUP, callerUserNo, null);
+    }
+
+    /** AWAITING_PICKUP → PICKED_UP. R6 §6.2 PUT /pickup */
+    @Transactional
+    public DeliveryTransitionResult pickup(String deliveryNo, long callerUserNo) {
+        return performRiderTransition(deliveryNo, DeliveryStatus.PICKED_UP, callerUserNo, null);
+    }
+
+    /** PICKED_UP → DELIVERING. R6 §6.2 PUT /depart */
+    @Transactional
+    public DeliveryTransitionResult depart(String deliveryNo, long callerUserNo) {
+        return performRiderTransition(deliveryNo, DeliveryStatus.DELIVERING, callerUserNo, null);
+    }
+
+    /** DELIVERING → DELIVERED + markDelivered(method, photoUrl). R6 §6.2 PUT /complete */
+    @Transactional
+    public DeliveryTransitionResult completeDelivery(
+            String deliveryNo, long callerUserNo, DeliveryCompleteReq req) {
+        validateDeliveredMethod(req.deliveredMethod()); // reviewer W-4 정정 — 화이트리스트 검증
+        return performRiderTransition(deliveryNo, DeliveryStatus.DELIVERED, callerUserNo,
+                d -> d.markDelivered(req.deliveredMethod(), req.deliveredPhotoUrl()));
+    }
+
+    /** deliveredMethod 화이트리스트 (Figma 정정 10, NoticeService validation 패턴 일관). */
+    private static final Set<String> ALLOWED_DELIVERED_METHODS =
+            Set.of("DIRECT", "CUSTOMER_REQUEST", "CUSTOMER_ABSENT");
+
+    private static void validateDeliveredMethod(String method) {
+        if (method == null || method.isBlank()) {
+            throw new BusinessException(
+                    "deliveredMethod는 필수입니다.", HttpStatus.BAD_REQUEST);
+        }
+        if (!ALLOWED_DELIVERED_METHODS.contains(method)) {
+            throw new BusinessException(
+                    "deliveredMethod는 DIRECT/CUSTOMER_REQUEST/CUSTOMER_ABSENT 중 하나입니다.",
+                    HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    /**
+     * R6 라이더 측 transition helper — load + RIDER 권한 + entity 메서드 + updateStatus 본문 + log INSERT.
+     *
+     * <p>R3-b updateStatus 패턴 일관 (화이트리스트 + saveAndFlush + try-catch). RIDER actor 고정.
+     * {@code beforeChange} 콜백 — entity 메서드(unassignRider/markDelivered) 호출 후 changeStatus.
+     * Main 동기화는 Controller가 트랜잭션 커밋 후 호출 (ADR-004 line 144-148 박제 일관).</p>
+     */
+    private DeliveryTransitionResult performRiderTransition(
+            String deliveryNo, DeliveryStatus to, long callerUserNo,
+            java.util.function.Consumer<Delivery> beforeChange) {
+        Delivery delivery = deliveryRepository.findById(deliveryNo)
+                .orElseThrow(() -> new BusinessException("배달을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        Rider caller = riderRepository.findByUserNo(callerUserNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        if (!Objects.equals(delivery.getRiderNo(), caller.getRiderNo())) {
+            throw new BusinessException("본인 배달이 아닙니다.", HttpStatus.FORBIDDEN);
+        }
+
+        DeliveryStatus from = delivery.getStatus();
+        if (!ALLOWED_TRANSITIONS.get(from).contains(to)) {
+            throw new BusinessException(
+                    "invalid state transition: " + from + " -> " + to,
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        Long riderNoSnapshot = delivery.getRiderNo();
+        if (beforeChange != null) beforeChange.accept(delivery);
+
+        LocalDateTime now = LocalDateTime.now();
+        delivery.changeStatus(to, now);
+
+        try {
+            deliveryRepository.saveAndFlush(delivery);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            throw new BusinessException(
+                    "동시 변경 충돌이 발생했습니다. 새로고침 후 다시 시도하세요.",
+                    HttpStatus.CONFLICT);
+        }
+
+        deliveryLogRepository.save(new DeliveryLog(
+                deliveryNo, from, to, ActorRole.RIDER, callerUserNo));
+
+        return new DeliveryTransitionResult(delivery.getOrderId(), to, riderNoSnapshot, now);
+    }
+
+    private static DeliveryWaitingRowRes toWaitingRow(Delivery d) {
+        return new DeliveryWaitingRowRes(
+                d.getDeliveryNo(), d.getOrderId(), d.getStatus().name(),
+                d.getPickupAddress(), d.getPickupLat(), d.getPickupLng(), d.getPickupPhone(),
+                d.getDeliveryAddress(), d.getDeliveryLat(), d.getDeliveryLng(), d.getCustomerPhone(),
+                d.getBaseFee(), d.getExtraFee(), d.getAssignedAt());
     }
 
     /** delivery_no 자동 생성 — 5자리 timestamp + 3자리 영문 (interfaces.md §1.1 박제 형식 예시 일관). */

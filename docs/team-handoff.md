@@ -78,6 +78,19 @@
 
 ---
 
+## 6. R6 reject riderNo snapshot — Main 측 해석 주의 (2026-05-11 신규, R6 reviewer S-2)
+
+| 항목 | 내용 |
+|---|---|
+| **위치** | rider-service `RiderOrderController.notifyMain` → main-service `PUT /internal/order/{orderId}/delivery-status` |
+| **현상** | rider 측에서 reject 처리 시 `Delivery.unassignRider()`로 `rider_no = NULL` 변경. 그러나 Main에 보내는 Feign body의 `DeliveryStatusUpdateReq.riderNo`는 **unassignRider 호출 *전* snapshot riderNo** (예: 5L). |
+| **의도** | `riderNo` 필드는 *어떤 라이더가 reject 했는지* 감사/추적용. Main 측이 `orders.rider_no`를 갱신할 때 사용 X. |
+| **위험** | Main 개발자가 `orders.rider_no = req.riderNo()` UPDATE 시 → rider DB(NULL) ↔ main DB(5L) **불일치** 발생. 다음 배차 시 라이더 매칭 오류 직전. |
+| **권장 처리 (main 측)** | `delivery-status` endpoint 처리 시 status가 `WAITING_ASSIGN`이면 `orders.rider_no = NULL` 처리 + body의 `riderNo`는 로그/감사만 사용. 다른 status는 기존 로직 그대로. |
+| **참조** | `interfaces.md` §2.1 / `RiderOrderController.notifyMain` / `DeliveryService.rejectDelivery` |
+
+---
+
 ## 처리 완료
 
 (팀원 처리 완료 시 이력 박제 — 항목 / 처리 커밋 / 처리일)
