@@ -1,7 +1,7 @@
 package com.green.mmg.main.order;
 
 import com.green.mmg.common.exception.BusinessException;
-import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.address.UserAddressRepository;
 import com.green.mmg.main.cart.CartMapper;
 import com.green.mmg.main.cart.CartRepository;
@@ -62,7 +62,7 @@ public class OrderService {
         String storeName = cartMapper.findStoreNameByStoreId(cart.getStoreId());
 
         // Phase 3-Backfill-A-4: Feign null 처리 (StoreService.storeOneGet 패턴 전파)
-        com.green.mmg.common.dto.feign.UserBriefDto user = authFeignClient.getUser(userNo);
+        com.green.mmg.common.dto.feign.UserBriefDto user = authFeignClient.getUserInfo(userNo).getResultData();
         if (user == null) {
             throw new BusinessException("사용자 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
         }

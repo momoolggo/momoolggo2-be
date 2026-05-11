@@ -4,6 +4,9 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+
+import java.util.Date;
 
 /**
  * user 테이블 엔티티 (my_mmg_auth.user).
@@ -57,4 +60,8 @@ public class User {
 
     @Column(name = "tel", length = 20)
     private String tel;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private Date createdAt;
 }

@@ -27,7 +27,9 @@
         SELECT
             s.store_name, s.owner_id AS ownerId, s.business_hours, s.min_price, s.store_pic,
             s.holiday, s.state, s.location, s.detail_location, s.created_at, s.notice,
-            s.business_number, s.store_tel, s.rating_avg, s.rating_count, s.order_count
+            s.business_number AS businessNumber, s.bank_name AS bankName,
+            s.account_number AS accountNumber, s.account_holder AS accountHolder,
+            s.store_tel, s.rating_avg, s.rating_count, s.order_count
         FROM store s
         WHERE s.store_id = #{id}
     </select>

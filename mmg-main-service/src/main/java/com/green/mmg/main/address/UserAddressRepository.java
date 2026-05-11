@@ -45,4 +45,7 @@ public interface UserAddressRepository extends JpaRepository<UserAddress, Long> 
         List<OrderAddressInfo> list = findDefaultByUserNo(userNo);
         return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
     }
+
+    @Query("SELECT COUNT(DISTINCT a.userNo) FROM UserAddress a WHERE a.userNo IN :userNos AND a.address LIKE %:district%")
+    long countDistinctByUserNosAndDistrict(@Param("userNos") List<Long> userNos, @Param("district") String district);
 }
