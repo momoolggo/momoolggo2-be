@@ -5,9 +5,11 @@ import com.green.mmg.rider.delivery.model.ActorRole;
 import com.green.mmg.rider.delivery.model.Delivery;
 import com.green.mmg.rider.delivery.model.DeliveryLog;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
+import com.green.mmg.rider.delivery.dto.DeliveryCancelReq;
 import com.green.mmg.rider.delivery.dto.DeliveryCompleteReq;
 import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
 import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
+import com.green.mmg.rider.delivery.model.DeliveryCancelReason;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
 import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
@@ -189,7 +191,7 @@ class DeliveryServiceTest {
     }
 
     @Nested
-    @DisplayName("비합법 전이 12건 (ADR-004 line 161 대표 매핑)")
+    @DisplayName("비합법 전이 11건 (R6-cancel 4 합법화 후, PICKED_UP→WAITING_ASSIGN 제거)")
     class IllegalTransitions {
 
         private void assertIllegal(DeliveryStatus from, DeliveryStatus to) {
@@ -235,9 +237,7 @@ class DeliveryServiceTest {
         @DisplayName("AWAITING_PICKUP → DELIVERED (terminal 직행)")
         void awaitingPickup_to_delivered() { assertIllegal(DeliveryStatus.AWAITING_PICKUP, DeliveryStatus.DELIVERED); }
 
-        @Test
-        @DisplayName("PICKED_UP → WAITING_ASSIGN (역방향)")
-        void pickedUp_to_waitingAssign() { assertIllegal(DeliveryStatus.PICKED_UP, DeliveryStatus.WAITING_ASSIGN); }
+        // PICKED_UP → WAITING_ASSIGN 제거 (R6-cancel C1에서 합법화 — cancel 시 ARRIVED/AWAITING/PICKED/DELIVERING → WAITING_ASSIGN 4 전이 추가)
 
         @Test
         @DisplayName("DELIVERING → AWAITING_PICKUP (역방향)")
@@ -868,6 +868,95 @@ class DeliveryServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getStatus())
                     .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        // R6-cancel: 진행 중 배달 반려 (4 합법 추가 전이 + reason 박제)
+
+        @Test
+        @DisplayName("cancelDelivery PICKED_UP→WAITING_ASSIGN happy: unassignRider + reason 박제")
+        void cancel_pickedUp_happy() {
+            Delivery delivery = new Delivery(
+                    DELIVERY_NO, ORDER_ID,
+                    null, null, null, null, null, null, null, null,
+                    3000);
+            delivery.assignRider(CALLER_RIDER_NO);
+            delivery.changeStatus(DeliveryStatus.PICKED_UP, LocalDateTime.now());
+
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            DeliveryTransitionResult result = deliveryService.cancelDelivery(
+                    DELIVERY_NO, CALLER_USER_NO,
+                    new DeliveryCancelReq(DeliveryCancelReason.ACCIDENT));
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+            assertThat(delivery.getRiderNo()).isNull();
+            assertThat(result.riderNo()).isEqualTo(CALLER_RIDER_NO);
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+
+            ArgumentCaptor<DeliveryLog> logCaptor = ArgumentCaptor.forClass(DeliveryLog.class);
+            verify(deliveryLogRepository).save(logCaptor.capture());
+            assertThat(logCaptor.getValue().getReason()).isEqualTo(DeliveryCancelReason.ACCIDENT);
+            assertThat(logCaptor.getValue().getActorRole()).isEqualTo(ActorRole.RIDER);
+        }
+
+        @Test
+        @DisplayName("cancelDelivery DELIVERING→WAITING_ASSIGN happy: PERSONAL reason 박제")
+        void cancel_delivering_personal() {
+            Delivery delivery = new Delivery(
+                    DELIVERY_NO, ORDER_ID,
+                    null, null, null, null, null, null, null, null,
+                    3000);
+            delivery.assignRider(CALLER_RIDER_NO);
+            delivery.changeStatus(DeliveryStatus.DELIVERING, LocalDateTime.now());
+
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            DeliveryTransitionResult result = deliveryService.cancelDelivery(
+                    DELIVERY_NO, CALLER_USER_NO,
+                    new DeliveryCancelReq(DeliveryCancelReason.PERSONAL));
+
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+
+            ArgumentCaptor<DeliveryLog> logCaptor = ArgumentCaptor.forClass(DeliveryLog.class);
+            verify(deliveryLogRepository).save(logCaptor.capture());
+            assertThat(logCaptor.getValue().getReason()).isEqualTo(DeliveryCancelReason.PERSONAL);
+            assertThat(logCaptor.getValue().getFromStatus()).isEqualTo(DeliveryStatus.DELIVERING);
+        }
+
+        @Test
+        @DisplayName("cancelDelivery reason null: BAD_REQUEST + 조회/save 미호출")
+        void cancel_nullReason_throwsBadRequest() {
+            assertThatThrownBy(() -> deliveryService.cancelDelivery(
+                    DELIVERY_NO, CALLER_USER_NO, new DeliveryCancelReq(null)))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("reason")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).findById(any());
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("cancelDelivery WAITING_ASSIGN→WAITING_ASSIGN: 화이트리스트 위반 BAD_REQUEST")
+        void cancel_fromWaitingAssign_throwsBadRequest() {
+            Delivery delivery = deliveryWith(DeliveryStatus.WAITING_ASSIGN, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            assertThatThrownBy(() -> deliveryService.cancelDelivery(
+                    DELIVERY_NO, CALLER_USER_NO,
+                    new DeliveryCancelReq(DeliveryCancelReason.OTHER)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).saveAndFlush(any(Delivery.class));
         }
 
         @Test

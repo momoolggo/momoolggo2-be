@@ -4,6 +4,7 @@ import com.green.mmg.common.model.JwtUser;
 import com.green.mmg.common.model.UserPrincipal;
 import com.green.mmg.rider.delivery.model.ActorRole;
 import com.green.mmg.rider.delivery.model.Delivery;
+import com.green.mmg.rider.delivery.model.DeliveryCancelReason;
 import com.green.mmg.rider.delivery.model.DeliveryLog;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
 import com.green.mmg.rider.feign.MainInternalClient;
@@ -42,6 +43,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -278,6 +280,81 @@ class RiderOrderControllerIntegrationTest {
         em.flush();
 
         mockMvc.perform(put("/api/rider/order/" + d.getDeliveryNo() + "/pickup"))
+                .andExpect(status().isBadRequest());
+
+        verify(mainInternalClient, never()).updateDeliveryStatus(any(), any());
+    }
+
+    // R6-cancel: POST /api/rider/order/{deliveryNo}/cancel (3건)
+
+    @Test
+    @DisplayName("POST /cancel ACCIDENT happy: PICKED_UP → WAITING_ASSIGN + rider_no NULL + log reason 박제 + Main 호출")
+    void cancel_pickedUp_accident_happy() throws Exception {
+        Rider rider = seedRider(true);
+        authenticateAs(rider.getUserNo());
+        Delivery d = seedDelivery(rider.getRiderNo(), DeliveryStatus.PICKED_UP);
+
+        em.flush();
+
+        String body = """
+                {"reason": "ACCIDENT"}
+                """;
+        mockMvc.perform(post("/api/rider/order/" + d.getDeliveryNo() + "/cancel")
+                        .contentType(APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultMessage").value("배달 반려 처리 성공"));
+
+        em.flush();
+        em.clear();
+
+        Delivery saved = deliveryRepository.findById(d.getDeliveryNo()).orElseThrow();
+        assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+        assertThat(saved.getRiderNo()).isNull();
+
+        List<DeliveryLog> logs = deliveryLogRepository.findAll().stream()
+                .filter(l -> d.getDeliveryNo().equals(l.getDeliveryNo()))
+                .toList();
+        assertThat(logs).anyMatch(l -> l.getReason() == DeliveryCancelReason.ACCIDENT
+                && l.getActorRole() == ActorRole.RIDER
+                && l.getToStatus() == DeliveryStatus.WAITING_ASSIGN);
+
+        verify(mainInternalClient).updateDeliveryStatus(eq(d.getOrderId()),
+                any(DeliveryStatusUpdateReq.class));
+    }
+
+    @Test
+    @DisplayName("POST /cancel reason 누락: 400 BAD_REQUEST + Main 미호출 + DB 변경 X")
+    void cancel_nullReason_returns400() throws Exception {
+        Rider rider = seedRider(true);
+        authenticateAs(rider.getUserNo());
+        Delivery d = seedDelivery(rider.getRiderNo(), DeliveryStatus.PICKED_UP);
+
+        em.flush();
+
+        String body = """
+                {"reason": null}
+                """;
+        mockMvc.perform(post("/api/rider/order/" + d.getDeliveryNo() + "/cancel")
+                        .contentType(APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+
+        verify(mainInternalClient, never()).updateDeliveryStatus(any(), any());
+    }
+
+    @Test
+    @DisplayName("POST /cancel WAITING_ASSIGN→WAITING_ASSIGN 위반: 400 BAD_REQUEST")
+    void cancel_fromWaitingAssign_returns400() throws Exception {
+        Rider rider = seedRider(true);
+        authenticateAs(rider.getUserNo());
+        Delivery d = seedDelivery(rider.getRiderNo(), DeliveryStatus.WAITING_ASSIGN);
+
+        em.flush();
+
+        String body = """
+                {"reason": "OTHER"}
+                """;
+        mockMvc.perform(post("/api/rider/order/" + d.getDeliveryNo() + "/cancel")
+                        .contentType(APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
 
         verify(mainInternalClient, never()).updateDeliveryStatus(any(), any());
