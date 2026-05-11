@@ -251,15 +251,27 @@ public class DeliveryService {
                 : deliveryRepository.findByStatusIn(group, pageable);
 
         List<RiderInternalMonitorRes.DeliveryRow> rows = result.getContent().stream()
-                .map(d -> new RiderInternalMonitorRes.DeliveryRow(
-                        d.getDeliveryNo(),
-                        d.getOrderId(),
-                        d.getRiderNo(),
-                        d.getStatus().name(),
-                        d.getBaseFee(),
-                        d.getExtraFee(),
-                        d.getAssignedAt(),
-                        d.getDeliveredAt()))
+                .map(d -> {
+                    Integer elapsedMinutes = null;
+                    if (d.getAssignedAt() != null) {
+                        LocalDateTime end = d.getDeliveredAt() != null
+                                ? d.getDeliveredAt()
+                                : LocalDateTime.now();
+                        elapsedMinutes = (int) java.time.Duration.between(d.getAssignedAt(), end).toMinutes();
+                    }
+                    return new RiderInternalMonitorRes.DeliveryRow(
+                            d.getDeliveryNo(),
+                            d.getOrderId(),
+                            d.getRiderNo(),
+                            d.getStatus().name(),
+                            d.getBaseFee(),
+                            d.getExtraFee(),
+                            d.getAssignedAt(),
+                            d.getDeliveredAt(),
+                            null,            // storeName — 추후 메인연동후에  연동
+                            elapsedMinutes,
+                            null);           // distanceKm — 추후 메인 연동후에 연동
+                })
                 .toList();
 
         return new RiderInternalMonitorRes(
