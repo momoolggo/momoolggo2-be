@@ -64,7 +64,7 @@ PUT /api/rider/location
 → rider-service:
   1. SecurityContextHolder에서 callerUserNo 추출
   2. RiderRepository.findByUserNo(callerUserNo) → riderNo
-  3. 권한 검증 (status=ACTIVE 또는 EATING이어야 송신 의미 있음 — REST/SUSPENDED는 거부)
+  3. 권한 검증 (status=ACTIVE 또는 EATING이어야 송신 의미 있음 — PENDING/SUSPENDED는 거부)
   4. Redis SET rider:loc:{riderNo} JSON TTL 30s
   5. 응답 200
 ```

@@ -52,8 +52,6 @@
 | **RefreshTokenStore mmg-common 이관 (Phase 5 라이더/admin RT)** | 2026-05-02 | `mmg-auth-service/.../token/` 위치 (D3 결정) | Phase 5 — 라이더/admin이 RT 다룰 필요 발생 시 mmg-common으로 이관. 현재는 auth만 사용 (YAGNI). |
 | **Phase 4-C reviewer Warning 3건 (cosmetic, 발표 전 확인 권장)** | 2026-05-02 | `UserService.issueAndStoreTokens` 쿠키-Redis 순서 / `UserServiceTest` reissue 메시지 부분 일치 / `docker-compose.yml` Redis 비밀번호 부재 | W-1: 학원 발표 전 리허설(Redis 강제 kill 시 login 시도 시나리오)로 Servlet spec 동작 확인 권장. W-2: 메시지 변경 시 silent 통과 위험 — 다음 reissue 손볼 때 정확 검증으로 갱신. W-3: 개발 환경 무방, 운영 전환 시 `--requirepass` 추가 검토. |
 | **accountNo 평문 노출 (RiderProfileRes 본인 한정 응답)** | 2026-05-05 | `mmg-rider-service` R1-A — `RiderProfileRes.accountNo` (GET `/api/rider/me`) | Phase 6+ 마스킹 — D7 손님 전화번호 마스킹 패턴 일관(예: 앞 N자리만 노출, 나머지 `*`). 본인 한정 응답이라 즉시 보안 위험은 낮음(`@PreAuthorize` hasRole(RIDER) + 본인 user_no lookup). 외부 노출(관리자/사장 화면) 추가 시점에 재검토. |
-| **DeliveryLog.actorRole String → ActorRole enum 도입 (R3 진입 시)** | 2026-05-06 | `mmg-rider-service` R2-b — `DeliveryLog.actorRole` String 타입 (RIDER/SYSTEM/ADMIN) | R2-b reviewer W-1 — R2-b 시점 사용처 0이라 R2 범위 외. R3 DeliveryService.updateStatus 진입 시 `ActorRole` enum 신규 (RIDER/SYSTEM/ADMIN) + `@Enumerated(EnumType.STRING)` 적용. 위치: `mmg-rider-service/.../delivery/model/ActorRole.java` (DeliveryStatus 패턴 일관). 사용처 등장 시 Critical 격상. |
-| **WorkSession.vehicleType String → VehicleType enum 도입 (R3 진입 시)** | 2026-05-07 | `mmg-rider-service` R2-c — `WorkSession.vehicleType` String 타입 (WALK/BICYCLE/MOTORBIKE/CAR), Rider.vehicleType과 동일 화이트리스트 | R2-c reviewer W-2 — R2-c 시점 사용처 0이라 R2 범위 외. R3 WorkSessionService.start 진입 시 `VehicleType` enum 신규 (WALK/BICYCLE/MOTORBIKE/CAR) + `@Enumerated(EnumType.STRING)` 적용. Rider.vehicleType과 동시 정정 (현재 둘 다 String이라 Rider.java도 함께 갱신). 위치: `mmg-rider-service/.../rider/model/VehicleType.java` 또는 공용. RiderService.ALLOWED_VEHICLE_TYPES Set<String> 화이트리스트도 enum.values() 기반으로 갱신. |
 
 ---
 
@@ -104,3 +102,5 @@
 | **Review 통합 happy path 부재 (post/delete)** | 2026-05-02 | 2026-05-02 | `dca7c02` (B-2) — `ReviewControllerIntegrationTest`에 2건 추가. `entityManager.flush() + clear() + JPQL/findById` 재조회 검증. |
 | **UserAddressService.save / setDefault 단위 테스트 부재** | 2026-05-02 | 2026-05-02 | `8ffba23` (B-3) — Save 3건(defaultAd 분기) + SetDefault 2건 추가. 누적 13건 단위 테스트. |
 | **StoreController `System.out.println` 잔존 1건** | 2026-05-02 | 2026-05-02 | `ad63030` (B-4) — 디버그 잔재 단순 제거. main-service 내 `System.out` 0건 도달. |
+| **DeliveryLog.actorRole String → ActorRole enum 도입 (R2-b → R3-a 처리)** | 2026-05-06 | 2026-05-10 | `e32f8ca` (R3-a) — ActorRole enum 신설 + DeliveryLog 마이그레이션 + DeliveryLogTest 갱신. mmg-rider-service 단독 + mmg-common 미수정. |
+| **WorkSession.vehicleType / Rider.vehicleType String → VehicleType enum 도입 (R2-c → R3-a 처리)** | 2026-05-07 | 2026-05-10 | `19edc43` `eb3a9e5` `396a270` (R3-a) — VehicleType enum 신설 + 양 entity 마이그레이션 + RiderService valueOf + 응답 동결 (RiderProfileRes.from() .name() 변환) + RiderServiceTest 6건/WorkSessionTest 3건. |

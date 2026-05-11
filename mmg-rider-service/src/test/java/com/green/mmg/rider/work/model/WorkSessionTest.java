@@ -1,5 +1,6 @@
 package com.green.mmg.rider.work.model;
 
+import com.green.mmg.rider.rider.model.VehicleType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -24,10 +25,10 @@ class WorkSessionTest {
     void constructor_setsRequiredFields_andDefaults() {
         LocalDateTime startedAt = LocalDateTime.of(2026, 5, 7, 9, 0, 0);
 
-        WorkSession session = new WorkSession(1L, "MOTORBIKE", startedAt);
+        WorkSession session = new WorkSession(1L, VehicleType.MOTORBIKE, startedAt);
 
         assertThat(session.getRiderNo()).isEqualTo(1L);
-        assertThat(session.getVehicleType()).isEqualTo("MOTORBIKE");
+        assertThat(session.getVehicleType()).isEqualTo(VehicleType.MOTORBIKE);
         assertThat(session.getStartedAt()).isEqualTo(startedAt);
         assertThat(session.getEndedAt()).isNull();
         assertThat(session.getWorkSeconds()).isEqualTo(0);
@@ -40,13 +41,13 @@ class WorkSessionTest {
     void constructor_vehicleTypeSnapshot_preserved() {
         LocalDateTime startedAt = LocalDateTime.of(2026, 5, 7, 10, 30, 15);
 
-        WorkSession walk = new WorkSession(2L, "WALK", startedAt);
-        WorkSession bicycle = new WorkSession(3L, "BICYCLE", startedAt);
-        WorkSession car = new WorkSession(4L, "CAR", startedAt);
+        WorkSession walk = new WorkSession(2L, VehicleType.WALK, startedAt);
+        WorkSession bicycle = new WorkSession(3L, VehicleType.BICYCLE, startedAt);
+        WorkSession car = new WorkSession(4L, VehicleType.CAR, startedAt);
 
-        assertThat(walk.getVehicleType()).isEqualTo("WALK");
-        assertThat(bicycle.getVehicleType()).isEqualTo("BICYCLE");
-        assertThat(car.getVehicleType()).isEqualTo("CAR");
+        assertThat(walk.getVehicleType()).isEqualTo(VehicleType.WALK);
+        assertThat(bicycle.getVehicleType()).isEqualTo(VehicleType.BICYCLE);
+        assertThat(car.getVehicleType()).isEqualTo(VehicleType.CAR);
     }
 
     @Test
@@ -55,8 +56,8 @@ class WorkSessionTest {
         LocalDateTime past = LocalDateTime.of(2026, 5, 1, 8, 0, 0);
         LocalDateTime future = LocalDateTime.of(2026, 12, 31, 23, 59, 59);
 
-        WorkSession sessionPast = new WorkSession(5L, "MOTORBIKE", past);
-        WorkSession sessionFuture = new WorkSession(6L, "MOTORBIKE", future);
+        WorkSession sessionPast = new WorkSession(5L, VehicleType.MOTORBIKE, past);
+        WorkSession sessionFuture = new WorkSession(6L, VehicleType.MOTORBIKE, future);
 
         assertThat(sessionPast.getStartedAt()).isEqualTo(past);
         assertThat(sessionFuture.getStartedAt()).isEqualTo(future);

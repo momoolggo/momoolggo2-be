@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class NoticeTest {
 
     @Test
-    @DisplayName("생성자: 필수 5필드 매핑 + category IMPORTANT 박제")
+    @DisplayName("생성자: 필수 8필드 매핑 + category IMPORTANT 박제")
     void constructor_setsRequiredFields() {
         LocalDateTime publishedAt = LocalDateTime.of(2026, 5, 7, 9, 0, 0);
 
@@ -27,6 +27,9 @@ class NoticeTest {
                 NoticeCategory.IMPORTANT,
                 "5월 안전 운전 캠페인",
                 "5월 한 달간 헬멧 착용 필수입니다.",
+                NoticeTargetType.ALL,
+                NoticeSendType.NOW,
+                null,
                 publishedAt,
                 1L
         );
@@ -34,6 +37,9 @@ class NoticeTest {
         assertThat(notice.getCategory()).isEqualTo(NoticeCategory.IMPORTANT);
         assertThat(notice.getTitle()).isEqualTo("5월 안전 운전 캠페인");
         assertThat(notice.getContent()).isEqualTo("5월 한 달간 헬멧 착용 필수입니다.");
+        assertThat(notice.getTargetType()).isEqualTo(NoticeTargetType.ALL);
+        assertThat(notice.getSendType()).isEqualTo(NoticeSendType.NOW);
+        assertThat(notice.getReservedAt()).isNull();
         assertThat(notice.getPublishedAt()).isEqualTo(publishedAt);
         assertThat(notice.getSenderAdminNo()).isEqualTo(1L);
         assertThat(notice.getNoticeNo()).isNull();
@@ -44,9 +50,12 @@ class NoticeTest {
     void constructor_categoryWhitelist_preserved() {
         LocalDateTime publishedAt = LocalDateTime.of(2026, 5, 7, 12, 0, 0);
 
-        Notice important = new Notice(NoticeCategory.IMPORTANT, "T1", "C1", publishedAt, 1L);
-        Notice safety = new Notice(NoticeCategory.SAFETY, "T2", "C2", publishedAt, 1L);
-        Notice general = new Notice(NoticeCategory.GENERAL, "T3", "C3", publishedAt, 1L);
+        Notice important = new Notice(NoticeCategory.IMPORTANT, "T1", "C1",
+                NoticeTargetType.ALL, NoticeSendType.NOW, null, publishedAt, 1L);
+        Notice safety = new Notice(NoticeCategory.SAFETY, "T2", "C2",
+                NoticeTargetType.ALL, NoticeSendType.NOW, null, publishedAt, 1L);
+        Notice general = new Notice(NoticeCategory.GENERAL, "T3", "C3",
+                NoticeTargetType.ALL, NoticeSendType.NOW, null, publishedAt, 1L);
 
         assertThat(important.getCategory()).isEqualTo(NoticeCategory.IMPORTANT);
         assertThat(safety.getCategory()).isEqualTo(NoticeCategory.SAFETY);
@@ -59,10 +68,14 @@ class NoticeTest {
         LocalDateTime past = LocalDateTime.of(2025, 1, 1, 0, 0, 0);
         LocalDateTime future = LocalDateTime.of(2027, 6, 15, 10, 30, 0);
 
-        Notice notice1 = new Notice(NoticeCategory.GENERAL, "Past", "C", past, 1L);
-        Notice notice2 = new Notice(NoticeCategory.GENERAL, "Future", "C", future, 1L);
+        Notice notice1 = new Notice(NoticeCategory.GENERAL, "Past", "C",
+                NoticeTargetType.ALL, NoticeSendType.NOW, null, past, 1L);
+        Notice notice2 = new Notice(NoticeCategory.GENERAL, "Future", "C",
+                NoticeTargetType.ALL, NoticeSendType.RESERVED, future, future, 1L);
 
         assertThat(notice1.getPublishedAt()).isEqualTo(past);
         assertThat(notice2.getPublishedAt()).isEqualTo(future);
+        assertThat(notice2.getReservedAt()).isEqualTo(future);
+        assertThat(notice2.getSendType()).isEqualTo(NoticeSendType.RESERVED);
     }
 }

@@ -25,7 +25,7 @@ public record RiderProfileRes(
                 rider.getStatus().name(),
                 rider.getLicenseNo(),
                 rider.getLicenseType(),
-                rider.getVehicleType(),
+                rider.getVehicleType().name(),
                 rider.getAccountBank(),
                 rider.getAccountNo(),
                 rider.getAccountHolder()

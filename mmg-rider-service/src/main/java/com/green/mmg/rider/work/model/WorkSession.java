@@ -1,6 +1,7 @@
 package com.green.mmg.rider.work.model;
 
 import com.green.mmg.common.entity.BaseEntity;
+import com.green.mmg.rider.rider.model.VehicleType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -36,8 +37,9 @@ public class WorkSession extends BaseEntity {
     @Column(name = "rider_no", nullable = false)
     private Long riderNo;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "vehicle_type", length = 20, nullable = false)
-    private String vehicleType;
+    private VehicleType vehicleType;
 
     @Column(name = "started_at", nullable = false)
     private LocalDateTime startedAt;
@@ -55,7 +57,7 @@ public class WorkSession extends BaseEntity {
      * 세션 시작 시점 생성자 — ACTIVE 진입 시 호출 (R3 WorkSessionService).
      * ended_at null (진행 중), work_seconds/break_seconds 0 (DDL DEFAULT 일관, R2-a extra_fee 패턴).
      */
-    public WorkSession(Long riderNo, String vehicleType, LocalDateTime startedAt) {
+    public WorkSession(Long riderNo, VehicleType vehicleType, LocalDateTime startedAt) {
         this.riderNo = riderNo;
         this.vehicleType = vehicleType;
         this.startedAt = startedAt;

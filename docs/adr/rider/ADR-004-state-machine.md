@@ -38,7 +38,7 @@ orders.delivery_state는 응답 동결 (CLAUDE.md §6 규칙 7) — 프론트가
 
 ### 동시 변경 충돌 시 응답 (D5)
 
-- **a. 메시지 + HTTP 409 Conflict** (`OptimisticLockException` → `ConflictException`)
+- **a. 메시지 + HTTP 409 Conflict** (`OptimisticLockException` → `BusinessException(HttpStatus.CONFLICT)` — R1-A 정착 패턴 일관)
 - b. 500 Internal Server Error (그대로 propagate)
 
 → **a 채택** (D5)
@@ -101,17 +101,20 @@ orders.delivery_state는 응답 동결 (CLAUDE.md §6 규칙 7) — 프론트가
 
 - delivery entity에 `@Version private Long version`
 - DeliveryService.updateStatus 시 dirty checking → JPA가 UPDATE WHERE version=? 자동 생성
-- 충돌 시 Hibernate `ObjectOptimisticLockingFailureException` → `@RestControllerAdvice`에서 `ConflictException` 변환 → HTTP 409
+- 충돌 시 Hibernate `ObjectOptimisticLockingFailureException` → **DeliveryService 내부 `try-catch + saveAndFlush()` 패턴으로 `BusinessException(HttpStatus.CONFLICT)` 변환 후 throw** → mmg-common `GlobalExceptionHandler.handleBusiness()`(line 26-31)가 `e.getStatus()` 동적 매핑으로 HTTP 409 응답 (별도 `@RestControllerAdvice` 추가 X — R1-A `RiderService.java:57` 정착 패턴 일관, mmg-common 미수정 = 영역 ✅)
+- 변환 위치 명시 = R3-a 정정 후속 (사례 #19 정정, 2026-05-10) — 트랜잭션 commit 시점 발생을 `saveAndFlush()`로 메서드 내부 즉시 발생 + try-catch 캐치
+- tech-debt: rider 단독 `@RestControllerAdvice` 미래 확장 (다른 Service에서도 OptimisticLockException 발생 시 일관 처리 필요할 시 검토)
 
 ### 충돌 응답 (D5-a)
 
 ```json
 {
-  "resultCode": "CONFLICT",
   "resultMessage": "동시 변경 충돌이 발생했습니다. 새로고침 후 다시 시도하세요.",
   "resultData": null
 }
 ```
+
+> 응답 형식: 실측 `ResultResponse` 2-key(message/data). `resultCode` 필드 부재 — `GlobalExceptionHandler.java:30` `new ResultResponse<>(e.getMessage(), null)` 정착 (사례 #17-B 정정).
 
 ### delivery_log 자동 INSERT
 
@@ -122,26 +125,43 @@ orders.delivery_state는 응답 동결 (CLAUDE.md §6 규칙 7) — 프론트가
 ### 비정상 전이 방어 + 권한 검증
 
 ```
-public void updateStatus(String deliveryNo, DeliveryStatus to, long callerUserNo) {
-    Delivery delivery = repo.findById(deliveryNo).orElseThrow(...);
+public void updateStatus(String deliveryNo, DeliveryStatus to,
+                         long callerUserNo, ActorRole callerActorRole) {
+    Delivery delivery = repo.findById(deliveryNo)
+            .orElseThrow(() -> new BusinessException("배달을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
-    // 권한: rider 본인만 (Objects.equals 패턴)
-    if (!Objects.equals(delivery.getRiderNo(), riderRepo.findByUserNo(callerUserNo).getRiderNo())) {
-        throw new ForbiddenException(...);
+    // 권한: RIDER 액터만 본인 배달 검증 (Objects.equals 패턴). ADMIN/SYSTEM은 검증 X (R7 강제 변경 / 자동 처리)
+    if (callerActorRole == ActorRole.RIDER) {
+        Rider caller = riderRepo.findByUserNo(callerUserNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        if (!Objects.equals(delivery.getRiderNo(), caller.getRiderNo())) {
+            throw new BusinessException("본인 배달이 아닙니다.", HttpStatus.FORBIDDEN);
+        }
     }
 
     // 화이트리스트 검증
-    if (!ALLOWED_TRANSITIONS.get(delivery.getStatus()).contains(to)) {
-        throw new BusinessException("invalid state transition");
+    DeliveryStatus from = delivery.getStatus();
+    if (!ALLOWED_TRANSITIONS.get(from).contains(to)) {
+        throw new BusinessException(
+                "invalid state transition: " + from + " -> " + to,
+                HttpStatus.BAD_REQUEST);
     }
 
-    // 상태 변경 (낙관적 락 자동)
-    DeliveryStatus from = delivery.getStatus();
-    delivery.setStatus(to);
-    setTimestampField(delivery, to);  // assigned_at, picked_at 등
+    // 상태 변경 + 단계별 시각 자동 기록 (Delivery.changeStatus 단일 비즈니스 메서드)
+    delivery.changeStatus(to, LocalDateTime.now());
 
-    // log 기록 (같은 트랜잭션)
-    deliveryLogRepo.save(new DeliveryLog(deliveryNo, from, to, "RIDER", callerUserNo));
+    // saveAndFlush + try-catch — OptimisticLockException 메서드 내부 즉시 발생 + 변환 (사례 #19 결정 11 (i))
+    try {
+        repo.saveAndFlush(delivery);
+    } catch (ObjectOptimisticLockingFailureException e) {
+        throw new BusinessException(
+                "동시 변경 충돌이 발생했습니다. 새로고침 후 다시 시도하세요.",
+                HttpStatus.CONFLICT);
+    }
+
+    // log 기록 (같은 트랜잭션, callerActorRole 매개변수 명시 = 결정 8 (가) R1-A 정착 패턴 일관)
+    deliveryLogRepo.save(new DeliveryLog(deliveryNo, from, to, callerActorRole, callerUserNo));
 
     // Main에 동기화 (Feign, 같은 트랜잭션 내부 호출 회피 — Phase 4-A 패턴)
     // → updateStatus 호출 측에서 트랜잭션 커밋 후 별도 호출
@@ -156,12 +176,21 @@ public void updateStatus(String deliveryNo, DeliveryStatus to, long callerUserNo
 
 ### Phase 5-R3 검증 케이스 (단위 테스트)
 
-- 7개 상태 전이 화이트리스트 통과 케이스 (6건)
-- 비정상 전이 BusinessException 케이스 (12건 — 각 상태에서 비허용 to)
-- 권한 위반 ForbiddenException 케이스 (1건)
-- 낙관적 락 충돌 시 ConflictException 케이스 (1건 — `@Version` 수동 변조 또는 동시 변경 시뮬)
-- delivery_log 같은 트랜잭션 INSERT 케이스 (1건)
-- orders.delivery_state 매핑 통합 테스트 (3건 — WAITING/PICKED/DELIVERED)
+- 7개 상태 전이 화이트리스트 통과 케이스 — **7건** (사례 #20 정정, 2026-05-10. ASSIGNED→WAITING_ASSIGN reject 포함, 합법 전이 1+2+1+1+1+1+0=7)
+- 비정상 전이 BusinessException(HttpStatus.BAD_REQUEST) 케이스 — **12건 대표 매핑** (전수 35건 중 대표):
+  - WAITING_ASSIGN → {PICKED_UP, DELIVERING, DELIVERED}: 3건 (단계 건너뜀 + terminal 직행)
+  - ASSIGNED → {AWAITING_PICKUP, PICKED_UP}: 2건 (단계 건너뜀)
+  - ARRIVED_AT_STORE → DELIVERED: 1건 (terminal 직행)
+  - AWAITING_PICKUP → DELIVERED: 1건 (terminal 직행)
+  - PICKED_UP → WAITING_ASSIGN: 1건 (역방향)
+  - DELIVERING → AWAITING_PICKUP: 1건 (역방향)
+  - DELIVERED → {ASSIGNED, PICKED_UP, DELIVERING}: 3건 (terminal 후 모든 to 비합법, 대표 3종)
+- 권한 위반 BusinessException(HttpStatus.FORBIDDEN) 케이스 — 1건
+- 낙관적 락 충돌 시 BusinessException(HttpStatus.CONFLICT) 케이스 — 1건 (`@Version` mock 시뮬, `saveAndFlush` 패턴)
+- delivery 부재 시 BusinessException(HttpStatus.NOT_FOUND) 케이스 — 1건 (`findById.orElseThrow`)
+- delivery_log 같은 트랜잭션 INSERT 케이스 — 1건 (ArgumentCaptor verify)
+- orders.delivery_state 매핑 통합 테스트 — 3건 (WAITING/PICKED/DELIVERED, R3-c 분리)
+- **R3-b 단위 합계 = 23건 (7 합법 + 12 비합법 + 1 권한 + 1 충돌 + 1 NOT_FOUND + 1 log INSERT)** + R3-c 통합 3건 = R3 전체 26건
 
 ### Phase 5-R6 (외부 endpoint)
 
