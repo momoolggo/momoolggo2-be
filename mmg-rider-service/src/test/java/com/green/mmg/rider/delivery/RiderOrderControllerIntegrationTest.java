@@ -43,7 +43,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -299,7 +298,7 @@ class RiderOrderControllerIntegrationTest {
         String body = """
                 {"reason": "ACCIDENT"}
                 """;
-        mockMvc.perform(post("/api/rider/order/" + d.getDeliveryNo() + "/cancel")
+        mockMvc.perform(put("/api/rider/order/" + d.getDeliveryNo() + "/cancel")
                         .contentType(APPLICATION_JSON).content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultMessage").value("배달 반려 처리 성공"));
@@ -334,7 +333,7 @@ class RiderOrderControllerIntegrationTest {
         String body = """
                 {"reason": null}
                 """;
-        mockMvc.perform(post("/api/rider/order/" + d.getDeliveryNo() + "/cancel")
+        mockMvc.perform(put("/api/rider/order/" + d.getDeliveryNo() + "/cancel")
                         .contentType(APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
 
@@ -353,7 +352,7 @@ class RiderOrderControllerIntegrationTest {
         String body = """
                 {"reason": "OTHER"}
                 """;
-        mockMvc.perform(post("/api/rider/order/" + d.getDeliveryNo() + "/cancel")
+        mockMvc.perform(put("/api/rider/order/" + d.getDeliveryNo() + "/cancel")
                         .contentType(APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
 

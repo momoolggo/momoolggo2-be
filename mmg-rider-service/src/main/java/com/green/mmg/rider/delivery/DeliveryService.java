@@ -315,7 +315,12 @@ public class DeliveryService {
         return performRiderTransition(deliveryNo, DeliveryStatus.ARRIVED_AT_STORE, callerUserNo, null);
     }
 
-    /** ASSIGNED → WAITING_ASSIGN + unassignRider. R6 §6.2 PUT /reject */
+    /**
+     * ASSIGNED → WAITING_ASSIGN + unassignRider. R6 §6.2 PUT /reject.
+     *
+     * <p><b>reject vs cancel 비대칭 (CW-1)</b>: reject = 배차 수락 *전* 거부(reason 불필요).
+     * cancel = 진행 중 반려(사고/개인사유/기타 reason 필수, decision-#34). 결과 상태(WAITING_ASSIGN)는 동일하나 의도/책임 분리.</p>
+     */
     @Transactional
     public DeliveryTransitionResult rejectDelivery(String deliveryNo, long callerUserNo) {
         return performRiderTransition(deliveryNo, DeliveryStatus.WAITING_ASSIGN, callerUserNo,

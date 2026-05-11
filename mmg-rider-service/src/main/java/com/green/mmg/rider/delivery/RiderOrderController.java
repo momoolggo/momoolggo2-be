@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -120,8 +119,9 @@ public class RiderOrderController {
     /**
      * R6-cancel: 라이더가 진행 중 배달을 사고/개인사유/기타로 반려.
      * Main 동기화 시 reason 전달 X (decision-#35 (가)) — status=WAITING_ASSIGN 알림만.
+     * PUT 일관 (R6 6 transition endpoint와 동일, reviewer CW-2 정정).
      */
-    @PostMapping("/{deliveryNo}/cancel")
+    @PutMapping("/{deliveryNo}/cancel")
     public ResultResponse<Void> cancel(
             @PathVariable String deliveryNo,
             @AuthenticationPrincipal UserPrincipal principal,

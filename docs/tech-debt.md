@@ -24,6 +24,7 @@
 |---|---|---|---|
 | **PaymentService.confirmPayment `@Transactional` 안 HTTP 외부 호출 + timeout 미설정** | 2026-04-29 | `PaymentService.callTossConfirm` (HttpURLConnection) | Phase 5 — `TossPaymentClient` 컴포넌트 추출 + RestTemplate/WebClient 전환 + 트랜잭션 외부로 호출 분리 |
 | **PaymentControllerIntegrationTest 학원 DB row PK 하드코딩** (`ORDER_ID_UNPAID=391775460588723L` 등) | 2026-04-29 | `PaymentControllerIntegrationTest` | Phase 2-Backfill-B — `@Transactional + @Rollback + fixture INSERT` 패턴으로 전환 (다른 5개 테스트 패턴과 통일) |
+| **DeliveryService.ALLOWED_TRANSITIONS 공유 맵 — updateStatus가 cancel 4 전이도 통과 (R6-cancel reviewer W-1)** | 2026-05-11 | `DeliveryService.java:55-83` | R7 진입 전 — (A) `updateStatus` 내부 cancel 전이 분기 추가(reason 필수 + unassignRider 강제) 또는 (B) cancel 전이를 별도 Set으로 분리. 현재 `updateStatus` 외부 호출처 0이라 미실현 위험 (admin/system actor 외부 호출 시 reason NULL + rider_no 잔존 위험). |
 
 ---
 
