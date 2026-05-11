@@ -11,8 +11,8 @@ import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
 import com.green.mmg.rider.internal.dto.RiderInternalNoticeReq;
 import com.green.mmg.rider.internal.dto.RiderInternalNoticeRes;
 import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
+import com.green.mmg.rider.location.LocationService;
 import com.green.mmg.rider.notice.NoticeService;
-import com.green.mmg.rider.rider.RiderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,7 +47,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class RiderInternalController {
 
     private final DeliveryService deliveryService;
-    private final RiderService riderService;
+    private final LocationService locationService;
     private final NoticeService noticeService;
     private final MainInternalClient mainInternalClient;
 
@@ -74,7 +74,7 @@ public class RiderInternalController {
 
     @GetMapping("/{riderNo}/location")
     public RiderInternalLocationRes location(@PathVariable Long riderNo) {
-        return riderService.getInternalLocation(riderNo);
+        return locationService.getInternalLocation(riderNo);
     }
 
     @GetMapping("/{riderNo}/status")
