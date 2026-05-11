@@ -12,4 +12,5 @@ public class BlindReq {
     private String content;
     private Double rating;
     private String writer;
+
 }

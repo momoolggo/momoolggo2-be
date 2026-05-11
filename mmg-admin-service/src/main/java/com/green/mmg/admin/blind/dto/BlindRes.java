@@ -24,4 +24,5 @@ public class BlindRes {
     private String writer;     // 추가
     private String userName;
     private String userTel;
+
 }
