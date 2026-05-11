@@ -5,9 +5,11 @@ import com.green.mmg.rider.delivery.model.ActorRole;
 import com.green.mmg.rider.delivery.model.Delivery;
 import com.green.mmg.rider.delivery.model.DeliveryLog;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
+import com.green.mmg.rider.delivery.dto.DeliveryCancelReq;
 import com.green.mmg.rider.delivery.dto.DeliveryCompleteReq;
 import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
 import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
+import com.green.mmg.rider.delivery.model.DeliveryCancelReason;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
 import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
@@ -68,10 +70,15 @@ public class DeliveryService {
         map.put(DeliveryStatus.WAITING_ASSIGN, EnumSet.of(DeliveryStatus.ASSIGNED));
         map.put(DeliveryStatus.ASSIGNED,
                 EnumSet.of(DeliveryStatus.ARRIVED_AT_STORE, DeliveryStatus.WAITING_ASSIGN));
-        map.put(DeliveryStatus.ARRIVED_AT_STORE, EnumSet.of(DeliveryStatus.AWAITING_PICKUP));
-        map.put(DeliveryStatus.AWAITING_PICKUP, EnumSet.of(DeliveryStatus.PICKED_UP));
-        map.put(DeliveryStatus.PICKED_UP, EnumSet.of(DeliveryStatus.DELIVERING));
-        map.put(DeliveryStatus.DELIVERING, EnumSet.of(DeliveryStatus.DELIVERED));
+        // R6-cancel: ARRIVED/AWAITING/PICKED/DELIVERING → WAITING_ASSIGN 4 전이 추가 (cancel 사유 박제)
+        map.put(DeliveryStatus.ARRIVED_AT_STORE,
+                EnumSet.of(DeliveryStatus.AWAITING_PICKUP, DeliveryStatus.WAITING_ASSIGN));
+        map.put(DeliveryStatus.AWAITING_PICKUP,
+                EnumSet.of(DeliveryStatus.PICKED_UP, DeliveryStatus.WAITING_ASSIGN));
+        map.put(DeliveryStatus.PICKED_UP,
+                EnumSet.of(DeliveryStatus.DELIVERING, DeliveryStatus.WAITING_ASSIGN));
+        map.put(DeliveryStatus.DELIVERING,
+                EnumSet.of(DeliveryStatus.DELIVERED, DeliveryStatus.WAITING_ASSIGN));
         map.put(DeliveryStatus.DELIVERED, EnumSet.noneOf(DeliveryStatus.class));
         ALLOWED_TRANSITIONS = Map.copyOf(map);
     }
@@ -308,7 +315,12 @@ public class DeliveryService {
         return performRiderTransition(deliveryNo, DeliveryStatus.ARRIVED_AT_STORE, callerUserNo, null);
     }
 
-    /** ASSIGNED → WAITING_ASSIGN + unassignRider. R6 §6.2 PUT /reject */
+    /**
+     * ASSIGNED → WAITING_ASSIGN + unassignRider. R6 §6.2 PUT /reject.
+     *
+     * <p><b>reject vs cancel 비대칭 (CW-1)</b>: reject = 배차 수락 *전* 거부(reason 불필요).
+     * cancel = 진행 중 반려(사고/개인사유/기타 reason 필수, decision-#34). 결과 상태(WAITING_ASSIGN)는 동일하나 의도/책임 분리.</p>
+     */
     @Transactional
     public DeliveryTransitionResult rejectDelivery(String deliveryNo, long callerUserNo) {
         return performRiderTransition(deliveryNo, DeliveryStatus.WAITING_ASSIGN, callerUserNo,
@@ -342,6 +354,21 @@ public class DeliveryService {
                 d -> d.markDelivered(req.deliveredMethod(), req.deliveredPhotoUrl()));
     }
 
+    /**
+     * R6-cancel: 진행 중 배달 반려 (ARRIVED/AWAITING/PICKED/DELIVERING → WAITING_ASSIGN).
+     * 사고/개인적인 사유/기타 — reason 필수. unassignRider로 다른 라이더 재배차 가능.
+     * delivery_log에 reason 박제 (cancel 시만, 다른 transition NULL).
+     */
+    @Transactional
+    public DeliveryTransitionResult cancelDelivery(
+            String deliveryNo, long callerUserNo, DeliveryCancelReq req) {
+        if (req == null || req.reason() == null) {
+            throw new BusinessException("reason은 필수입니다.", HttpStatus.BAD_REQUEST);
+        }
+        return performRiderTransition(deliveryNo, DeliveryStatus.WAITING_ASSIGN, callerUserNo,
+                Delivery::unassignRider, req.reason());
+    }
+
     /** deliveredMethod 화이트리스트 (Figma 정정 10, NoticeService validation 패턴 일관). */
     private static final Set<String> ALLOWED_DELIVERED_METHODS =
             Set.of("DIRECT", "CUSTOMER_REQUEST", "CUSTOMER_ABSENT");
@@ -368,6 +395,13 @@ public class DeliveryService {
     private DeliveryTransitionResult performRiderTransition(
             String deliveryNo, DeliveryStatus to, long callerUserNo,
             java.util.function.Consumer<Delivery> beforeChange) {
+        return performRiderTransition(deliveryNo, to, callerUserNo, beforeChange, null);
+    }
+
+    private DeliveryTransitionResult performRiderTransition(
+            String deliveryNo, DeliveryStatus to, long callerUserNo,
+            java.util.function.Consumer<Delivery> beforeChange,
+            DeliveryCancelReason reason) {
         Delivery delivery = deliveryRepository.findById(deliveryNo)
                 .orElseThrow(() -> new BusinessException("배달을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
@@ -400,7 +434,7 @@ public class DeliveryService {
         }
 
         deliveryLogRepository.save(new DeliveryLog(
-                deliveryNo, from, to, ActorRole.RIDER, callerUserNo));
+                deliveryNo, from, to, ActorRole.RIDER, callerUserNo, reason));
 
         return new DeliveryTransitionResult(delivery.getOrderId(), to, riderNoSnapshot, now);
     }

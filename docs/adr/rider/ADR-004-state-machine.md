@@ -75,13 +75,15 @@ orders.delivery_state는 응답 동결 (CLAUDE.md §6 규칙 7) — 프론트가
 |---|---|
 | WAITING_ASSIGN | ASSIGNED |
 | ASSIGNED | ARRIVED_AT_STORE, WAITING_ASSIGN (reject 시) |
-| ARRIVED_AT_STORE | AWAITING_PICKUP |
-| AWAITING_PICKUP | PICKED_UP |
-| PICKED_UP | DELIVERING |
-| DELIVERING | DELIVERED |
+| ARRIVED_AT_STORE | AWAITING_PICKUP, **WAITING_ASSIGN (cancel 시, R6-cancel 2026-05-11)** |
+| AWAITING_PICKUP | PICKED_UP, **WAITING_ASSIGN (cancel 시, R6-cancel)** |
+| PICKED_UP | DELIVERING, **WAITING_ASSIGN (cancel 시, R6-cancel)** |
+| DELIVERING | DELIVERED, **WAITING_ASSIGN (cancel 시, R6-cancel)** |
 | DELIVERED | (terminal) |
 
 위반 시: `BusinessException("invalid state transition: " + from + " → " + to)` HTTP 400.
+
+**cancel 전용 추가 (4 전이, R6-cancel 2026-05-11)**: 라이더 사고/개인적인 사유/기타로 진행 중 배달 반려. `DeliveryCancelReason` enum (ACCIDENT/PERSONAL/OTHER) 필수. `delivery_log.reason` 컬럼에 박제 (cancel 시만, 다른 transition NULL). Main 동기화는 status=WAITING_ASSIGN 알림만 전달 (decision-#35 (가) reason 전달 X — reason은 rider 도메인 단독 책임).
 
 ### orders.delivery_state 매핑 (정정 3)
 

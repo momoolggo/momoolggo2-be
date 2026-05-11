@@ -91,6 +91,20 @@
 
 ---
 
+## 7. R6-cancel 신규 endpoint — Main 측 처리 (2026-05-11 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **endpoint** | `POST /api/rider/order/{deliveryNo}/cancel` (rider 측, RIDER role) |
+| **호출 시점** | 라이더가 진행 중 배달(ARRIVED_AT_STORE/AWAITING_PICKUP/PICKED_UP/DELIVERING)에서 사고/개인사유/기타로 반려 |
+| **rider DB 처리** | delivery.status → WAITING_ASSIGN + rider_no NULL + delivery_log.reason 박제 (ACCIDENT/PERSONAL/OTHER) |
+| **Main 동기화 (decision-#35 (가))** | 기존 `PUT /internal/order/{orderId}/delivery-status` 재사용. status=WAITING_ASSIGN 알림만, **reason 정보 전달 X** (rider 도메인 단독 책임) |
+| **Main 측 권장 처리** | reject와 동일 — `orders.rider_no = NULL` + status WAITING_ASSIGN 매핑 (`orders.delivery_state = 1` 배달전). riderNo 필드는 감사 추적용. §6 항목과 동일 처리 가능 |
+| **reason 활용** | rider 도메인 단독. 향후 R7 정산 / R8 라이더 평가 시 활용 (Main 의존 X). 통계는 rider-service에서 집계 |
+| **참조** | `RiderOrderController.cancel` / `DeliveryService.cancelDelivery` / `DeliveryCancelReason` enum |
+
+---
+
 ## 처리 완료
 
 (팀원 처리 완료 시 이력 박제 — 항목 / 처리 커밋 / 처리일)
