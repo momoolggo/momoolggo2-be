@@ -29,7 +29,6 @@ public class StoreController {
         return new ResultResponse<>("",result);
     }
 
-
     @GetMapping("/{id}") //가게 상세정보
     public ResultResponse<?> StoreOneGet(@PathVariable long id){
         StoreOneGetRes result = storeService.storeOneGet(id);
@@ -41,6 +40,14 @@ public class StoreController {
         List<MenuGetRes> result= storeService.menuListGet(id);
         return new ResultResponse<>("", result);
     }
+
+    @GetMapping("/menu/{menuId}/option") // 가게 메뉴옵션 조회
+    public ResultResponse<?> MenuOption(@PathVariable long menuId) {
+        List<MenuOptionCategoryRes> result = storeService.menuOption(menuId);
+        return new ResultResponse<>("", result);
+    }
+
+
     @GetMapping("/searchstore") // 메뉴와 가게 검색
     public ResultResponse<?> StoreSearchList(@RequestParam ("search_text") String searchText){
         List<StoreGetRes> result = storeService.storeSearchList(searchText);

@@ -21,14 +21,14 @@ class DeliveryLogTest {
                 "00001ABC",
                 DeliveryStatus.WAITING_ASSIGN,
                 DeliveryStatus.ASSIGNED,
-                "RIDER",
+                ActorRole.RIDER,
                 42L
         );
 
         assertThat(log.getDeliveryNo()).isEqualTo("00001ABC");
         assertThat(log.getFromStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
         assertThat(log.getToStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
-        assertThat(log.getActorRole()).isEqualTo("RIDER");
+        assertThat(log.getActorRole()).isEqualTo(ActorRole.RIDER);
         assertThat(log.getActorUserNo()).isEqualTo(42L);
     }
 
@@ -39,35 +39,35 @@ class DeliveryLogTest {
                 "00002ABC",
                 null,
                 DeliveryStatus.WAITING_ASSIGN,
-                "SYSTEM",
+                ActorRole.SYSTEM,
                 null
         );
 
         assertThat(log.getFromStatus()).isNull();
         assertThat(log.getActorUserNo()).isNull();
         assertThat(log.getToStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
-        assertThat(log.getActorRole()).isEqualTo("SYSTEM");
+        assertThat(log.getActorRole()).isEqualTo(ActorRole.SYSTEM);
         assertThat(log.getDeliveryNo()).isEqualTo("00002ABC");
     }
 
     @Test
-    @DisplayName("생성자: DeliveryStatus enum 재사용 — 7개 상태 전이 4건 매핑 + ADMIN 액터")
+    @DisplayName("생성자: DeliveryStatus enum 재사용 — 7개 상태 전이 4건 매핑 + ADMIN 액터 (ActorRole 3종 모두 커버)")
     void constructor_deliveryStatusEnumReuse_variousTransitions() {
         DeliveryLog log1 = new DeliveryLog(
-                "00003ABC", DeliveryStatus.ARRIVED_AT_STORE, DeliveryStatus.AWAITING_PICKUP, "RIDER", 42L);
+                "00003ABC", DeliveryStatus.ARRIVED_AT_STORE, DeliveryStatus.AWAITING_PICKUP, ActorRole.RIDER, 42L);
         DeliveryLog log2 = new DeliveryLog(
-                "00003ABC", DeliveryStatus.AWAITING_PICKUP, DeliveryStatus.PICKED_UP, "RIDER", 42L);
+                "00003ABC", DeliveryStatus.AWAITING_PICKUP, DeliveryStatus.PICKED_UP, ActorRole.RIDER, 42L);
         DeliveryLog log3 = new DeliveryLog(
-                "00003ABC", DeliveryStatus.PICKED_UP, DeliveryStatus.DELIVERING, "RIDER", 42L);
+                "00003ABC", DeliveryStatus.PICKED_UP, DeliveryStatus.DELIVERING, ActorRole.RIDER, 42L);
         DeliveryLog log4 = new DeliveryLog(
-                "00003ABC", DeliveryStatus.DELIVERING, DeliveryStatus.DELIVERED, "ADMIN", 1L);
+                "00003ABC", DeliveryStatus.DELIVERING, DeliveryStatus.DELIVERED, ActorRole.ADMIN, 1L);
 
         assertThat(log1.getFromStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
         assertThat(log1.getToStatus()).isEqualTo(DeliveryStatus.AWAITING_PICKUP);
         assertThat(log2.getToStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
         assertThat(log3.getToStatus()).isEqualTo(DeliveryStatus.DELIVERING);
         assertThat(log4.getToStatus()).isEqualTo(DeliveryStatus.DELIVERED);
-        assertThat(log4.getActorRole()).isEqualTo("ADMIN");
+        assertThat(log4.getActorRole()).isEqualTo(ActorRole.ADMIN);
         assertThat(log4.getActorUserNo()).isEqualTo(1L);
     }
 }

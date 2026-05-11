@@ -37,8 +37,9 @@ public class Rider extends BaseEntity {
     @Column(name = "license_type", length = 20, nullable = false)
     private String licenseType;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "vehicle_type", length = 20, nullable = false)
-    private String vehicleType;
+    private VehicleType vehicleType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20, nullable = false)
@@ -56,7 +57,7 @@ public class Rider extends BaseEntity {
     /**
      * 생성자 — 가입 시점 PENDING 고정 (D11 auto-approve로 ACTIVE 전환은 Service에서).
      */
-    public Rider(Long userNo, String licenseNo, String licenseType, String vehicleType,
+    public Rider(Long userNo, String licenseNo, String licenseType, VehicleType vehicleType,
                  String accountBank, String accountNo, String accountHolder) {
         this.userNo = userNo;
         this.licenseNo = licenseNo;

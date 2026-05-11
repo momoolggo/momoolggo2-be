@@ -24,7 +24,7 @@ import java.time.LocalDateTime;
  * <p>setter 미공개 — 상태 전환은 명시 메서드(R3 DeliveryService 진입 시 assign/arriveAtStore/pickup/deliver 등)로만 변경.
  * R2 시점은 entity 형태 + WAITING_ASSIGN 가입 시점 고정 생성자만 도입.</p>
  *
- * <p>{@code @Version} 낙관적 락 (Q5-A, ADR-004 D5) — 동시 변경 시 ConflictException 변환.</p>
+ * <p>{@code @Version} 낙관적 락 (Q5-A, ADR-004 D5-a) — 동시 변경 시 DeliveryService 내부 try-catch + saveAndFlush 패턴으로 BusinessException(HttpStatus.CONFLICT) 변환 (R3-a 정정 일관, R1-A 정착 패턴).</p>
  *
  * <p>{@code delivery_no} VARCHAR PK (8자 형식 {@code 00001ABC}) — application 생성 (Figma 정정 9, Phase 3-C Order 패턴).
  * generation 알고리즘은 R3 DeliveryService 진입 시 결정.</p>
@@ -133,6 +133,33 @@ public class Delivery extends BaseEntity {
         this.extraFee = 0;
     }
 
-    // 비즈니스 메서드 (assignRider / arriveAtStore / pickup / deliver / changeStatus 등) — R3 DeliveryService 진입 시 추가.
-    // R2 범위는 entity 형태 + 명시 생성자만.
+    /**
+     * 배차 시점 riderNo 박제 (R4 RiderInternalController.assign 진입 시점 호출).
+     *
+     * <p>setter 0 정착 패턴 일관 — 외부에서 riderNo 직접 변경 X, 명시 메서드로만 변경.
+     * R4 assign endpoint = WAITING_ASSIGN 생성 → assignRider → changeStatus(ASSIGNED) 3단계 흐름.</p>
+     */
+    public void assignRider(Long riderNo) {
+        this.riderNo = riderNo;
+    }
+
+    /**
+     * 상태 전환 + 단계별 시각 자동 기록 (R3-b DeliveryService.updateStatus 진입 시점 호출).
+     *
+     * <p>화이트리스트 검증은 Service 책임 (결정 7 (가) ALLOWED_TRANSITIONS Map).
+     * entity는 검증 후 단순 변경 + timestamp 분기.</p>
+     *
+     * <p>WAITING_ASSIGN / AWAITING_PICKUP는 시각 미기록 — DDL DEFAULT NULL 일관.</p>
+     */
+    public void changeStatus(DeliveryStatus newStatus, LocalDateTime at) {
+        this.status = newStatus;
+        switch (newStatus) {
+            case ASSIGNED -> this.assignedAt = at;
+            case ARRIVED_AT_STORE -> this.arrivedAtStoreAt = at;
+            case PICKED_UP -> this.pickedAt = at;
+            case DELIVERING -> this.deliveringAt = at;
+            case DELIVERED -> this.deliveredAt = at;
+            default -> { /* WAITING_ASSIGN, AWAITING_PICKUP — 시각 미기록 */ }
+        }
+    }
 }

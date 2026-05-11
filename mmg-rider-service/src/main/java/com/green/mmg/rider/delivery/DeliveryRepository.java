@@ -1,18 +1,33 @@
 package com.green.mmg.rider.delivery;
 
 import com.green.mmg.rider.delivery.model.Delivery;
+import com.green.mmg.rider.delivery.model.DeliveryStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
 /**
- * 배달 Repository — R2 범위 = 기본 CRUD만.
+ * 배달 Repository — R2 기본 CRUD + R4 진입 시 진행 중 조회 메서드 추가.
  *
- * <p>R3 DeliveryService 진입 시 메서드명 추론 / @Query 추가 예정:
- * <ul>
- *   <li>{@code findByRiderNo(Long riderNo)} — 라이더별 배달 조회 (R6 외부 endpoint)</li>
- *   <li>{@code findByOrderId(String orderId)} — 주문별 배달 조회 (R4 Main → Rider Feign)</li>
- *   <li>{@code findByStatus(DeliveryStatus status)} — 가용 라이더 배차 (R4 WAITING_ASSIGN 검색)</li>
- * </ul>
- * 인덱스 3건(idx_delivery_rider_no / idx_delivery_order_id / idx_delivery_status)은 DDL 박제 완료.</p>
+ * <p>인덱스 3건(idx_delivery_rider_no / idx_delivery_order_id / idx_delivery_status)은 DDL 박제 완료.</p>
  */
 public interface DeliveryRepository extends JpaRepository<Delivery, String> {
+
+    /**
+     * 진행 중 배달 1건 조회 (RiderService.getInternalStatus, interfaces.md §1.3).
+     * 가장 최근 배차된 진행 중 배달 — assigned_at DESC 정렬.
+     * 진행 중 정의: WAITING_ASSIGN 제외 (배차 대기), DELIVERED 제외 (terminal).
+     */
+    Optional<Delivery> findFirstByRiderNoAndStatusInOrderByAssignedAtDesc(
+            Long riderNo, List<DeliveryStatus> statuses);
+
+    /** monitor summary — 그룹별 카운트 (idx_delivery_status 활용). */
+    long countByStatus(DeliveryStatus status);
+
+    /** monitor deliveries — status 그룹 필터 (idx_delivery_status 활용). */
+    Page<Delivery> findByStatusIn(Collection<DeliveryStatus> statuses, Pageable pageable);
 }

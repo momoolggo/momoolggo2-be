@@ -51,7 +51,7 @@ Response 200:
 Response 4xx:
   - 400 BusinessException — rider not available (EATING/REST/SUSPENDED) — D8-a
   - 404 BusinessException — rider not found
-  - 409 ConflictException — 동시 배차 충돌 (낙관적 락) — D5
+  - 409 BusinessException(HttpStatus.CONFLICT) — 동시 배차 충돌 (낙관적 락) — D5 (R3-a 정정 일관, R1-A `RiderService.java:57` 정착 패턴, mmg-common `GlobalExceptionHandler.java:26-31` `e.getStatus()` 동적 매핑)
 ```
 
 검증:
@@ -374,6 +374,90 @@ GET /api/rider/notice?category=&page=
 ```
 GET /api/rider/cs/contact   — 고객센터 연락처 (정적)
 ```
+
+---
+
+## 7. R4 화면 기반 후보 명세 (Phase 5-R4 진입 시 결정)
+
+> **상태**: Candidate (2026-05-10)
+> **출처**: 관리자 측 라이더 관제 / 라이더 공지 발송 화면 박제. 코드 0, 명세만.
+> **본인 결정 자리**: R4 진입 시 통신 패턴 (Feign 동기 vs Redis Pub/Sub vs Kafka), §4.1과의 통합/정정 여부.
+
+### 7.1 GET /internal/rider/monitor (Admin → Rider, 후보)
+
+```
+GET /internal/rider/monitor?status={status}&page={page}
+Headers: X-Internal: true
+Query:
+  - status: ADR-004 7-state 매핑 후보 (WAITING_ASSIGN / ASSIGNED / DELIVERING / DELIVERED 등, R4 진입 시 정정)
+  - page: 0-based
+Response 200:
+  {
+    "summary": {
+      "waiting": 0,
+      "assigned": 0,
+      "delivering": 0,
+      "completed": 0
+    },
+    "deliveries": []
+  }
+```
+
+의도: 관리자 배달관제 화면이 실시간 관제 요약 + 배달 목록 조회.
+
+### 7.2 POST /internal/rider/notice (Admin → Rider, 후보)
+
+```
+POST /internal/rider/notice
+Headers: X-Internal: true
+Body:
+  {
+    "title": "string",
+    "targetType": "ALL",
+    "content": "string",
+    "sendType": "NOW",
+    "reservedAt": "2026-04-16T10:00:00"   // sendType=RESERVED 시 사용
+  }
+Response 200:
+  {
+    "resultMessage": "공지 발송 완료",
+    "resultData": null
+  }
+Response 400:
+  - reservedAt 과거값 (후보)
+  - sendType=RESERVED인데 reservedAt=null (후보)
+  - targetType 화이트리스트 위반 (후보)
+```
+
+의도: 관리자 작성 라이더 전체 공지를 Rider 서비스로 전달, 즉시/예약 발송.
+
+### 7.3 R4 진입 시 결정 보류 항목
+
+- **통신 패턴 (본인 결정 자리)**:
+  - 옵션 A: Feign 동기 (단순, MVP)
+  - 옵션 B: Redis Pub/Sub (Phase 6 Outbox 시점 통합)
+  - 옵션 C: Kafka (Phase 6+ 검토)
+- **인증 방식**: §3/§4 X-Internal 패턴 준수 vs 강화 (Phase 6+ mTLS 일관)
+- **동기 vs 비동기 fanout**: 7.2 즉시/예약 발송 라이더 전체 push 채널 (SSE / STOMP / FCM 후보)
+- **400 케이스 확정**: 7.2 reservedAt 과거값 / sendType=RESERVED인데 reservedAt=null / 7.1 status 화이트리스트 / page 음수
+- **§4.1 vs §7.2 통합/정정** (R3-c 종결 시점 갱신, 2026-05-10 — 시점 분리 박제 일관):
+  - **데이터 모델 = R2-e (이미 종결)** / **입구 = R4 진입 시 결정**
+  - §4.1 path `/internal/notice` + category(IMPORTANT/SAFETY/GENERAL) + publishedAt 기반 (DB 영속, ADR-009 R2-e)
+  - §7.2 path `/internal/rider/notice` + targetType(ALL) + sendType(NOW/RESERVED) + reservedAt 기반 (fanout)
+  - **현 `notice` 테이블 컬럼** (R2-e 종결 박제, `rider-schema.sql:138-149`): notice_no / category / title / content / published_at / sender_admin_no
+  - **§7.2 요구 필드**: targetType / sendType / reservedAt **부재**
+  - R4 진입 시 본인 결정 (옵션 3개):
+    - **(a)** notice 테이블 컬럼 추가 (target_type / send_type / reserved_at, 스키마 마이그레이션 + Q-DB (가) 학원 DB ALTER TABLE 적용)
+    - **(b)** §7.2 명세 정정 (R2-e 컬럼만 추종, 화면 박제 의도 vs 실 명세 충돌 시 본인 결정)
+    - **(c)** 신설 별도 테이블 (notice_dispatch 등 발송 이력 분리, R2-e notice + R4 dispatch 분리 모델)
+  - Code 분석 추천 = R4 진입 시점에 결정 효과 분석 강제 절차(`feedback_decision_load_balance.md`) 작동 후 보고
+
+### 7.4 R2-b 인덱스 설계 영향
+
+7.1 monitor가 status별 카운트 + 최근 배달 목록 조회. R2-b delivery_log 설계 시 다음 후보 검토:
+- `(delivery_id, created_at)` 복합 인덱스 — 특정 배달의 이력 시계열 조회
+- `(created_at)` 단일 인덱스 — 전체 status 변경 흐름 시계열
+- monitor가 delivery_log를 직접 조회 vs delivery 테이블만 조회 — R2-b 진단 시 결정
 
 ---
 
