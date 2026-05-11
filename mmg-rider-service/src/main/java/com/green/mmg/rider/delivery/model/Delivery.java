@@ -156,8 +156,9 @@ public class Delivery extends BaseEntity {
     /**
      * 배달 완료 시점 메타데이터 박제 (R6 RiderOrderController.complete 진입 시점 호출).
      *
-     * <p>changeStatus(DELIVERED) 호출 후 별도 메서드로 deliveredMethod / deliveredPhotoUrl 저장.
-     * R3-b assignRider 패턴 일관 — entity 메서드 명시 추가.</p>
+     * <p>DeliveryService.performRiderTransition 흐름: {@code beforeChange.accept(delivery)} (본 메서드)
+     * → {@code changeStatus(DELIVERED, now)} 순서. 두 메서드 독립 필드라 순서 영향 0.
+     * R3-a assignRider 패턴 일관 — entity 메서드 명시 추가.</p>
      */
     public void markDelivered(String deliveredMethod, String deliveredPhotoUrl) {
         this.deliveredMethod = deliveredMethod;

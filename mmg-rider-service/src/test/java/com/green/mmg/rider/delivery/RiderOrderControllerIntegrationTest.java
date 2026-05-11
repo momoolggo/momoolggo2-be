@@ -125,8 +125,8 @@ class RiderOrderControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("GET /api/rider/order/waiting: 200 + WAITING_ASSIGN 데이터 포함")
-    void waiting_returnsList() throws Exception {
+    @DisplayName("GET /api/rider/order/waiting ACTIVE: 200 + WAITING_ASSIGN 데이터 포함")
+    void waiting_activeRider_returnsList() throws Exception {
         Rider rider = seedRider(true);
         authenticateAs(rider.getUserNo());
         Delivery seeded = seedDelivery(null, DeliveryStatus.WAITING_ASSIGN);
@@ -139,6 +139,16 @@ class RiderOrderControllerIntegrationTest {
                 .andExpect(jsonPath("$.resultMessage").value("대기 배달 조회 성공"))
                 .andExpect(jsonPath("$.resultData[?(@.deliveryNo == '" + seeded.getDeliveryNo() + "')].status")
                         .value("WAITING_ASSIGN"));
+    }
+
+    @Test
+    @DisplayName("GET /api/rider/order/waiting PENDING: 403 FORBIDDEN (reviewer C-2 정정)")
+    void waiting_pendingRider_returns403() throws Exception {
+        Rider rider = seedRider(false); // PENDING
+        authenticateAs(rider.getUserNo());
+
+        mockMvc.perform(get("/api/rider/order/waiting"))
+                .andExpect(status().isForbidden());
     }
 
     @Test

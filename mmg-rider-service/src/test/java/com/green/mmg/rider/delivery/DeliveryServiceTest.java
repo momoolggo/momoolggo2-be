@@ -633,19 +633,51 @@ class DeliveryServiceTest {
         }
 
         @Test
-        @DisplayName("getWaitingDeliveries: WAITING_ASSIGN 전체 시간순 + dto 매핑")
-        void waiting_returnsAllWaiting() {
+        @DisplayName("getWaitingDeliveries ACTIVE happy: WAITING_ASSIGN 전체 시간순 + dto 매핑")
+        void waiting_activeRider_returnsAllWaiting() {
+            when(callerRider.getStatus()).thenReturn(RiderStatus.ACTIVE);
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
             Delivery d = deliveryWith(DeliveryStatus.WAITING_ASSIGN, null);
             lenient().when(d.getOrderId()).thenReturn(ORDER_ID);
             when(deliveryRepository.findByStatusOrderByCreatedAtAsc(DeliveryStatus.WAITING_ASSIGN))
                     .thenReturn(List.of(d));
 
-            List<DeliveryWaitingRowRes> rows = deliveryService.getWaitingDeliveries();
+            List<DeliveryWaitingRowRes> rows = deliveryService.getWaitingDeliveries(CALLER_USER_NO);
 
             assertThat(rows).hasSize(1);
             assertThat(rows.get(0).deliveryNo()).isEqualTo(DELIVERY_NO);
             assertThat(rows.get(0).orderId()).isEqualTo(ORDER_ID);
             assertThat(rows.get(0).status()).isEqualTo("WAITING_ASSIGN");
+        }
+
+        @Test
+        @DisplayName("getWaitingDeliveries PENDING: FORBIDDEN + 조회 미호출 (reviewer C-2 정정)")
+        void waiting_pendingRider_throwsForbidden() {
+            when(callerRider.getStatus()).thenReturn(RiderStatus.PENDING);
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+
+            assertThatThrownBy(() -> deliveryService.getWaitingDeliveries(CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("ACTIVE 라이더만")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(deliveryRepository, never())
+                    .findByStatusOrderByCreatedAtAsc(any(DeliveryStatus.class));
+        }
+
+        @Test
+        @DisplayName("getWaitingDeliveries rider 부재: NOT_FOUND")
+        void waiting_noRider_throwsNotFound() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.getWaitingDeliveries(CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+
+            verify(deliveryRepository, never())
+                    .findByStatusOrderByCreatedAtAsc(any(DeliveryStatus.class));
         }
 
         @SuppressWarnings("unchecked")

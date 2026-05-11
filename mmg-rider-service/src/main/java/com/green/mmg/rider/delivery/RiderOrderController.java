@@ -39,8 +39,11 @@ public class RiderOrderController {
     private final MainInternalClient mainInternalClient;
 
     @GetMapping("/waiting")
-    public ResultResponse<List<DeliveryWaitingRowRes>> waiting() {
-        return new ResultResponse<>("대기 배달 조회 성공", deliveryService.getWaitingDeliveries());
+    public ResultResponse<List<DeliveryWaitingRowRes>> waiting(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        List<DeliveryWaitingRowRes> data = deliveryService.getWaitingDeliveries(
+                principal.getSignedUserNo());
+        return new ResultResponse<>("대기 배달 조회 성공", data);
     }
 
     @GetMapping("/inprogress")

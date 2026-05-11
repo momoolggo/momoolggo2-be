@@ -265,9 +265,22 @@ public class DeliveryService {
     // 6 transition wrapper + 2 조회 메서드. updateStatus(R3-b)는 admin/system actor 그대로 보존.
     // ========================================================================
 
-    /** 대기 배달 목록 — WAITING_ASSIGN 전체, 시간순. R6 §6.2 GET /api/rider/order/waiting */
+    /**
+     * 대기 배달 목록 — WAITING_ASSIGN 전체, 시간순. R6 §6.2 GET /api/rider/order/waiting.
+     *
+     * <p>caller가 ACTIVE 라이더인지 검증 (PENDING/EATING/SUSPENDED 거부, reviewer C-2 정정).
+     * PENDING 라이더가 가게/손님 평문 정보 조회 회피 — 보안 결함 차단.</p>
+     */
     @Transactional(readOnly = true)
-    public List<DeliveryWaitingRowRes> getWaitingDeliveries() {
+    public List<DeliveryWaitingRowRes> getWaitingDeliveries(long callerUserNo) {
+        Rider caller = riderRepository.findByUserNo(callerUserNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        if (caller.getStatus() != RiderStatus.ACTIVE) {
+            throw new BusinessException(
+                    "ACTIVE 라이더만 대기 배달을 조회할 수 있습니다 (현재: " + caller.getStatus() + ").",
+                    HttpStatus.FORBIDDEN);
+        }
         return deliveryRepository.findByStatusOrderByCreatedAtAsc(DeliveryStatus.WAITING_ASSIGN)
                 .stream().map(DeliveryService::toWaitingRow).toList();
     }
@@ -324,8 +337,25 @@ public class DeliveryService {
     @Transactional
     public DeliveryTransitionResult completeDelivery(
             String deliveryNo, long callerUserNo, DeliveryCompleteReq req) {
+        validateDeliveredMethod(req.deliveredMethod()); // reviewer W-4 정정 — 화이트리스트 검증
         return performRiderTransition(deliveryNo, DeliveryStatus.DELIVERED, callerUserNo,
                 d -> d.markDelivered(req.deliveredMethod(), req.deliveredPhotoUrl()));
+    }
+
+    /** deliveredMethod 화이트리스트 (Figma 정정 10, NoticeService validation 패턴 일관). */
+    private static final Set<String> ALLOWED_DELIVERED_METHODS =
+            Set.of("DIRECT", "CUSTOMER_REQUEST", "CUSTOMER_ABSENT");
+
+    private static void validateDeliveredMethod(String method) {
+        if (method == null || method.isBlank()) {
+            throw new BusinessException(
+                    "deliveredMethod는 필수입니다.", HttpStatus.BAD_REQUEST);
+        }
+        if (!ALLOWED_DELIVERED_METHODS.contains(method)) {
+            throw new BusinessException(
+                    "deliveredMethod는 DIRECT/CUSTOMER_REQUEST/CUSTOMER_ABSENT 중 하나입니다.",
+                    HttpStatus.BAD_REQUEST);
+        }
     }
 
     /**
