@@ -4,6 +4,7 @@ import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.model.UserPrincipal;
 import com.green.mmg.rider.delivery.dto.DeliveryCancelReq;
 import com.green.mmg.rider.delivery.dto.DeliveryCompleteReq;
+import com.green.mmg.rider.delivery.dto.DeliveryHistoryRes;
 import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
 import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
 import com.green.mmg.rider.feign.MainInternalClient;
@@ -13,11 +14,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -53,6 +57,22 @@ public class RiderOrderController {
         List<DeliveryWaitingRowRes> data = deliveryService.getMyInProgressDeliveries(
                 principal.getSignedUserNo());
         return new ResultResponse<>("진행 중 배달 조회 성공", data);
+    }
+
+    /**
+     * R9 배달내역 — 본인 DELIVERED 목록 + 기간 필터 + 합계 (REQ-RDR-003).
+     * Q-Period (가): from/to 미지정 시 최근 30일 자동.
+     */
+    @GetMapping("/completed")
+    public ResultResponse<DeliveryHistoryRes> completed(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(value = "from", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(value = "to", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        DeliveryHistoryRes data = deliveryService.getMyCompletedDeliveries(
+                principal.getSignedUserNo(), from, to);
+        return new ResultResponse<>("배달내역 조회 성공", data);
     }
 
     @PutMapping("/{deliveryNo}/accept")

@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -37,4 +38,11 @@ public interface DeliveryRepository extends JpaRepository<Delivery, String> {
 
     /** R6 대기 배달 목록 — WAITING_ASSIGN 전체, 가용 라이더 모두 대상 (rider_no NULL). */
     List<Delivery> findByStatusOrderByCreatedAtAsc(DeliveryStatus status);
+
+    /**
+     * R9 배달내역 — 본인 DELIVERED 목록, deliveredAt 기간 필터 + DESC 정렬.
+     * REQ-RDR-003 "기간 필터 지원" 박제 일관 (assigned_at 아닌 delivered_at 기준 = 완료 시점).
+     */
+    List<Delivery> findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
+            Long riderNo, DeliveryStatus status, LocalDateTime from, LocalDateTime to);
 }

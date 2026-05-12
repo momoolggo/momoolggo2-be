@@ -976,4 +976,82 @@ class DeliveryServiceTest {
             verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
         }
     }
+
+    // ─── R9 배달내역 (getMyCompletedDeliveries) ─────────────────────
+
+    @org.junit.jupiter.api.Nested
+    @DisplayName("R9 getMyCompletedDeliveries")
+    class GetCompletedDeliveriesTest {
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("happy: from=null/to=null → 최근 30일 자동 적용 + 합계 계산")
+        void happy_defaultsRecent30Days_andAggregates() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            com.green.mmg.rider.delivery.model.Delivery d1 = mock(com.green.mmg.rider.delivery.model.Delivery.class);
+            com.green.mmg.rider.delivery.model.Delivery d2 = mock(com.green.mmg.rider.delivery.model.Delivery.class);
+            when(d1.getDeliveryNo()).thenReturn("D1");
+            when(d1.getOrderId()).thenReturn("O1");
+            when(d1.getPickupAddress()).thenReturn("가게1");
+            when(d1.getDeliveryAddress()).thenReturn("손님1");
+            when(d1.getBaseFee()).thenReturn(3000);
+            when(d1.getExtraFee()).thenReturn(500);
+            when(d1.getDeliveredAt()).thenReturn(LocalDateTime.now().minusHours(1));
+            when(d2.getDeliveryNo()).thenReturn("D2");
+            when(d2.getOrderId()).thenReturn("O2");
+            when(d2.getPickupAddress()).thenReturn("가게2");
+            when(d2.getDeliveryAddress()).thenReturn("손님2");
+            when(d2.getBaseFee()).thenReturn(4000);
+            when(d2.getExtraFee()).thenReturn(0);
+            when(d2.getDeliveredAt()).thenReturn(LocalDateTime.now().minusHours(5));
+
+            ArgumentCaptor<LocalDateTime> fromCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+            ArgumentCaptor<LocalDateTime> toCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+            when(deliveryRepository.findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
+                    eq(CALLER_RIDER_NO), eq(DeliveryStatus.DELIVERED),
+                    fromCaptor.capture(), toCaptor.capture()))
+                    .thenReturn(List.of(d1, d2));
+
+            com.green.mmg.rider.delivery.dto.DeliveryHistoryRes res =
+                    deliveryService.getMyCompletedDeliveries(CALLER_USER_NO, null, null);
+
+            // 기본 30일: from = today - 30, to = today + 1 (종료일 23:59 포함)
+            java.time.LocalDate today = java.time.LocalDate.now();
+            assertThat(fromCaptor.getValue().toLocalDate()).isEqualTo(today.minusDays(30));
+            assertThat(toCaptor.getValue().toLocalDate()).isEqualTo(today.plusDays(1));
+
+            assertThat(res.from()).isEqualTo(today.minusDays(30));
+            assertThat(res.to()).isEqualTo(today);
+            assertThat(res.totalCount()).isEqualTo(2);
+            assertThat(res.totalFee()).isEqualTo(3500 + 4000);
+            assertThat(res.rows()).hasSize(2);
+            assertThat(res.rows().get(0).deliveryNo()).isEqualTo("D1");
+            assertThat(res.rows().get(0).totalFee()).isEqualTo(3500);
+        }
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("from > to → BAD_REQUEST")
+        void fromAfterTo_badRequest() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            java.time.LocalDate from = java.time.LocalDate.of(2026, 5, 10);
+            java.time.LocalDate to = java.time.LocalDate.of(2026, 5, 1);
+
+            assertThatThrownBy(() -> deliveryService.getMyCompletedDeliveries(CALLER_USER_NO, from, to))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+        }
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("rider 미등록 → NOT_FOUND")
+        void riderNotFound() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.getMyCompletedDeliveries(CALLER_USER_NO, null, null))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+            verify(deliveryRepository, never()).findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
+                    any(), any(), any(), any());
+        }
+    }
 }
