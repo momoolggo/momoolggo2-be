@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import java.util.List;
 
 @FeignClient(name = "mmg-rider-service",
-        url = "${feign.rider-service.url:http://localhost:8084}")
+        url = "${feign.rider-service.url:http://localhost:8082}")
 public interface RiderFeignClient {
 
     /** 라이더 관제 데이터 조회 — GET /internal/rider/monitor */
