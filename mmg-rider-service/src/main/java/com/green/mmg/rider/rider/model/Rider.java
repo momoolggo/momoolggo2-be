@@ -76,4 +76,30 @@ public class Rider extends BaseEntity {
     public void approve() {
         this.status = RiderStatus.ACTIVE;
     }
+
+    /**
+     * ACTIVE → EATING 토글 (R8 D8-a, 식사중 진입).
+     * 화이트리스트 검증은 WorkSessionService에서 수행 (R3 DeliveryService.ALLOWED_TRANSITIONS 패턴 일관).
+     */
+    public void toggleEating() {
+        this.status = RiderStatus.EATING;
+    }
+
+    /**
+     * EATING → ACTIVE 복귀 (R8, 식사 종료).
+     * 화이트리스트 검증은 WorkSessionService에서 수행.
+     */
+    public void resumeActive() {
+        this.status = RiderStatus.ACTIVE;
+    }
+
+    /**
+     * 정산 계좌 변경 (R7, PUT /api/rider/settlement/account). Q-AccountChange (가) 자유 변경.
+     * 입력 검증(null/blank)은 SettlementService에서 수행.
+     */
+    public void updateAccount(String accountBank, String accountNo, String accountHolder) {
+        this.accountBank = accountBank;
+        this.accountNo = accountNo;
+        this.accountHolder = accountHolder;
+    }
 }

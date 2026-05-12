@@ -72,6 +72,39 @@ class DeliveryServiceIntegrationTest {
         return riderRepository.saveAndFlush(rider);
     }
 
+    @Test
+    @DisplayName("R9 배달내역 — DELIVERED 본인 행 + 기간 필터 + 합계 검증 (실 학원 DB)")
+    void completedDeliveries_filtersAndAggregates() {
+        Rider rider = seedRider();
+        // 본인 DELIVERED 2건 + 본인 진행중 1건 + 타인 DELIVERED 1건
+        Delivery mine1 = seedDelivery(DeliveryStatus.DELIVERED, rider.getRiderNo());
+        Delivery mine2 = seedDelivery(DeliveryStatus.DELIVERED, rider.getRiderNo());
+        seedDelivery(DeliveryStatus.DELIVERING, rider.getRiderNo());
+        Rider other = seedRider();
+        seedDelivery(DeliveryStatus.DELIVERED, other.getRiderNo());
+
+        // seedDelivery의 changeStatus(DELIVERED)는 status만 set — deliveredAt은 markDelivered 호출 또는
+        // native query로 박제 필요. 통합 fixture 단계 직접 박제 (R3-c rider_no native query 패턴 일관).
+        LocalDateTime now = LocalDateTime.now();
+        em.createNativeQuery("UPDATE delivery SET delivered_at = :now WHERE rider_no = :riderNo AND status = 'DELIVERED'")
+                .setParameter("now", now)
+                .setParameter("riderNo", rider.getRiderNo())
+                .executeUpdate();
+        em.flush();
+        em.clear();
+
+        com.green.mmg.rider.delivery.dto.DeliveryHistoryRes res =
+                deliveryService.getMyCompletedDeliveries(rider.getUserNo(), null, null);
+
+        // 본인 DELIVERED 2건만 (DELIVERING 제외 + 타인 제외)
+        assertThat(res.rows()).extracting(r -> r.deliveryNo())
+                .containsExactlyInAnyOrder(mine1.getDeliveryNo(), mine2.getDeliveryNo());
+        assertThat(res.totalCount()).isEqualTo(2);
+        int expectedFee = res.rows().stream().mapToInt(r -> r.totalFee()).sum();
+        assertThat(res.totalFee()).isEqualTo(expectedFee);
+        assertThat(res.totalFee()).isEqualTo(3000 * 2);  // base 3000 × 2, extra 0
+    }
+
     private Delivery seedDelivery(DeliveryStatus initialStatus, Long riderNo) {
         String deliveryNo = "IT" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
         String orderId = "OR" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();

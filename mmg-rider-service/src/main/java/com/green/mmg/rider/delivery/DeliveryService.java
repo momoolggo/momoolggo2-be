@@ -7,6 +7,8 @@ import com.green.mmg.rider.delivery.model.DeliveryLog;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
 import com.green.mmg.rider.delivery.dto.DeliveryCancelReq;
 import com.green.mmg.rider.delivery.dto.DeliveryCompleteReq;
+import com.green.mmg.rider.delivery.dto.DeliveryHistoryRes;
+import com.green.mmg.rider.delivery.dto.DeliveryHistoryRowRes;
 import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
 import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
 import com.green.mmg.rider.delivery.model.DeliveryCancelReason;
@@ -28,6 +30,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -319,6 +322,39 @@ public class DeliveryService {
         return deliveryRepository.findByRiderNoAndStatusInOrderByAssignedAtDesc(
                         caller.getRiderNo(), inProgress)
                 .stream().map(DeliveryService::toWaitingRow).toList();
+    }
+
+    /**
+     * R9 배달내역 — 본인 DELIVERED 목록 + 기간 필터 + 합계.
+     * REQ-RDR-003 박제 일관, Q-Period (가) 기본 30일 + 옵션. Figma 170148 박제.
+     */
+    @Transactional(readOnly = true)
+    public DeliveryHistoryRes getMyCompletedDeliveries(long callerUserNo, LocalDate from, LocalDate to) {
+        Rider caller = riderRepository.findByUserNo(callerUserNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+
+        LocalDate today = LocalDate.now();
+        LocalDate fromDate = from != null ? from : today.minusDays(30);
+        LocalDate toDate = to != null ? to : today;
+        if (toDate.isBefore(fromDate)) {
+            throw new BusinessException(
+                    "to는 from 이후여야 합니다 (from=" + fromDate + ", to=" + toDate + ").",
+                    HttpStatus.BAD_REQUEST);
+        }
+        LocalDateTime fromTs = fromDate.atStartOfDay();
+        LocalDateTime toTs = toDate.plusDays(1).atStartOfDay();  // 종료일 23:59 포함
+
+        List<Delivery> rows = deliveryRepository
+                .findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
+                        caller.getRiderNo(), DeliveryStatus.DELIVERED, fromTs, toTs);
+
+        List<DeliveryHistoryRowRes> rowDtos = rows.stream()
+                .map(DeliveryHistoryRowRes::from)
+                .toList();
+        int totalFee = rowDtos.stream().mapToInt(DeliveryHistoryRowRes::totalFee).sum();
+
+        return new DeliveryHistoryRes(fromDate, toDate, rowDtos.size(), totalFee, rowDtos);
     }
 
     /** ASSIGNED → ARRIVED_AT_STORE. R6 §6.2 PUT /accept */

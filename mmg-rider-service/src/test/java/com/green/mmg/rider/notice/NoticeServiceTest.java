@@ -2,7 +2,9 @@ package com.green.mmg.rider.notice;
 
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.rider.internal.dto.RiderInternalNoticeReq;
+import com.green.mmg.rider.notice.dto.RiderNoticeRowRes;
 import com.green.mmg.rider.notice.model.Notice;
+import com.green.mmg.rider.notice.model.NoticeCategory;
 import com.green.mmg.rider.notice.model.NoticeSendType;
 import com.green.mmg.rider.notice.model.NoticeTargetType;
 import org.junit.jupiter.api.DisplayName;
@@ -15,10 +17,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -169,5 +175,52 @@ class NoticeServiceTest {
                 .isEqualTo(HttpStatus.BAD_REQUEST);
 
         verify(noticeRepository, never()).save(any(Notice.class));
+    }
+
+    // ─── R9 getRiderNoticeList ──────────────────────────────────────
+
+    @Test
+    @DisplayName("getRiderNoticeList: target_type IN (ALL, RIDER) + published_at<=now 호출 위임")
+    void getRiderNoticeList_invokesFilterWithTargetsAndNow() {
+        when(noticeRepository.findByTargetTypeInAndPublishedAtLessThanEqualOrderByPublishedAtDesc(
+                anyCollection(), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+
+        List<RiderNoticeRowRes> result = noticeService.getRiderNoticeList();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<NoticeTargetType>> targetsCaptor =
+                ArgumentCaptor.forClass(Collection.class);
+        ArgumentCaptor<LocalDateTime> nowCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(noticeRepository).findByTargetTypeInAndPublishedAtLessThanEqualOrderByPublishedAtDesc(
+                targetsCaptor.capture(), nowCaptor.capture());
+
+        assertThat(targetsCaptor.getValue())
+                .containsExactlyInAnyOrder(NoticeTargetType.ALL, NoticeTargetType.RIDER);
+        assertThat(targetsCaptor.getValue()).doesNotContain(NoticeTargetType.SPECIFIC);
+        assertThat(nowCaptor.getValue()).isBeforeOrEqualTo(LocalDateTime.now());
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getRiderNoticeList: Notice → RiderNoticeRowRes 매핑 정확")
+    void getRiderNoticeList_mapsRowFields() {
+        LocalDateTime publishedAt = LocalDateTime.of(2026, 5, 10, 9, 0, 0);
+        Notice n = new Notice(
+                NoticeCategory.SAFETY, "안전 수칙", "헬멧 착용",
+                NoticeTargetType.ALL, NoticeSendType.NOW,
+                null, publishedAt, 1L);
+        when(noticeRepository.findByTargetTypeInAndPublishedAtLessThanEqualOrderByPublishedAtDesc(
+                anyCollection(), any(LocalDateTime.class)))
+                .thenReturn(List.of(n));
+
+        List<RiderNoticeRowRes> result = noticeService.getRiderNoticeList();
+
+        assertThat(result).hasSize(1);
+        RiderNoticeRowRes row = result.get(0);
+        assertThat(row.category()).isEqualTo(NoticeCategory.SAFETY);
+        assertThat(row.title()).isEqualTo("안전 수칙");
+        assertThat(row.content()).isEqualTo("헬멧 착용");
+        assertThat(row.publishedAt()).isEqualTo(publishedAt);
     }
 }

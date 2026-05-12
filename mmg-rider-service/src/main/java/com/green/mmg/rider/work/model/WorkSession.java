@@ -54,7 +54,7 @@ public class WorkSession extends BaseEntity {
     private Integer breakSeconds;
 
     /**
-     * 세션 시작 시점 생성자 — ACTIVE 진입 시 호출 (R3 WorkSessionService).
+     * 세션 시작 시점 생성자 — ACTIVE 진입 시 호출 (R8 WorkSessionService).
      * ended_at null (진행 중), work_seconds/break_seconds 0 (DDL DEFAULT 일관, R2-a extra_fee 패턴).
      */
     public WorkSession(Long riderNo, VehicleType vehicleType, LocalDateTime startedAt) {
@@ -65,6 +65,33 @@ public class WorkSession extends BaseEntity {
         this.breakSeconds = 0;
     }
 
-    // 비즈니스 메서드 (addWork / addBreak / end) — R3 WorkSessionService 진입 시 추가.
-    // R2 범위는 entity 형태 + 명시 생성자만.
+    /**
+     * 휴게 시간 누적 (EATING → ACTIVE 복귀 시 호출). Q-Break (가) 메모리 측정 패턴 일관 —
+     * Service에서 breakStartedAt 메모리 보관 + 복귀 시 (now - breakStartedAt) 초 단위 계산 → addBreak.
+     *
+     * @param seconds 누적 초 (0 이상)
+     */
+    public void addBreak(int seconds) {
+        if (seconds < 0) {
+            throw new IllegalArgumentException("break seconds must be >= 0");
+        }
+        this.breakSeconds += seconds;
+    }
+
+    /**
+     * 업무 종료 (D9-a). ended_at 기록 + work_seconds 계산 (= 총 경과 - break_seconds).
+     *
+     * @param endedAt 종료 시각
+     */
+    public void end(LocalDateTime endedAt) {
+        if (endedAt == null) {
+            throw new IllegalArgumentException("endedAt must not be null");
+        }
+        if (endedAt.isBefore(this.startedAt)) {
+            throw new IllegalArgumentException("endedAt must be >= startedAt");
+        }
+        this.endedAt = endedAt;
+        long totalSeconds = java.time.Duration.between(this.startedAt, endedAt).getSeconds();
+        this.workSeconds = (int) Math.max(0, totalSeconds - this.breakSeconds);
+    }
 }

@@ -2,6 +2,7 @@ package com.green.mmg.rider.notice;
 
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.rider.internal.dto.RiderInternalNoticeReq;
+import com.green.mmg.rider.notice.dto.RiderNoticeRowRes;
 import com.green.mmg.rider.notice.model.Notice;
 import com.green.mmg.rider.notice.model.NoticeCategory;
 import com.green.mmg.rider.notice.model.NoticeSendType;
@@ -13,7 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 공지 도메인 서비스 — POST /internal/rider/notice (즉시/예약 발송).
@@ -34,6 +37,10 @@ public class NoticeService {
 
     private static final long TEMP_SENDER_ADMIN_NO = 1L;
     private static final NoticeCategory TEMP_CATEGORY = NoticeCategory.GENERAL;
+
+    /** R9 라이더 가시성 — Q-Visibility (가) ALL + RIDER (SPECIFIC은 admin POST에서 block). */
+    private static final Set<NoticeTargetType> RIDER_VISIBLE_TARGETS =
+            EnumSet.of(NoticeTargetType.ALL, NoticeTargetType.RIDER);
 
     private final NoticeRepository noticeRepository;
 
@@ -60,9 +67,25 @@ public class NoticeService {
         return noticeRepository.save(notice);
     }
 
-    // 공지 목록 조회
+    // 공지 목록 조회 — admin 전체 (R4-a, KYL)
     public List<Notice> getNoticeList() {
         return noticeRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    /**
+     * R9 라이더 측 GET /api/rider/notice — 가시성 필터 (Q-Visibility (가)).
+     *
+     * <p>target_type IN (ALL, RIDER) AND published_at <= now() ORDER BY published_at DESC.
+     * 예약(RESERVED) 발송 중 시각 미도래 항목은 자동 제외.</p>
+     */
+    @Transactional(readOnly = true)
+    public List<RiderNoticeRowRes> getRiderNoticeList() {
+        return noticeRepository
+                .findByTargetTypeInAndPublishedAtLessThanEqualOrderByPublishedAtDesc(
+                        RIDER_VISIBLE_TARGETS, LocalDateTime.now())
+                .stream()
+                .map(RiderNoticeRowRes::from)
+                .toList();
     }
 
     // 공지 수정

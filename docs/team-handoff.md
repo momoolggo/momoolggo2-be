@@ -105,6 +105,34 @@
 
 ---
 
+## 8. main → rider 자동 배차 트리거 미구현 (2026-05-12 발견)
+
+| 항목 | 내용 |
+|---|---|
+| **현상** | `RiderFeignClient.assignRider` (main-service Feign interface, `b1b7f63` KYL) 박제됐으나 **main 코드 내 호출처 0건**. 즉 주문이 들어와도 라이더 측 `delivery` 테이블 INSERT 0 → 라이더 대기 탭 빈 목록. |
+| **본인 의도 흐름** | 결제 → `orders.state=1`(대기) → 사장 "주문 수락" → `orders.state=3`(조리중) → **이 시점에 `RiderFeignClient.assignRider()` 호출** → 라이더 측 delivery 생성 → 라이더 화면에 노출 |
+| **영역** | `mmg-main-service` ❌ 팀원 (`OrderService` / 가게 측 주문 수락 endpoint 위치). 호출처 추가 = main 책임 |
+| **권장 처리 (main 측)** | 1. 가게 "주문 수락" endpoint (또는 state=3 전환 메서드)에 `riderFeignClient.assignRider(req)` 호출 추가. 2. RiderAssignReq 구성 (orderId / storeNo / storeAddress / storeLat/Lng / storePhone / deliveryAddress / deliveryLat/Lng / customerPhone / baseFee). 3. best-effort 패턴 (try-catch + 로그) — 라이더 측 응답 실패해도 orders state 전환은 성공. 4. 라이더 매칭은 라이더 측 R6 `GET /api/rider/order/waiting` (전체 풀에서 선착순) — main이 특정 riderNo 지정 X. |
+| **참조** | `RiderFeignClient.java:14-17` / `RiderInternalController.assign` / `DeliveryService.assignDelivery` / CLAUDE.md §7 주문 상태 흐름 |
+
+> **2026-05-12 현재 시연 한계**: Q1-동작 (다) admin 수동 호출 = `POST /internal/rider/{riderNo}/assign` 직접 호출하면 라이더 화면에 즉시 노출. main 측 자동 트리거가 처리되기 전까지의 임시 시연 경로.
+
+---
+
+## 9. R7 정산 admin 측 호출처 미구현 (2026-05-12 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **endpoint (rider 측, 추가됨)** | `POST /internal/rider/settlement/calculate` (주간 집계 트리거, 멱등) / `POST /internal/rider/settlement/{settlementNo}/confirm` (PENDING → CONFIRMED) / `GET /internal/rider/settlement/pending` (Admin 모니터) |
+| **현상** | rider 측 3 endpoint 박제됐으나 **admin-service 내 호출처 0건**. admin 화면에서 "이번 주 정산 집계" 버튼 클릭 / "confirm" 버튼 클릭 시점에 호출 필요. |
+| **본인 의도 흐름 (ADR-007 line 98-119 박제)** | 매주 월요일 새벽 (or 임의 시점) admin 화면 → POST /internal/rider/settlement/calculate (periodStart/periodEnd) → 전체 라이더 settlement INSERT (status=PENDING). admin 검토 후 → POST /internal/rider/settlement/{id}/confirm (adminNo) → CONFIRMED 전환. |
+| **영역** | `mmg-admin-service` ❌ 팀원 (admin Feign interface 신설 + admin 화면 endpoint에서 호출). 호출처 추가 = admin 책임. |
+| **권장 처리 (admin 측)** | 1. `AdminRiderFeignClient` 신설 (또는 기존 `RiderFeignClient` 확장) — `calculateSettlement(CalculateReq)` / `confirmSettlement(Long, ConfirmReq)` / `pendingSettlements()` 메서드. 2. admin Settlement 모니터 화면 endpoint에서 호출. 3. best-effort 패턴 또는 명시 실패 처리 (정산은 멱등 ✅ 재호출 안전). 4. adminNo는 X-Admin-No 헤더 또는 SecurityContext에서 추출. |
+| **산출 공식 박제 (ADR-007 line 88-93)** | gross = totalBaseFee + totalExtraFee / commission = gross × 0.10 / tax = (gross - commission) × 0.033 / insurance = 5000원/주 (운행 0건 시 0) / payout = gross - commission - tax - insurance (음수 차단 max 0). Q-Commission-Value (가) 채택. |
+| **참조** | `RiderInternalController.java:111-127` / `SettlementService.calculate/confirm/findPending` / `docs/adr/rider/ADR-007-settlement.md` |
+
+---
+
 ## 처리 완료
 
 (팀원 처리 완료 시 이력 박제 — 항목 / 처리 커밋 / 처리일)
