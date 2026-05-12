@@ -119,6 +119,20 @@
 
 ---
 
+## 9. R7 정산 admin 측 호출처 미구현 (2026-05-12 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **endpoint (rider 측, 추가됨)** | `POST /internal/rider/settlement/calculate` (주간 집계 트리거, 멱등) / `POST /internal/rider/settlement/{settlementNo}/confirm` (PENDING → CONFIRMED) / `GET /internal/rider/settlement/pending` (Admin 모니터) |
+| **현상** | rider 측 3 endpoint 박제됐으나 **admin-service 내 호출처 0건**. admin 화면에서 "이번 주 정산 집계" 버튼 클릭 / "confirm" 버튼 클릭 시점에 호출 필요. |
+| **본인 의도 흐름 (ADR-007 line 98-119 박제)** | 매주 월요일 새벽 (or 임의 시점) admin 화면 → POST /internal/rider/settlement/calculate (periodStart/periodEnd) → 전체 라이더 settlement INSERT (status=PENDING). admin 검토 후 → POST /internal/rider/settlement/{id}/confirm (adminNo) → CONFIRMED 전환. |
+| **영역** | `mmg-admin-service` ❌ 팀원 (admin Feign interface 신설 + admin 화면 endpoint에서 호출). 호출처 추가 = admin 책임. |
+| **권장 처리 (admin 측)** | 1. `AdminRiderFeignClient` 신설 (또는 기존 `RiderFeignClient` 확장) — `calculateSettlement(CalculateReq)` / `confirmSettlement(Long, ConfirmReq)` / `pendingSettlements()` 메서드. 2. admin Settlement 모니터 화면 endpoint에서 호출. 3. best-effort 패턴 또는 명시 실패 처리 (정산은 멱등 ✅ 재호출 안전). 4. adminNo는 X-Admin-No 헤더 또는 SecurityContext에서 추출. |
+| **산출 공식 박제 (ADR-007 line 88-93)** | gross = totalBaseFee + totalExtraFee / commission = gross × 0.10 / tax = (gross - commission) × 0.033 / insurance = 5000원/주 (운행 0건 시 0) / payout = gross - commission - tax - insurance (음수 차단 max 0). Q-Commission-Value (가) 채택. |
+| **참조** | `RiderInternalController.java:111-127` / `SettlementService.calculate/confirm/findPending` / `docs/adr/rider/ADR-007-settlement.md` |
+
+---
+
 ## 처리 완료
 
 (팀원 처리 완료 시 이력 박제 — 항목 / 처리 커밋 / 처리일)

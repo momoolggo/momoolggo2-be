@@ -14,6 +14,10 @@ import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
 import com.green.mmg.rider.location.LocationService;
 import com.green.mmg.rider.notice.NoticeService;
 import com.green.mmg.rider.notice.model.Notice;
+import com.green.mmg.rider.settlement.SettlementService;
+import com.green.mmg.rider.settlement.dto.CalculateReq;
+import com.green.mmg.rider.settlement.dto.ConfirmReq;
+import com.green.mmg.rider.settlement.dto.SettlementRowRes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -38,6 +42,7 @@ public class RiderInternalController {
     private final LocationService locationService;
     private final NoticeService noticeService;
     private final MainInternalClient mainInternalClient;
+    private final SettlementService settlementService;
 
     @PostMapping("/{riderNo}/assign")
     public RiderInternalAssignRes assign(
@@ -104,5 +109,27 @@ public class RiderInternalController {
     public RiderInternalNoticeRes deleteNotice(@PathVariable Long noticeId) {
         noticeService.deleteNotice(noticeId);
         return RiderInternalNoticeRes.success();
+    }
+
+    // ─── R7 정산 (admin Feign 호출용) ──────────────────────────
+
+    /** Admin 주간 정산 집계 트리거 (D10-b). 멱등 처리. */
+    @PostMapping("/settlement/calculate")
+    public List<SettlementRowRes> calculateSettlement(@RequestBody CalculateReq req) {
+        return settlementService.calculate(req.periodStart(), req.periodEnd());
+    }
+
+    /** Admin PENDING → CONFIRMED. */
+    @PostMapping("/settlement/{settlementNo}/confirm")
+    public SettlementRowRes confirmSettlement(
+            @PathVariable Long settlementNo,
+            @RequestBody ConfirmReq req) {
+        return settlementService.confirm(settlementNo, req.adminNo());
+    }
+
+    /** Admin 모니터 — PENDING 목록. */
+    @GetMapping("/settlement/pending")
+    public List<SettlementRowRes> pendingSettlements() {
+        return settlementService.findPending();
     }
 }

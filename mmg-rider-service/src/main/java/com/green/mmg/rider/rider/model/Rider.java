@@ -92,4 +92,14 @@ public class Rider extends BaseEntity {
     public void resumeActive() {
         this.status = RiderStatus.ACTIVE;
     }
+
+    /**
+     * 정산 계좌 변경 (R7, PUT /api/rider/settlement/account). Q-AccountChange (가) 자유 변경.
+     * 입력 검증(null/blank)은 SettlementService에서 수행.
+     */
+    public void updateAccount(String accountBank, String accountNo, String accountHolder) {
+        this.accountBank = accountBank;
+        this.accountNo = accountNo;
+        this.accountHolder = accountHolder;
+    }
 }

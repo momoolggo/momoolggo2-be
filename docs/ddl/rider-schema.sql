@@ -127,7 +127,8 @@ CREATE TABLE IF NOT EXISTS `settlement` (
   `created_at`            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`settlement_no`),
-  KEY `idx_settlement_rider_no` (`rider_no`)
+  KEY `idx_settlement_rider_no` (`rider_no`),
+  UNIQUE KEY `uq_settlement_rider_period` (`rider_no`, `period_start`, `period_end`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 6) notice 테이블 (라이더 공지사항, ADR-002 정정 8 + ADR-009)

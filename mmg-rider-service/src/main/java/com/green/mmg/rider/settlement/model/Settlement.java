@@ -28,7 +28,10 @@ import java.time.LocalDateTime;
  * 인덱스 1건: rider_no (Q-R2a2 (나) 자동 적용).</p>
  */
 @Entity
-@Table(name = "settlement")
+@Table(name = "settlement",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_settlement_rider_period",
+                columnNames = {"rider_no", "period_start", "period_end"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Settlement extends BaseEntity {
@@ -106,5 +109,15 @@ public class Settlement extends BaseEntity {
         this.status = SettlementStatus.PENDING;
     }
 
-    // 비즈니스 메서드 (confirm / markPaid) — R7 SettlementService 진입 시 추가.
+    /** admin confirm — PENDING → CONFIRMED. confirmed_by_admin_no + confirmed_at 기록. */
+    public void confirm(Long adminNo, LocalDateTime at) {
+        this.status = SettlementStatus.CONFIRMED;
+        this.confirmedByAdminNo = adminNo;
+        this.confirmedAt = at;
+    }
+
+    /** admin 입금 완료 — paid_at 기록 (status 변경 X, CONFIRMED 유지). */
+    public void markPaid(LocalDateTime at) {
+        this.paidAt = at;
+    }
 }
