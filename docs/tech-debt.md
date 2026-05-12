@@ -53,6 +53,8 @@
 | **RefreshTokenStore mmg-common 이관 (Phase 5 라이더/admin RT)** | 2026-05-02 | `mmg-auth-service/.../token/` 위치 (D3 결정) | Phase 5 — 라이더/admin이 RT 다룰 필요 발생 시 mmg-common으로 이관. 현재는 auth만 사용 (YAGNI). |
 | **Phase 4-C reviewer Warning 3건 (cosmetic, 발표 전 확인 권장)** | 2026-05-02 | `UserService.issueAndStoreTokens` 쿠키-Redis 순서 / `UserServiceTest` reissue 메시지 부분 일치 / `docker-compose.yml` Redis 비밀번호 부재 | W-1: 학원 발표 전 리허설(Redis 강제 kill 시 login 시도 시나리오)로 Servlet spec 동작 확인 권장. W-2: 메시지 변경 시 silent 통과 위험 — 다음 reissue 손볼 때 정확 검증으로 갱신. W-3: 개발 환경 무방, 운영 전환 시 `--requirepass` 추가 검토. |
 | **accountNo 평문 노출 (RiderProfileRes 본인 한정 응답)** | 2026-05-05 | `mmg-rider-service` R1-A — `RiderProfileRes.accountNo` (GET `/api/rider/me`) | Phase 6+ 마스킹 — D7 손님 전화번호 마스킹 패턴 일관(예: 앞 N자리만 노출, 나머지 `*`). 본인 한정 응답이라 즉시 보안 위험은 낮음(`@PreAuthorize` hasRole(RIDER) + 본인 user_no lookup). 외부 노출(관리자/사장 화면) 추가 시점에 재검토. |
+| **WorkSessionService toggleStatus race condition → 중복 진행 세션 → 다음 조회 500 (R8 W-2)** | 2026-05-12 | `WorkSessionService.toggleStatus` — `findByRiderNoAndEndedAtIsNull` empty 체크 후 `save` 패턴 (line 118) | Phase 6+ — 동시 토글 요청 시 중복 INSERT 가능. 다음 `findByRiderNoAndEndedAtIsNull` 호출이 `IncorrectResultSizeDataAccessException` → HTTP 500. ADR-008 line 193 미해결 항목과 동일 (Q-Break (가) 메모리 측정 MVP 채택 한계). 처리 옵션: (A) DB unique 제약 `(rider_no, ended_at IS NULL)` partial index — MySQL 미지원, 회피 필요 (B) Redis 락 `lock:work-session:{riderNo}` (C) `rider` 행 `@Version` 낙관적 락 + 토글 흐름 보호. 운영 진입 시 (B) 또는 (C) 채택. |
+| **R8 reviewer Cosmetic — `getSummary` week = 최근 7일 rolling window (월~일 아님)** | 2026-05-12 | `WorkSessionService.getSummary` line 194 — `LocalDate.now().minusDays(6).atStartOfDay()` | Phase 6+ UI 협의 — 기획 요구사항 "이번 주 합계"가 월~일(주 단위) vs 최근 7일(rolling) 모호. 현재 rolling 채택. FE 화면 텍스트 "최근 7일"로 레이블링 권장. |
 
 ---
 

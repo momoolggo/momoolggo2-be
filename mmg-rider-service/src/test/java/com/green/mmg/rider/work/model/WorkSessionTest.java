@@ -62,4 +62,89 @@ class WorkSessionTest {
         assertThat(sessionPast.getStartedAt()).isEqualTo(past);
         assertThat(sessionFuture.getStartedAt()).isEqualTo(future);
     }
+
+    @Test
+    @DisplayName("addBreak: 누적 (0 → 600 → 900)")
+    void addBreak_accumulates() {
+        WorkSession session = new WorkSession(1L, VehicleType.MOTORBIKE,
+                LocalDateTime.of(2026, 5, 7, 9, 0, 0));
+
+        session.addBreak(600);
+        assertThat(session.getBreakSeconds()).isEqualTo(600);
+
+        session.addBreak(300);
+        assertThat(session.getBreakSeconds()).isEqualTo(900);
+    }
+
+    @Test
+    @DisplayName("addBreak: 음수 거부 (IllegalArgumentException)")
+    void addBreak_negativeRejected() {
+        WorkSession session = new WorkSession(1L, VehicleType.MOTORBIKE,
+                LocalDateTime.of(2026, 5, 7, 9, 0, 0));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> session.addBreak(-1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(">= 0");
+    }
+
+    @Test
+    @DisplayName("end: ended_at 기록 + work_seconds 계산 (총 경과 - break)")
+    void end_recordsEndedAt_andComputesWorkSeconds() {
+        LocalDateTime startedAt = LocalDateTime.of(2026, 5, 7, 9, 0, 0);
+        LocalDateTime endedAt = LocalDateTime.of(2026, 5, 7, 13, 20, 0);  // 4h 20m = 15,600s
+        WorkSession session = new WorkSession(1L, VehicleType.MOTORBIKE, startedAt);
+        session.addBreak(4200);  // 1h 10m
+
+        session.end(endedAt);
+
+        assertThat(session.getEndedAt()).isEqualTo(endedAt);
+        assertThat(session.getWorkSeconds()).isEqualTo(15600 - 4200);  // 11,400s = 3h 10m
+    }
+
+    @Test
+    @DisplayName("end: break 0이면 work_seconds = 총 경과")
+    void end_noBreak_workSecondsEqualsTotal() {
+        LocalDateTime startedAt = LocalDateTime.of(2026, 5, 7, 9, 0, 0);
+        LocalDateTime endedAt = LocalDateTime.of(2026, 5, 7, 12, 0, 0);  // 3h = 10,800s
+        WorkSession session = new WorkSession(1L, VehicleType.MOTORBIKE, startedAt);
+
+        session.end(endedAt);
+
+        assertThat(session.getWorkSeconds()).isEqualTo(10800);
+    }
+
+    @Test
+    @DisplayName("end: break가 총 경과 초과 시 work_seconds = 0 (음수 차단)")
+    void end_breakExceedsTotal_workSecondsZero() {
+        LocalDateTime startedAt = LocalDateTime.of(2026, 5, 7, 9, 0, 0);
+        LocalDateTime endedAt = LocalDateTime.of(2026, 5, 7, 9, 30, 0);  // 30m = 1,800s
+        WorkSession session = new WorkSession(1L, VehicleType.MOTORBIKE, startedAt);
+        session.addBreak(3600);  // 1h > 30m
+
+        session.end(endedAt);
+
+        assertThat(session.getWorkSeconds()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("end: null endedAt 거부")
+    void end_nullEndedAt_rejected() {
+        WorkSession session = new WorkSession(1L, VehicleType.MOTORBIKE,
+                LocalDateTime.of(2026, 5, 7, 9, 0, 0));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> session.end(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("end: endedAt < startedAt 거부")
+    void end_endedBeforeStarted_rejected() {
+        LocalDateTime startedAt = LocalDateTime.of(2026, 5, 7, 9, 0, 0);
+        LocalDateTime endedAt = LocalDateTime.of(2026, 5, 7, 8, 0, 0);
+        WorkSession session = new WorkSession(1L, VehicleType.MOTORBIKE, startedAt);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> session.end(endedAt))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(">=");
+    }
 }

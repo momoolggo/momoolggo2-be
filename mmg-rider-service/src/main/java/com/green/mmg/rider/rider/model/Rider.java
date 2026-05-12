@@ -76,4 +76,20 @@ public class Rider extends BaseEntity {
     public void approve() {
         this.status = RiderStatus.ACTIVE;
     }
+
+    /**
+     * ACTIVE → EATING 토글 (R8 D8-a, 식사중 진입).
+     * 화이트리스트 검증은 WorkSessionService에서 수행 (R3 DeliveryService.ALLOWED_TRANSITIONS 패턴 일관).
+     */
+    public void toggleEating() {
+        this.status = RiderStatus.EATING;
+    }
+
+    /**
+     * EATING → ACTIVE 복귀 (R8, 식사 종료).
+     * 화이트리스트 검증은 WorkSessionService에서 수행.
+     */
+    public void resumeActive() {
+        this.status = RiderStatus.ACTIVE;
+    }
 }
