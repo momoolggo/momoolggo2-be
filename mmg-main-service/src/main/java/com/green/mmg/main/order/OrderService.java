@@ -46,7 +46,11 @@ public class OrderService {
     private final CartMapper cartMapper;          // findCartItems (JOIN) + findStoreNameByStoreId 잔존
     private final CartRepository cartRepository;  // Phase 3-C-3: findCartEntityByUserNo 위임
     private final UserAddressRepository userAddressRepository;  // Phase 3-D-B: findDefaultAddress 위임
+    private final OrderStatusLogRepository orderStatusLogRepository;
     private final AuthFeignClient authFeignClient;
+
+    private static final int ORDER_STATE_WAITING = 1;
+    private static final int ORDER_STATE_CANCELED = 2;
 
     private static final int DELIVERY_FEE = 1500;
 
@@ -114,6 +118,7 @@ public class OrderService {
         order.setDeliveryFee(DELIVERY_FEE);
         order.setAmount(totalAmount);
         order.setPayState(dto.getPayState());
+        order.setOrderState(ORDER_STATE_WAITING);
         orderRepository.saveAndFlush(order);
 
         for (CartItemRes item : items) {
@@ -129,6 +134,37 @@ public class OrderService {
         // 가게 누적 주문 수(store.order_count) 갱신 — 같은 트랜잭션 내 처리
         orderMapper.calSumOrder(cart.getStoreId());
         return uniqueId;
+    }
+
+    // 주문 취소
+
+    @Transactional
+    public void cancelOrder(long callUserNo,long orderId, OrderCancelReq req) {
+        Orders order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다", HttpStatus.NOT_FOUND));
+
+        if(!Objects.equals(order.getUserNo(), callUserNo)) {
+            throw new BusinessException("본인 주문만 취소할 수 있습니다", HttpStatus.FORBIDDEN);
+        }
+
+        if(!Objects.equals(order.getOrderState(), ORDER_STATE_WAITING)) {
+            throw new BusinessException("가게가 주문을 수락한 이후에는 취소할 수 없습니다", HttpStatus.BAD_REQUEST);
+        }
+
+        if(req == null || req.getReason() == null || req.getReason().isBlank()) {
+            throw new BusinessException("취소 사유를 선택해 주세요", HttpStatus.BAD_REQUEST);
+        }
+        order.setOrderState(ORDER_STATE_CANCELED);
+
+        OrderStatusLog log = new OrderStatusLog();
+        log.setOrderId(orderId);
+        log.setBeforeState(ORDER_STATE_WAITING);
+        log.setAfterState(ORDER_STATE_CANCELED);
+        log.setChangedByType("USER");
+        log.setChangedByNo(callUserNo);
+        log.setMemo(req.getReason());
+
+        orderStatusLogRepository.save(log);
     }
 
     @Transactional

@@ -1,12 +1,8 @@
 package com.green.mmg.main.order;
 
-import com.green.mmg.main.order.model.OrderHistoryDto;
-import com.green.mmg.main.order.model.OrderHistoryReq;
-import com.green.mmg.main.order.model.OrderInfoRes;
-import com.green.mmg.main.order.model.OrderReqDto;
+import com.green.mmg.main.order.model.*;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.model.UserPrincipal;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -36,6 +32,14 @@ public class OrderController {
             @RequestBody OrderReqDto dto) {
         long orderId = orderService.placeOrder(principal.getSignedUserNo(), dto);
         return ResponseEntity.ok(Map.of("result", "success","orderId", orderId));
+    }
+
+    // 주문 취소
+    @PutMapping("/{orderId}/cancel")
+    public ResultResponse<Void> cancelOrder(@AuthenticationPrincipal UserPrincipal principal,
+                                      @PathVariable long orderId, @RequestBody OrderCancelReq req) {
+        orderService.cancelOrder(principal.getSignedUserNo(),orderId, req);
+        return new ResultResponse<>("주문 취소 완료", null);
     }
 
     // 삭제 — calSumOrder는 OrderService.deleteOrder 내부에서 처리 (storeId 사전 확보 후 호출)
