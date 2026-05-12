@@ -81,4 +81,13 @@ public class Notice extends BaseEntity {
     }
 
     // 비즈니스 메서드 (update / delete) — R9 NoticeService 진입 시 추가.
+    public void update(String title, String content, NoticeSendType sendType, LocalDateTime reservedAt) {
+        this.title = title;
+        this.content = content;
+        this.sendType = sendType;
+        this.reservedAt = reservedAt;
+        if (sendType == NoticeSendType.RESERVED && reservedAt != null) {
+            this.publishedAt = reservedAt;
+        }
+    }
 }
