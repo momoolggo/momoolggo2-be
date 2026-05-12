@@ -3,6 +3,8 @@ package com.green.mmg.rider.notice;
 import com.green.mmg.rider.notice.model.Notice;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
+
 /**
  * 공지사항 Repository — R2 범위 = 기본 CRUD만.
  *
@@ -14,4 +16,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
  * 인덱스 1건(idx_notice_published_at)은 DDL 박제 완료.</p>
  */
 public interface NoticeRepository extends JpaRepository<Notice, Long> {
+    List<Notice> findAllByOrderByCreatedAtDesc();
 }

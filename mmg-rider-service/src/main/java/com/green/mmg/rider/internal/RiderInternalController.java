@@ -13,33 +13,21 @@ import com.green.mmg.rider.internal.dto.RiderInternalNoticeRes;
 import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
 import com.green.mmg.rider.location.LocationService;
 import com.green.mmg.rider.notice.NoticeService;
+import com.green.mmg.rider.notice.model.Notice;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Main/Admin → Rider Internal API — interfaces.md §1.1~1.3.
- *
- * <p>Phase 4-A {@code InternalUserController} 정착 패턴 일관 — {@code @RestController + /internal/...} prefix.
- * RiderSecurityConfig {@code /internal/**} permitAll (Phase 4-B Gateway 차단으로 외부 노출 0).
- * X-Internal 헤더 검증은 Phase 6+ 강화 예정.</p>
- *
- * <p>3 endpoint:
- * <ul>
- *   <li>{@code POST /internal/rider/{riderNo}/assign} — 배차 요청 + Main 동기화 (best-effort)</li>
- *   <li>{@code GET /internal/rider/{riderNo}/location} — 위치 조회 (R4 stub, R5 진입 시 Redis 채움)</li>
- *   <li>{@code GET /internal/rider/{riderNo}/status} — 라이더 상태 + 진행 중 배달</li>
- * </ul></p>
- *
- * <p>Main 동기화 흐름 (ADR-004 line 144-148 박제 일관) — DeliveryService.assignDelivery 트랜잭션 커밋 후
- * 별도 호출 (트랜잭션 외부). best-effort: 동기화 실패해도 배차는 성공 (보상은 Phase 6 outbox 패턴 검토).</p>
- */
+import java.util.List;
+
 @Slf4j
 @RestController
 @RequestMapping("/internal/rider")
@@ -57,7 +45,6 @@ public class RiderInternalController {
             @RequestBody RiderInternalAssignReq req) {
         RiderInternalAssignRes res = deliveryService.assignDelivery(riderNo, req);
 
-        // Main 동기화 (best-effort, 트랜잭션 외부 — ADR-004 line 144-148 박제 일관)
         try {
             mainInternalClient.updateDeliveryStatus(req.orderId(),
                     new DeliveryStatusUpdateReq(
@@ -94,6 +81,28 @@ public class RiderInternalController {
     @PostMapping("/notice")
     public RiderInternalNoticeRes notice(@RequestBody RiderInternalNoticeReq req) {
         noticeService.createNotice(req);
+        return RiderInternalNoticeRes.success();
+    }
+
+    /** Admin 공지 목록 조회 */
+    @GetMapping("/notice")
+    public List<Notice> getNoticeList() {
+        return noticeService.getNoticeList();
+    }
+
+    /** Admin 공지 수정 */
+    @PutMapping("/notice/{noticeId}")
+    public RiderInternalNoticeRes updateNotice(
+            @PathVariable Long noticeId,
+            @RequestBody RiderInternalNoticeReq req) {
+        noticeService.updateNotice(noticeId, req);
+        return RiderInternalNoticeRes.success();
+    }
+
+    /** Admin 공지 삭제 */
+    @DeleteMapping("/notice/{noticeId}")
+    public RiderInternalNoticeRes deleteNotice(@PathVariable Long noticeId) {
+        noticeService.deleteNotice(noticeId);
         return RiderInternalNoticeRes.success();
     }
 }

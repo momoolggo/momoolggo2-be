@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 공지 도메인 서비스 — POST /internal/rider/notice (즉시/예약 발송).
@@ -57,6 +58,27 @@ public class NoticeService {
                 publishedAt,
                 TEMP_SENDER_ADMIN_NO);
         return noticeRepository.save(notice);
+    }
+
+    // 공지 목록 조회
+    public List<Notice> getNoticeList() {
+        return noticeRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    // 공지 수정
+    @Transactional
+    public void updateNotice(Long noticeId, RiderInternalNoticeReq req) {
+        Notice notice = noticeRepository.findById(noticeId)
+                .orElseThrow(() -> new BusinessException("공지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        notice.update(req.title(), req.content(), req.sendType(), req.reservedAt());
+    }
+
+    // 공지 삭제
+    @Transactional
+    public void deleteNotice(Long noticeId) {
+        noticeRepository.findById(noticeId)
+                .orElseThrow(() -> new BusinessException("공지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        noticeRepository.deleteById(noticeId);
     }
 
     private void validate(RiderInternalNoticeReq req) {
