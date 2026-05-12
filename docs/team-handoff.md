@@ -105,6 +105,20 @@
 
 ---
 
+## 8. main → rider 자동 배차 트리거 미구현 (2026-05-12 발견)
+
+| 항목 | 내용 |
+|---|---|
+| **현상** | `RiderFeignClient.assignRider` (main-service Feign interface, `b1b7f63` KYL) 박제됐으나 **main 코드 내 호출처 0건**. 즉 주문이 들어와도 라이더 측 `delivery` 테이블 INSERT 0 → 라이더 대기 탭 빈 목록. |
+| **본인 의도 흐름** | 결제 → `orders.state=1`(대기) → 사장 "주문 수락" → `orders.state=3`(조리중) → **이 시점에 `RiderFeignClient.assignRider()` 호출** → 라이더 측 delivery 생성 → 라이더 화면에 노출 |
+| **영역** | `mmg-main-service` ❌ 팀원 (`OrderService` / 가게 측 주문 수락 endpoint 위치). 호출처 추가 = main 책임 |
+| **권장 처리 (main 측)** | 1. 가게 "주문 수락" endpoint (또는 state=3 전환 메서드)에 `riderFeignClient.assignRider(req)` 호출 추가. 2. RiderAssignReq 구성 (orderId / storeNo / storeAddress / storeLat/Lng / storePhone / deliveryAddress / deliveryLat/Lng / customerPhone / baseFee). 3. best-effort 패턴 (try-catch + 로그) — 라이더 측 응답 실패해도 orders state 전환은 성공. 4. 라이더 매칭은 라이더 측 R6 `GET /api/rider/order/waiting` (전체 풀에서 선착순) — main이 특정 riderNo 지정 X. |
+| **참조** | `RiderFeignClient.java:14-17` / `RiderInternalController.assign` / `DeliveryService.assignDelivery` / CLAUDE.md §7 주문 상태 흐름 |
+
+> **2026-05-12 현재 시연 한계**: Q1-동작 (다) admin 수동 호출 = `POST /internal/rider/{riderNo}/assign` 직접 호출하면 라이더 화면에 즉시 노출. main 측 자동 트리거가 처리되기 전까지의 임시 시연 경로.
+
+---
+
 ## 처리 완료
 
 (팀원 처리 완료 시 이력 박제 — 항목 / 처리 커밋 / 처리일)
