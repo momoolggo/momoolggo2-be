@@ -57,6 +57,11 @@ public class UserService {
         user.setGender(req.getGender() == null ? 0 : req.getGender());
         user.setTel(req.getTel());
         user.setRole(role);
+        if("OWNER".equals(role) || "RIDER".equals(role)) {
+            user.setStatus("PENDING");
+        } else {
+            user.setStatus("ACTIVE");
+        }
 
         User saved = userRepository.save(user);
 

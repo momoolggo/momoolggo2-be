@@ -40,6 +40,10 @@ public class User {
     @Column(name = "name", length = 10)
     private String name;
 
+    @Column(name = "status", columnDefinition = "ENUM('PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED')",
+    nullable = false)
+    private String status;
+
     /** DB DATE ↔ Java String("yyyy-MM-dd") — 응답 스펙 동결 */
     @Convert(converter = StringDateConverter.class)
     @Column(name = "birth")
@@ -60,6 +64,15 @@ public class User {
 
     @Column(name = "tel", length = 20)
     private String tel;
+
+    @Column(name = "business_no", length = 10)
+    private String businessNo;
+
+    @Column(name = "process_memo", length = 255)
+    private String processMemo;
+
+    @Column(name = "suspension_until")
+    private Date suspensionUntil;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
