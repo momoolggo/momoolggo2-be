@@ -85,6 +85,15 @@ docker compose down
 
 기본 포트 6379. 포트 변경은 `.env`의 `REDIS_PORT` 수정.
 
+### 환경별 설정 분리 원칙
+
+- 로컬 (`application.yml` + `.env`): 폴백값/유연한 값 (ddl-auto=update 허용, REDIS_HOST=localhost 등)
+- prod (`application-prod.yml` + `mmg-common/application-*-prod.yml`): K8s 고정값 (ddl-auto=none, redis-master.infra.svc.cluster.local 등)
+
+redis/kafka 주소를 변경할 때:
+- 로컬: `.env` 수정
+- prod: `mmg-common/src/main/resources/application-{redis|kafka}-prod.yml` 수정 → 4개 서비스 모두 자동 반영
+
 ### 빌드 & 실행
 
 ```bash
