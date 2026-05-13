@@ -6,6 +6,7 @@ import com.green.mmg.main.store.model.*;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -29,4 +30,9 @@ public interface StoreMapper {
 
     //사장 승인 모달
     InternalOwnerApprovalDetailRes findOwnerApprovalDetail(@Param("ownerNo") long ownerNo);
+
+    //오늘 가게 등록 수
+    long countTodayStores(@Param("start") LocalDateTime start,
+                          @Param("end") LocalDateTime end);
+
 }

@@ -50,13 +50,13 @@ public class User {
     private String birth;
 
     @Column(name = "gender")
-    private int gender;
+    private Integer gender;
 
     @Column(name = "green")
-    private int green;
+    private Integer green;
 
     @Column(name = "kind")
-    private int kind;
+    private Integer kind;
 
     /** rank: MariaDB 예약어 → 백틱 처리 */
     @Column(name = "`rank`", columnDefinition = "ENUM('BRONZE','SILVER','GOLD','VIP','VVIP')")
