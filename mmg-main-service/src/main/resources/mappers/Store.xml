@@ -52,6 +52,13 @@
         LIMIT 1
 </select>
 
+    <select id="countTodayStores" resultType="long">
+        SELECT COUNT(1)
+        FROM store s
+        WHERE s.created_at >= #{start}
+        AND s.created_at < #{end}
+    </select>
+
 
     <select id="menuAll">
         SELECT

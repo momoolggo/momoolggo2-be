@@ -110,7 +110,7 @@ public class InternalUserController {
         return new ResultResponse<>("회원 목록 조회완료", users.map(InternalAdminUserRes::from));
     }
 
-    /** 승인대기 회원 조회*/
+    /** 승인대기 회원 조회 */
     @Transactional(readOnly = true)
     @GetMapping("/users/pending")
     public ResultResponse<List<InternalAdminUserRes>> getPendingUsers(){
@@ -121,7 +121,7 @@ public class InternalUserController {
                         .toList());
     }
 
-    /** 승인 반려 상태 변경완료*/
+    /** 승인 반려 상태 변경완료 */
     @Transactional
     @PatchMapping("/user/{userNo}/approval")
     public ResultResponse<Void> updateApproval( @PathVariable long userNo, @RequestBody InternalUserApprovalReq req){
