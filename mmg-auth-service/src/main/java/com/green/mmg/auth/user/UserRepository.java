@@ -2,6 +2,8 @@ package com.green.mmg.auth.user;
 
 import com.green.mmg.auth.user.model.User;
 import com.green.mmg.common.dto.feign.UserBriefDto;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -38,6 +40,25 @@ public interface UserRepository extends JpaRepository<User, Long> {
             """)
 
     Optional<User> findInternalUserDetailByUserNo(@Param("userNo") long userNo);
+
+    @Query("""
+        SELECT u
+        FROM User u
+        WHERE (:role IS NULL OR u.role = :role)
+        ORDER BY u.createdAt DESC
+""")
+    Page<User> findAllByRole(@Param("role") String role, Pageable pageable);
+
+    @Query("""
+        SELECT u
+        FROM User u
+        WHERE u.status = 'PENDING'
+        AND u.role IN ('OWNER', 'RIDER')
+        ORDER BY u.createdAt DESC
+            
+""")
+    List<User> findPendingUsers();
+
     long countByRole(String role);
     long countByCreatedAtBetween(Date start, Date end);
 

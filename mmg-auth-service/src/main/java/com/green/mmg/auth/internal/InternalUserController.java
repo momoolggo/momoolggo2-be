@@ -1,18 +1,22 @@
 package com.green.mmg.auth.internal;
 
+import com.green.mmg.auth.internal.dto.InternalAdminUserRes;
+import com.green.mmg.auth.internal.dto.InternalUserApprovalReq;
 import com.green.mmg.auth.internal.dto.InternalUserDetailRes;
+import com.green.mmg.auth.internal.dto.InternalUserSuspensionReq;
 import com.green.mmg.auth.user.UserRepository;
 import com.green.mmg.auth.user.model.User;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.dto.feign.UserBriefDto;
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -96,6 +100,82 @@ public class InternalUserController {
                 user.getCreatedAt()
         ));
     }
+    /** 회원 목록 조회 */
+    @Transactional(readOnly = true)
+    @GetMapping("/users/list")
+    public ResultResponse<Page<InternalAdminUserRes>> getUserList(
+            @RequestParam(required = false) String role,
+            @RequestParam(defaultValue =  "0") int page) {
+        Page<User> users = userRepository.findAllByRole(role, PageRequest.of(page,10));
+        return new ResultResponse<>("회원 목록 조회완료", users.map(InternalAdminUserRes::from));
+    }
+
+    /** 승인대기 회원 조회*/
+    @Transactional(readOnly = true)
+    @GetMapping("/users/pending")
+    public ResultResponse<List<InternalAdminUserRes>> getPendingUsers(){
+        return new ResultResponse<>("승인대기 회원 조회완료",
+                userRepository.findPendingUsers()
+                        .stream()
+                        .map(InternalAdminUserRes::from)
+                        .toList());
+    }
+
+    /** 승인 반려 상태 변경완료*/
+    @Transactional
+    @PatchMapping("/user/{userNo}/approval")
+    public ResultResponse<Void> updateApproval( @PathVariable long userNo, @RequestBody InternalUserApprovalReq req){
+        User user = userRepository.findById(userNo)
+                .orElseThrow(() -> new ResourceNotFoundException("user not found: " + userNo));
+
+            if (!"ACTIVE".equals(req.getStatus()) && !"REJECTED".equals(req.getStatus())) {
+                throw new BusinessException("status는 ACTIVE 또는 REJECTED만 가능합니다.", HttpStatus.BAD_REQUEST);
+
+            }
+
+            user.setStatus(req.getStatus());
+            user.setProcessMemo(req.getReason());
+
+            return new ResultResponse<>("승인상태 변경 완료", null);
+    }
+
+    /** 계정 정지 완료 */
+    @Transactional
+    @PatchMapping("/user/{userNo}/suspension")
+    public ResultResponse<Void> suspendUser(@PathVariable long userNo, @RequestBody InternalUserSuspensionReq req){
+        User user = userRepository.findById(userNo)
+                .orElseThrow(() -> new ResourceNotFoundException("user not found: " + userNo));
+        user.setStatus("SUSPENDED");
+
+        if (req.getDays() != null && req.getDays() > 0) {
+            Date until = Date.from(
+                    LocalDate.now()
+                            .plusDays(req.getDays())
+                            .atStartOfDay(ZoneId.systemDefault())
+                            .toInstant()
+            );
+            user.setSuspensionUntil(until);
+        } else {
+            user.setSuspensionUntil(null);
+        }
+
+        user.setProcessMemo(req.getReason());
+
+        return new ResultResponse<>("계정 정지 완료", null);
+    }
+
+    @Transactional
+    @PatchMapping("/user/{userNo}/suspension/release")
+    public ResultResponse<Void> releaseSuspension( @PathVariable long userNo){
+        User user = userRepository.findById(userNo)
+                .orElseThrow(() -> new ResourceNotFoundException("user not found: " + userNo));
+
+        user.setStatus("ACTIVE");
+        user.setSuspensionUntil(null);
+
+        return new ResultResponse<>("계정 정지 해제 완료", null);
+    }
+
 
     /** 일별 신규 가입자 수 — 관리자 대시보드 일별 통계 카드용 */
     @Transactional(readOnly = true)
@@ -106,4 +186,4 @@ public class InternalUserController {
         return new ResultResponse<>("일별 신규 가입자 조회 완료",
                 userRepository.countByCreatedAtBetween(start, end));
     }
-}
+    }
