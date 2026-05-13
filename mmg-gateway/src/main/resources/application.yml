@@ -1,0 +1,76 @@
+spring:
+  application:
+    name: mmg-gateway
+  config:
+    import: "optional:file:.env[.properties]"
+
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            # ---------- /api/user/review/** → main (prefix 충돌 회피, 위에 위치) ----------
+            - id: review-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/user/review/**
+
+            # ---------- auth-service (8081) ----------
+            - id: auth-user-route        # /api/user/login | join | check-id | me | reissue | logout 등
+              uri: http://localhost:8081
+              predicates:
+                - Path=/api/user/**
+            - id: auth-policy-route      # /api/policy/**
+              uri: http://localhost:8081
+              predicates:
+                - Path=/api/policy/**
+
+            # ---------- main-service (8080) ----------
+            - id: main-store-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/store/**
+            - id: main-cart-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/cart/**
+            - id: main-order-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/order/**
+            - id: main-payment-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/payment/**
+            - id: main-address-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/address/**
+            - id: main-owner-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/owner/**
+            - id: main-uploads-route     # 이미지 정적 (CLAUDE.md §5 main 단독 책임)
+              uri: http://localhost:8080
+              predicates:
+                - Path=/uploads/**
+
+            # ---------- rider-service (8082) — Phase 5 본격 진행 시 ----------
+            - id: rider-route
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api/rider/**
+
+            # ---------- admin-service (8083) — Phase 5 본격 진행 시 ----------
+            - id: admin-route
+              uri: http://localhost:8083
+              predicates:
+                - Path=/api/admin/**
+
+            # /internal/** 라우팅 의도적 부재: InternalBlockController가 403 응답 (외부 노출 0)
+
+server:
+  port: 8000
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

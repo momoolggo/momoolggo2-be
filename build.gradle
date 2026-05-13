@@ -1,0 +1,63 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.0.3' apply false
+    id 'io.spring.dependency-management' version '1.1.7' apply false
+}
+
+allprojects {
+    group = 'com.green.mmg'
+    version = '0.0.1-SNAPSHOT'
+
+    repositories {
+        mavenCentral()
+    }
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'org.springframework.boot'
+    apply plugin: 'io.spring.dependency-management'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+
+    configurations {
+        compileOnly {
+            extendsFrom annotationProcessor
+        }
+    }
+
+    dependencyManagement {
+        imports {
+            mavenBom "org.springframework.cloud:spring-cloud-dependencies:2025.1.1"
+        }
+    }
+
+    dependencies {
+        compileOnly         'org.projectlombok:lombok'
+        annotationProcessor 'org.projectlombok:lombok'
+        annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+        testImplementation  'org.springframework.boot:spring-boot-starter-test'
+        testRuntimeOnly     'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+
+    // 멀티모듈에서 bootRun cwd를 루트로 고정 — 루트의 .env가 spring.config.import로 잡히게
+    tasks.withType(org.springframework.boot.gradle.tasks.run.BootRun).configureEach {
+        workingDir = rootProject.projectDir
+    }
+
+    // 통합 테스트도 루트 cwd 기준 (application.yml의 spring.config.import .env 로드 위해).
+    // SnapshotAssert가 모듈 디렉터리 기준으로 파일 쓰도록 system property 주입.
+    tasks.withType(Test).configureEach {
+        workingDir = rootProject.projectDir
+        systemProperty 'project.dir', project.projectDir.absolutePath
+    }
+}

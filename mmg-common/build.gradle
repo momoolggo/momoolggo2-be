@@ -1,0 +1,34 @@
+apply plugin: 'java-library'
+
+bootJar { enabled = false }
+jar {
+    enabled = true
+    archiveClassifier = ''
+}
+
+dependencies {
+    // Spring Boot starters: 전이 의존성 차단을 위해 모두 compileOnly.
+    // 실제 사용은 mmg-common을 의존하는 각 서비스가 자신의 starter로 가져감.
+    compileOnly 'org.springframework.boot:spring-boot-starter-web'
+    compileOnly 'org.springframework.boot:spring-boot-starter-security'
+    compileOnly 'org.springframework.boot:spring-boot-starter-data-jpa'
+    compileOnly 'org.springframework.boot:spring-boot-starter-validation'
+    compileOnly 'org.springframework.cloud:spring-cloud-starter-openfeign'
+
+    // jjwt: common이 직접 사용 + 모든 서비스에 전이로 노출 (공통 시크릿 검증)
+    api         'io.jsonwebtoken:jjwt-api:0.13.0'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
+
+    // 테스트 (JUnit 5 + Mockito + AssertJ)
+    // starter-test/web/security: production에서 compileOnly로 잡은 의존성을 test classpath에 노출
+    // (Jackson 3 tools.jackson.databind, SecurityFilterChain 등 production에서 사용하므로 테스트에도 필요)
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-web'
+    testImplementation 'org.springframework.boot:spring-boot-starter-security'
+    testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}

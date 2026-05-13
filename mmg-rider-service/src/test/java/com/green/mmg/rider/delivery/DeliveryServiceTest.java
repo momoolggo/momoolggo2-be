@@ -1,0 +1,1057 @@
+package com.green.mmg.rider.delivery;
+
+import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.rider.delivery.model.ActorRole;
+import com.green.mmg.rider.delivery.model.Delivery;
+import com.green.mmg.rider.delivery.model.DeliveryLog;
+import com.green.mmg.rider.delivery.model.DeliveryStatus;
+import com.green.mmg.rider.delivery.dto.DeliveryCancelReq;
+import com.green.mmg.rider.delivery.dto.DeliveryCompleteReq;
+import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
+import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
+import com.green.mmg.rider.delivery.model.DeliveryCancelReason;
+import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
+import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
+import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
+import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
+import com.green.mmg.rider.rider.RiderRepository;
+import com.green.mmg.rider.rider.model.Rider;
+import com.green.mmg.rider.rider.model.RiderStatus;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
+/**
+ * DeliveryService 단위 테스트 — Phase 5-R3-b (가짜 테스트 0건 원칙, CLAUDE.md §6.5).
+ *
+ * <p>23건 = 7 합법 + 12 비합법 대표 + 1 권한 + 1 낙관적 락 + 1 NOT_FOUND + 1 log INSERT.
+ * R3-c 통합 3건(orders.delivery_state 매핑)은 별건.</p>
+ *
+ * <p>Mockito 패턴 일관 — 학원 DB 의존성 회피 (Q-DB (다)). entity 권한 케이스는 Mockito spy로 riderNo 박제
+ * (Delivery setter 0 정착 일관, R4 진입 시 entity assignRider 메서드 추가 예정).</p>
+ */
+@ExtendWith(MockitoExtension.class)
+class DeliveryServiceTest {
+
+    private static final String DELIVERY_NO = "00001ABC";
+    private static final String ORDER_ID = "0000001A";
+    private static final long CALLER_USER_NO = 42L;
+    private static final Long CALLER_RIDER_NO = 5L;
+
+    @Mock private DeliveryRepository deliveryRepository;
+    @Mock private DeliveryLogRepository deliveryLogRepository;
+    @Mock private RiderRepository riderRepository;
+
+    @InjectMocks private DeliveryService deliveryService;
+
+    private Rider callerRider;
+
+    @BeforeEach
+    void setUp() {
+        callerRider = mock(Rider.class);
+        lenient().when(callerRider.getRiderNo()).thenReturn(CALLER_RIDER_NO);
+    }
+
+    private Delivery deliveryWith(DeliveryStatus status, Long riderNo) {
+        Delivery delivery = spy(new Delivery(
+                DELIVERY_NO, ORDER_ID,
+                null, null, null, null, null, null, null, null,
+                3000));
+        if (status != DeliveryStatus.WAITING_ASSIGN) {
+            delivery.changeStatus(status, LocalDateTime.now());
+        }
+        lenient().when(delivery.getRiderNo()).thenReturn(riderNo);
+        return delivery;
+    }
+
+    private void stubFindAndOwn(Delivery delivery) {
+        when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+        when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+        // R6 invalid transition / OptimisticLock 케이스에서는 saveAndFlush 호출 안 함 → lenient
+        lenient().when(deliveryRepository.saveAndFlush(any(Delivery.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    @Nested
+    @DisplayName("합법 전이 (7건, ADR-004 line 76-82 화이트리스트)")
+    class LegalTransitions {
+
+        @Test
+        @DisplayName("WAITING_ASSIGN → ASSIGNED")
+        void waitingAssign_to_assigned() {
+            Delivery delivery = deliveryWith(DeliveryStatus.WAITING_ASSIGN, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            deliveryService.updateStatus(DELIVERY_NO, DeliveryStatus.ASSIGNED, CALLER_USER_NO, ActorRole.RIDER);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            assertThat(delivery.getAssignedAt()).isNotNull();
+            verify(deliveryRepository).saveAndFlush(delivery);
+            verify(deliveryLogRepository).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("ASSIGNED → ARRIVED_AT_STORE")
+        void assigned_to_arrivedAtStore() {
+            Delivery delivery = deliveryWith(DeliveryStatus.ASSIGNED, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            deliveryService.updateStatus(DELIVERY_NO, DeliveryStatus.ARRIVED_AT_STORE, CALLER_USER_NO, ActorRole.RIDER);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
+            assertThat(delivery.getArrivedAtStoreAt()).isNotNull();
+            verify(deliveryRepository).saveAndFlush(delivery);
+        }
+
+        @Test
+        @DisplayName("ASSIGNED → WAITING_ASSIGN (reject 재할당)")
+        void assigned_to_waitingAssign_reject() {
+            Delivery delivery = deliveryWith(DeliveryStatus.ASSIGNED, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            deliveryService.updateStatus(DELIVERY_NO, DeliveryStatus.WAITING_ASSIGN, CALLER_USER_NO, ActorRole.RIDER);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+            verify(deliveryRepository).saveAndFlush(delivery);
+        }
+
+        @Test
+        @DisplayName("ARRIVED_AT_STORE → AWAITING_PICKUP")
+        void arrivedAtStore_to_awaitingPickup() {
+            Delivery delivery = deliveryWith(DeliveryStatus.ARRIVED_AT_STORE, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            deliveryService.updateStatus(DELIVERY_NO, DeliveryStatus.AWAITING_PICKUP, CALLER_USER_NO, ActorRole.RIDER);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.AWAITING_PICKUP);
+            verify(deliveryRepository).saveAndFlush(delivery);
+        }
+
+        @Test
+        @DisplayName("AWAITING_PICKUP → PICKED_UP")
+        void awaitingPickup_to_pickedUp() {
+            Delivery delivery = deliveryWith(DeliveryStatus.AWAITING_PICKUP, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            deliveryService.updateStatus(DELIVERY_NO, DeliveryStatus.PICKED_UP, CALLER_USER_NO, ActorRole.RIDER);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
+            assertThat(delivery.getPickedAt()).isNotNull();
+            verify(deliveryRepository).saveAndFlush(delivery);
+        }
+
+        @Test
+        @DisplayName("PICKED_UP → DELIVERING")
+        void pickedUp_to_delivering() {
+            Delivery delivery = deliveryWith(DeliveryStatus.PICKED_UP, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            deliveryService.updateStatus(DELIVERY_NO, DeliveryStatus.DELIVERING, CALLER_USER_NO, ActorRole.RIDER);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERING);
+            assertThat(delivery.getDeliveringAt()).isNotNull();
+            verify(deliveryRepository).saveAndFlush(delivery);
+        }
+
+        @Test
+        @DisplayName("DELIVERING → DELIVERED (terminal)")
+        void delivering_to_delivered() {
+            Delivery delivery = deliveryWith(DeliveryStatus.DELIVERING, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            deliveryService.updateStatus(DELIVERY_NO, DeliveryStatus.DELIVERED, CALLER_USER_NO, ActorRole.RIDER);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+            assertThat(delivery.getDeliveredAt()).isNotNull();
+            verify(deliveryRepository).saveAndFlush(delivery);
+        }
+    }
+
+    @Nested
+    @DisplayName("비합법 전이 11건 (R6-cancel 4 합법화 후, PICKED_UP→WAITING_ASSIGN 제거)")
+    class IllegalTransitions {
+
+        private void assertIllegal(DeliveryStatus from, DeliveryStatus to) {
+            Delivery delivery = deliveryWith(from, CALLER_RIDER_NO);
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+
+            assertThatThrownBy(() -> deliveryService.updateStatus(DELIVERY_NO, to, CALLER_USER_NO, ActorRole.RIDER))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("invalid state transition")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).saveAndFlush(any(Delivery.class));
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("WAITING_ASSIGN → PICKED_UP (단계 건너뜀)")
+        void waitingAssign_to_pickedUp() { assertIllegal(DeliveryStatus.WAITING_ASSIGN, DeliveryStatus.PICKED_UP); }
+
+        @Test
+        @DisplayName("WAITING_ASSIGN → DELIVERING (단계 건너뜀)")
+        void waitingAssign_to_delivering() { assertIllegal(DeliveryStatus.WAITING_ASSIGN, DeliveryStatus.DELIVERING); }
+
+        @Test
+        @DisplayName("WAITING_ASSIGN → DELIVERED (terminal 직행)")
+        void waitingAssign_to_delivered() { assertIllegal(DeliveryStatus.WAITING_ASSIGN, DeliveryStatus.DELIVERED); }
+
+        @Test
+        @DisplayName("ASSIGNED → AWAITING_PICKUP (단계 건너뜀)")
+        void assigned_to_awaitingPickup() { assertIllegal(DeliveryStatus.ASSIGNED, DeliveryStatus.AWAITING_PICKUP); }
+
+        @Test
+        @DisplayName("ASSIGNED → PICKED_UP (단계 건너뜀)")
+        void assigned_to_pickedUp() { assertIllegal(DeliveryStatus.ASSIGNED, DeliveryStatus.PICKED_UP); }
+
+        @Test
+        @DisplayName("ARRIVED_AT_STORE → DELIVERED (terminal 직행)")
+        void arrivedAtStore_to_delivered() { assertIllegal(DeliveryStatus.ARRIVED_AT_STORE, DeliveryStatus.DELIVERED); }
+
+        @Test
+        @DisplayName("AWAITING_PICKUP → DELIVERED (terminal 직행)")
+        void awaitingPickup_to_delivered() { assertIllegal(DeliveryStatus.AWAITING_PICKUP, DeliveryStatus.DELIVERED); }
+
+        // PICKED_UP → WAITING_ASSIGN 제거 (R6-cancel C1에서 합법화 — cancel 시 ARRIVED/AWAITING/PICKED/DELIVERING → WAITING_ASSIGN 4 전이 추가)
+
+        @Test
+        @DisplayName("DELIVERING → AWAITING_PICKUP (역방향)")
+        void delivering_to_awaitingPickup() { assertIllegal(DeliveryStatus.DELIVERING, DeliveryStatus.AWAITING_PICKUP); }
+
+        @Test
+        @DisplayName("DELIVERED → ASSIGNED (terminal 후)")
+        void delivered_to_assigned() { assertIllegal(DeliveryStatus.DELIVERED, DeliveryStatus.ASSIGNED); }
+
+        @Test
+        @DisplayName("DELIVERED → PICKED_UP (terminal 후)")
+        void delivered_to_pickedUp() { assertIllegal(DeliveryStatus.DELIVERED, DeliveryStatus.PICKED_UP); }
+
+        @Test
+        @DisplayName("DELIVERED → DELIVERING (terminal 후)")
+        void delivered_to_delivering() { assertIllegal(DeliveryStatus.DELIVERED, DeliveryStatus.DELIVERING); }
+    }
+
+    @Nested
+    @DisplayName("권한 검증 + 낙관적 락 + NOT_FOUND + log INSERT (4건)")
+    class AuthorizationAndConcurrency {
+
+        @Test
+        @DisplayName("권한: RIDER 액터 + 다른 라이더 배달 → BusinessException FORBIDDEN + saveAndFlush/log 미호출")
+        void riderActor_notOwnDelivery_throwsForbidden() {
+            Long otherRiderNo = 999L;
+            Delivery delivery = deliveryWith(DeliveryStatus.ASSIGNED, otherRiderNo);
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+
+            assertThatThrownBy(() -> deliveryService.updateStatus(
+                    DELIVERY_NO, DeliveryStatus.ARRIVED_AT_STORE, CALLER_USER_NO, ActorRole.RIDER))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("본인 배달이 아닙니다.")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(deliveryRepository, never()).saveAndFlush(any(Delivery.class));
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("낙관적 락: saveAndFlush ObjectOptimisticLockingFailureException → BusinessException CONFLICT + log 미호출")
+        void saveAndFlush_optimisticLock_throwsConflict() {
+            Delivery delivery = deliveryWith(DeliveryStatus.ASSIGNED, CALLER_RIDER_NO);
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class)))
+                    .thenThrow(new ObjectOptimisticLockingFailureException(Delivery.class, DELIVERY_NO));
+
+            assertThatThrownBy(() -> deliveryService.updateStatus(
+                    DELIVERY_NO, DeliveryStatus.ARRIVED_AT_STORE, CALLER_USER_NO, ActorRole.RIDER))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("동시 변경 충돌")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.CONFLICT);
+
+            verify(deliveryRepository).saveAndFlush(delivery);
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("NOT_FOUND: delivery 부재 → BusinessException NOT_FOUND + saveAndFlush/log 미호출")
+        void delivery_notFound_throwsNotFound() {
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.updateStatus(
+                    DELIVERY_NO, DeliveryStatus.ASSIGNED, CALLER_USER_NO, ActorRole.RIDER))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("배달을 찾을 수 없습니다.")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+
+            verify(deliveryRepository, never()).saveAndFlush(any(Delivery.class));
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("delivery_log 같은 트랜잭션 INSERT: from/to/actorRole/userNo 정확 박제 (ArgumentCaptor)")
+        void deliveryLog_argumentsCaptured() {
+            Delivery delivery = deliveryWith(DeliveryStatus.ASSIGNED, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            deliveryService.updateStatus(DELIVERY_NO, DeliveryStatus.ARRIVED_AT_STORE, CALLER_USER_NO, ActorRole.RIDER);
+
+            ArgumentCaptor<DeliveryLog> logCaptor = ArgumentCaptor.forClass(DeliveryLog.class);
+            verify(deliveryLogRepository).save(logCaptor.capture());
+
+            DeliveryLog captured = logCaptor.getValue();
+            assertThat(captured.getDeliveryNo()).isEqualTo(DELIVERY_NO);
+            assertThat(captured.getFromStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            assertThat(captured.getToStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
+            assertThat(captured.getActorRole()).isEqualTo(ActorRole.RIDER);
+            assertThat(captured.getActorUserNo()).isEqualTo(CALLER_USER_NO);
+        }
+    }
+
+    @Nested
+    @DisplayName("AssignDelivery (R4 §1.1, 5건)")
+    class AssignDelivery {
+
+        private RiderInternalAssignReq sampleReq() {
+            return new RiderInternalAssignReq(
+                    "ORD0001", 7L, "맛있는집",
+                    "가게 주소", 35.123, 128.456,
+                    "053-111-2222",
+                    "손님 주소", 35.130, 128.460,
+                    "010-1234-5678",
+                    4000, 1500);
+        }
+
+        private Rider activeRider() {
+            Rider rider = mock(Rider.class);
+            lenient().when(rider.getRiderNo()).thenReturn(CALLER_RIDER_NO);
+            lenient().when(rider.getStatus()).thenReturn(RiderStatus.ACTIVE);
+            return rider;
+        }
+
+        @Test
+        @DisplayName("happy: ACTIVE rider + Delivery 생성(WAITING_ASSIGN→ASSIGNED) + log INSERT(SYSTEM) + 응답 박제")
+        void happy_assigned() {
+            Rider rider = activeRider();
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            RiderInternalAssignRes res = deliveryService.assignDelivery(CALLER_RIDER_NO, sampleReq());
+
+            assertThat(res.assigned()).isTrue();
+            assertThat(res.riderNo()).isEqualTo(CALLER_RIDER_NO);
+            assertThat(res.deliveryNo()).isNotNull();
+            assertThat(res.assignedAt()).isNotNull();
+
+            ArgumentCaptor<Delivery> deliveryCaptor = ArgumentCaptor.forClass(Delivery.class);
+            verify(deliveryRepository).saveAndFlush(deliveryCaptor.capture());
+            Delivery saved = deliveryCaptor.getValue();
+            assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            assertThat(saved.getRiderNo()).isEqualTo(CALLER_RIDER_NO);
+            assertThat(saved.getOrderId()).isEqualTo("ORD0001");
+            assertThat(saved.getAssignedAt()).isNotNull();
+            assertThat(saved.getBaseFee()).isEqualTo(4000);
+
+            ArgumentCaptor<DeliveryLog> logCaptor = ArgumentCaptor.forClass(DeliveryLog.class);
+            verify(deliveryLogRepository).save(logCaptor.capture());
+            DeliveryLog log = logCaptor.getValue();
+            assertThat(log.getFromStatus()).isNull();
+            assertThat(log.getToStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            assertThat(log.getActorRole()).isEqualTo(ActorRole.SYSTEM);
+            assertThat(log.getActorUserNo()).isNull();
+        }
+
+        @Test
+        @DisplayName("rider 부재 → BusinessException NOT_FOUND + saveAndFlush/log 미호출")
+        void riderNotFound_throwsNotFound() {
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.assignDelivery(CALLER_RIDER_NO, sampleReq()))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("라이더를 찾을 수 없습니다.")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+
+            verify(deliveryRepository, never()).saveAndFlush(any(Delivery.class));
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("rider PENDING → BusinessException BAD_REQUEST (ACTIVE 외 상태)")
+        void riderNotActive_throwsBadRequest() {
+            Rider pendingRider = mock(Rider.class);
+            when(pendingRider.getStatus()).thenReturn(RiderStatus.PENDING);
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(pendingRider));
+
+            assertThatThrownBy(() -> deliveryService.assignDelivery(CALLER_RIDER_NO, sampleReq()))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("배차 가능 상태가 아닙니다")
+                    .hasMessageContaining("PENDING")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).saveAndFlush(any(Delivery.class));
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("saveAndFlush 낙관적 락 충돌 → BusinessException CONFLICT + log 미호출")
+        void optimisticLock_throwsConflict() {
+            Rider rider = activeRider();
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class)))
+                    .thenThrow(new ObjectOptimisticLockingFailureException(Delivery.class, "any"));
+
+            assertThatThrownBy(() -> deliveryService.assignDelivery(CALLER_RIDER_NO, sampleReq()))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("동시 배차 충돌")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.CONFLICT);
+
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("deliveryNo 자동 생성 형식: 5자리 숫자 + 3자리 영문 (interfaces.md §1.1 박제 형식 예시 일관)")
+        void deliveryNo_format() {
+            Rider rider = activeRider();
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            RiderInternalAssignRes res = deliveryService.assignDelivery(CALLER_RIDER_NO, sampleReq());
+
+            assertThat(res.deliveryNo()).hasSize(8).matches("^[0-9]{5}[A-Z]{3}$");
+        }
+    }
+
+    @Nested
+    @DisplayName("GetRiderInternalStatus (R4 §1.3, 3건)")
+    class GetRiderInternalStatus {
+
+        private Rider activeRider() {
+            Rider rider = mock(Rider.class);
+            lenient().when(rider.getRiderNo()).thenReturn(CALLER_RIDER_NO);
+            lenient().when(rider.getStatus()).thenReturn(RiderStatus.ACTIVE);
+            return rider;
+        }
+
+        @Test
+        @DisplayName("진행 중 배달 있음 → currentDeliveryNo 반환")
+        void withProgress_returnsCurrentDeliveryNo() {
+            Delivery inProgress = deliveryWith(DeliveryStatus.PICKED_UP, CALLER_RIDER_NO);
+            Rider rider = activeRider();
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.findFirstByRiderNoAndStatusInOrderByAssignedAtDesc(eq(CALLER_RIDER_NO), anyList()))
+                    .thenReturn(Optional.of(inProgress));
+
+            RiderInternalStatusRes res = deliveryService.getRiderInternalStatus(CALLER_RIDER_NO);
+
+            assertThat(res.riderNo()).isEqualTo(CALLER_RIDER_NO);
+            assertThat(res.status()).isEqualTo("ACTIVE");
+            assertThat(res.currentDeliveryNo()).isEqualTo(DELIVERY_NO);
+        }
+
+        @Test
+        @DisplayName("진행 중 배달 없음 → currentDeliveryNo null")
+        void withoutProgress_returnsNull() {
+            Rider rider = activeRider();
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.findFirstByRiderNoAndStatusInOrderByAssignedAtDesc(eq(CALLER_RIDER_NO), anyList()))
+                    .thenReturn(Optional.empty());
+
+            RiderInternalStatusRes res = deliveryService.getRiderInternalStatus(CALLER_RIDER_NO);
+
+            assertThat(res.currentDeliveryNo()).isNull();
+            assertThat(res.status()).isEqualTo("ACTIVE");
+        }
+
+        @Test
+        @DisplayName("rider 부재 → BusinessException NOT_FOUND")
+        void riderNotFound_throwsNotFound() {
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.getRiderInternalStatus(CALLER_RIDER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("라이더를 찾을 수 없습니다.")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+
+            verify(deliveryRepository, never())
+                    .findFirstByRiderNoAndStatusInOrderByAssignedAtDesc(any(), anyList());
+        }
+    }
+
+    @Nested
+    @DisplayName("Admin 모니터 (6건)")
+    class GetMonitor {
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("status=null happy: summary 4그룹 + findAll page0")
+        void monitor_noFilter_returnsSummaryAndAllDeliveries() {
+            when(deliveryRepository.countByStatus(DeliveryStatus.WAITING_ASSIGN)).thenReturn(2L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.ASSIGNED)).thenReturn(1L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.ARRIVED_AT_STORE)).thenReturn(2L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.AWAITING_PICKUP)).thenReturn(0L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.PICKED_UP)).thenReturn(3L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.DELIVERING)).thenReturn(1L);
+            when(deliveryRepository.countByStatus(DeliveryStatus.DELIVERED)).thenReturn(7L);
+
+            Delivery d1 = deliveryWith(DeliveryStatus.ASSIGNED, 5L);
+            Delivery d2 = deliveryWith(DeliveryStatus.DELIVERING, 6L);
+            when(deliveryRepository.findAll(any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(d1, d2)));
+
+            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0);
+
+            assertThat(res.summary().waiting()).isEqualTo(2L);
+            assertThat(res.summary().assigned()).isEqualTo(3L); // 1+2+0
+            assertThat(res.summary().delivering()).isEqualTo(4L); // 3+1
+            assertThat(res.summary().completed()).isEqualTo(7L);
+            assertThat(res.deliveries()).hasSize(2);
+            assertThat(res.deliveries().get(0).status()).isEqualTo("ASSIGNED");
+            assertThat(res.deliveries().get(1).status()).isEqualTo("DELIVERING");
+
+            verify(deliveryRepository, never())
+                    .findByStatusIn(any(Collection.class), any(Pageable.class));
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("status=assigned: ASSIGNED+ARRIVED_AT_STORE+AWAITING_PICKUP 3 enum filter")
+        void monitor_assignedFilter_passesGroupSet() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+            ArgumentCaptor<Collection<DeliveryStatus>> captor = ArgumentCaptor.forClass(Collection.class);
+            when(deliveryRepository.findByStatusIn(captor.capture(), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of()));
+
+            deliveryService.getMonitor("assigned", 0);
+
+            assertThat(captor.getValue()).containsExactlyInAnyOrder(
+                    DeliveryStatus.ASSIGNED,
+                    DeliveryStatus.ARRIVED_AT_STORE,
+                    DeliveryStatus.AWAITING_PICKUP);
+            verify(deliveryRepository, never()).findAll(any(Pageable.class));
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("status=DELIVERING(대문자) lowercase 정규화 후 group 매칭")
+        void monitor_uppercase_normalizedToLowercase() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+            ArgumentCaptor<Collection<DeliveryStatus>> captor = ArgumentCaptor.forClass(Collection.class);
+            when(deliveryRepository.findByStatusIn(captor.capture(), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of()));
+
+            deliveryService.getMonitor("DELIVERING", 0);
+
+            assertThat(captor.getValue()).containsExactlyInAnyOrder(
+                    DeliveryStatus.PICKED_UP,
+                    DeliveryStatus.DELIVERING);
+        }
+
+        @Test
+        @DisplayName("invalid status → BusinessException BAD_REQUEST + count 미호출 (W-1 정정)")
+        void monitor_invalidStatus_throwsBadRequest() {
+            assertThatThrownBy(() -> deliveryService.getMonitor("xxx", 0))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).countByStatus(any(DeliveryStatus.class));
+            verify(deliveryRepository, never()).findAll(any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("page<0 → BusinessException BAD_REQUEST")
+        void monitor_negativePage_throwsBadRequest() {
+            assertThatThrownBy(() -> deliveryService.getMonitor(null, -1))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).countByStatus(any(DeliveryStatus.class));
+        }
+
+        @Test
+        @DisplayName("PageRequest size=20 + assignedAt DESC sort 검증")
+        void monitor_pageRequestFixedSizeAndSort() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+            ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+            when(deliveryRepository.findAll(pageableCaptor.capture()))
+                    .thenReturn(new PageImpl<>(List.of()));
+
+            deliveryService.getMonitor(null, 3);
+
+            Pageable captured = pageableCaptor.getValue();
+            assertThat(captured.getPageSize()).isEqualTo(20);
+            assertThat(captured.getPageNumber()).isEqualTo(3);
+            assertThat(captured.getSort().getOrderFor("assignedAt").getDirection())
+                    .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+        }
+    }
+
+    // ========================================================================
+    // R6 §6.2 라이더 측 외부 endpoint (14건)
+    // ========================================================================
+
+    @Nested
+    @DisplayName("R6 §6.2 라이더 측 transition + 조회 (14건)")
+    class RiderTransitions {
+
+        private Delivery deliveryAssignedToCaller() {
+            Delivery d = deliveryWith(DeliveryStatus.ASSIGNED, CALLER_RIDER_NO);
+            lenient().when(d.getOrderId()).thenReturn(ORDER_ID);
+            return d;
+        }
+
+        @Test
+        @DisplayName("getWaitingDeliveries ACTIVE happy: WAITING_ASSIGN 전체 시간순 + dto 매핑")
+        void waiting_activeRider_returnsAllWaiting() {
+            when(callerRider.getStatus()).thenReturn(RiderStatus.ACTIVE);
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            Delivery d = deliveryWith(DeliveryStatus.WAITING_ASSIGN, null);
+            lenient().when(d.getOrderId()).thenReturn(ORDER_ID);
+            when(deliveryRepository.findByStatusOrderByCreatedAtAsc(DeliveryStatus.WAITING_ASSIGN))
+                    .thenReturn(List.of(d));
+
+            List<DeliveryWaitingRowRes> rows = deliveryService.getWaitingDeliveries(CALLER_USER_NO);
+
+            assertThat(rows).hasSize(1);
+            assertThat(rows.get(0).deliveryNo()).isEqualTo(DELIVERY_NO);
+            assertThat(rows.get(0).orderId()).isEqualTo(ORDER_ID);
+            assertThat(rows.get(0).status()).isEqualTo("WAITING_ASSIGN");
+        }
+
+        @Test
+        @DisplayName("getWaitingDeliveries PENDING: FORBIDDEN + 조회 미호출 (reviewer C-2 정정)")
+        void waiting_pendingRider_throwsForbidden() {
+            when(callerRider.getStatus()).thenReturn(RiderStatus.PENDING);
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+
+            assertThatThrownBy(() -> deliveryService.getWaitingDeliveries(CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("ACTIVE 라이더만")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(deliveryRepository, never())
+                    .findByStatusOrderByCreatedAtAsc(any(DeliveryStatus.class));
+        }
+
+        @Test
+        @DisplayName("getWaitingDeliveries rider 부재: NOT_FOUND")
+        void waiting_noRider_throwsNotFound() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.getWaitingDeliveries(CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+
+            verify(deliveryRepository, never())
+                    .findByStatusOrderByCreatedAtAsc(any(DeliveryStatus.class));
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("getMyInProgressDeliveries happy: 본인 riderNo + 5 status filter")
+        void inprogress_happy_returnsMyDeliveries() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            Delivery d = deliveryWith(DeliveryStatus.PICKED_UP, CALLER_RIDER_NO);
+            lenient().when(d.getOrderId()).thenReturn(ORDER_ID);
+
+            ArgumentCaptor<java.util.Collection<DeliveryStatus>> statusCaptor =
+                    ArgumentCaptor.forClass(java.util.Collection.class);
+            when(deliveryRepository.findByRiderNoAndStatusInOrderByAssignedAtDesc(
+                    eq(CALLER_RIDER_NO), statusCaptor.capture()))
+                    .thenReturn(List.of(d));
+
+            List<DeliveryWaitingRowRes> rows = deliveryService.getMyInProgressDeliveries(CALLER_USER_NO);
+
+            assertThat(rows).hasSize(1);
+            assertThat(statusCaptor.getValue()).containsExactlyInAnyOrder(
+                    DeliveryStatus.ASSIGNED,
+                    DeliveryStatus.ARRIVED_AT_STORE,
+                    DeliveryStatus.AWAITING_PICKUP,
+                    DeliveryStatus.PICKED_UP,
+                    DeliveryStatus.DELIVERING);
+        }
+
+        @Test
+        @DisplayName("getMyInProgressDeliveries rider 부재: NOT_FOUND")
+        void inprogress_noRider_throwsNotFound() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.getMyInProgressDeliveries(CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("acceptDelivery happy: ASSIGNED → ARRIVED_AT_STORE + RIDER actor log")
+        void accept_happy_transitionsAndLogs() {
+            Delivery delivery = deliveryAssignedToCaller();
+            stubFindAndOwn(delivery);
+
+            DeliveryTransitionResult result = deliveryService.acceptDelivery(DELIVERY_NO, CALLER_USER_NO);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
+            assertThat(result.orderId()).isEqualTo(ORDER_ID);
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
+            assertThat(result.riderNo()).isEqualTo(CALLER_RIDER_NO);
+            verify(deliveryRepository).saveAndFlush(delivery);
+
+            ArgumentCaptor<DeliveryLog> logCaptor = ArgumentCaptor.forClass(DeliveryLog.class);
+            verify(deliveryLogRepository).save(logCaptor.capture());
+            assertThat(logCaptor.getValue().getActorRole()).isEqualTo(ActorRole.RIDER);
+            assertThat(logCaptor.getValue().getActorUserNo()).isEqualTo(CALLER_USER_NO);
+        }
+
+        @Test
+        @DisplayName("acceptDelivery 본인 X: FORBIDDEN + saveAndFlush 미호출")
+        void accept_notOwner_throwsForbidden() {
+            Delivery delivery = deliveryWith(DeliveryStatus.ASSIGNED, 999L);
+            stubFindAndOwn(delivery);
+
+            assertThatThrownBy(() -> deliveryService.acceptDelivery(DELIVERY_NO, CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.FORBIDDEN);
+
+            verify(deliveryRepository, never()).saveAndFlush(any(Delivery.class));
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("acceptDelivery 화이트리스트 위반(WAITING_ASSIGN→ARRIVED_AT_STORE): BAD_REQUEST")
+        void accept_invalidTransition_throwsBadRequest() {
+            Delivery delivery = deliveryWith(DeliveryStatus.WAITING_ASSIGN, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            assertThatThrownBy(() -> deliveryService.acceptDelivery(DELIVERY_NO, CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).saveAndFlush(any(Delivery.class));
+        }
+
+        @Test
+        @DisplayName("rejectDelivery: ASSIGNED → WAITING_ASSIGN + unassignRider + riderNo snapshot 보존")
+        void reject_happy_unassignsAndKeepsRiderSnapshot() {
+            // spy 우회 — 실 entity로 unassignRider 작동 검증 (spy의 getRiderNo() mock이 unassign 후도 5L 반환 회피)
+            Delivery delivery = new Delivery(
+                    DELIVERY_NO, ORDER_ID,
+                    null, null, null, null, null, null, null, null,
+                    3000);
+            delivery.assignRider(CALLER_RIDER_NO);
+            delivery.changeStatus(DeliveryStatus.ASSIGNED, LocalDateTime.now());
+
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            DeliveryTransitionResult result = deliveryService.rejectDelivery(DELIVERY_NO, CALLER_USER_NO);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+            assertThat(delivery.getRiderNo()).isNull(); // unassignRider 작동
+            assertThat(result.riderNo()).isEqualTo(CALLER_RIDER_NO); // snapshot 보존
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+        }
+
+        @Test
+        @DisplayName("arriveAtStore happy: ARRIVED_AT_STORE → AWAITING_PICKUP")
+        void arrive_happy() {
+            Delivery delivery = deliveryWith(DeliveryStatus.ARRIVED_AT_STORE, CALLER_RIDER_NO);
+            lenient().when(delivery.getOrderId()).thenReturn(ORDER_ID);
+            stubFindAndOwn(delivery);
+
+            DeliveryTransitionResult result = deliveryService.arriveAtStore(DELIVERY_NO, CALLER_USER_NO);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.AWAITING_PICKUP);
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.AWAITING_PICKUP);
+        }
+
+        @Test
+        @DisplayName("pickup happy: AWAITING_PICKUP → PICKED_UP")
+        void pickup_happy() {
+            Delivery delivery = deliveryWith(DeliveryStatus.AWAITING_PICKUP, CALLER_RIDER_NO);
+            lenient().when(delivery.getOrderId()).thenReturn(ORDER_ID);
+            stubFindAndOwn(delivery);
+
+            DeliveryTransitionResult result = deliveryService.pickup(DELIVERY_NO, CALLER_USER_NO);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.PICKED_UP);
+        }
+
+        @Test
+        @DisplayName("depart happy: PICKED_UP → DELIVERING")
+        void depart_happy() {
+            Delivery delivery = deliveryWith(DeliveryStatus.PICKED_UP, CALLER_RIDER_NO);
+            lenient().when(delivery.getOrderId()).thenReturn(ORDER_ID);
+            stubFindAndOwn(delivery);
+
+            DeliveryTransitionResult result = deliveryService.depart(DELIVERY_NO, CALLER_USER_NO);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERING);
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.DELIVERING);
+        }
+
+        @Test
+        @DisplayName("completeDelivery happy: DELIVERING → DELIVERED + markDelivered(method, photoUrl)")
+        void complete_happy_marksDeliveredAndTransitions() {
+            Delivery delivery = deliveryWith(DeliveryStatus.DELIVERING, CALLER_RIDER_NO);
+            lenient().when(delivery.getOrderId()).thenReturn(ORDER_ID);
+            stubFindAndOwn(delivery);
+            DeliveryCompleteReq req = new DeliveryCompleteReq("DIRECT", "/uploads/delivery/x.jpg");
+
+            DeliveryTransitionResult result = deliveryService.completeDelivery(
+                    DELIVERY_NO, CALLER_USER_NO, req);
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+            assertThat(delivery.getDeliveredMethod()).isEqualTo("DIRECT");
+            assertThat(delivery.getDeliveredPhotoUrl()).isEqualTo("/uploads/delivery/x.jpg");
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+        }
+
+        @Test
+        @DisplayName("completeDelivery photoUrl null 허용 (DIRECT 방식)")
+        void complete_nullPhotoUrl_allowed() {
+            Delivery delivery = deliveryWith(DeliveryStatus.DELIVERING, CALLER_RIDER_NO);
+            lenient().when(delivery.getOrderId()).thenReturn(ORDER_ID);
+            stubFindAndOwn(delivery);
+            DeliveryCompleteReq req = new DeliveryCompleteReq("DIRECT", null);
+
+            deliveryService.completeDelivery(DELIVERY_NO, CALLER_USER_NO, req);
+
+            assertThat(delivery.getDeliveredPhotoUrl()).isNull();
+            assertThat(delivery.getDeliveredMethod()).isEqualTo("DIRECT");
+        }
+
+        @Test
+        @DisplayName("delivery 부재: NOT_FOUND")
+        void anyTransition_deliveryNotFound_throwsNotFound() {
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.acceptDelivery(DELIVERY_NO, CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        // R6-cancel: 진행 중 배달 반려 (4 합법 추가 전이 + reason 박제)
+
+        @Test
+        @DisplayName("cancelDelivery PICKED_UP→WAITING_ASSIGN happy: unassignRider + reason 박제")
+        void cancel_pickedUp_happy() {
+            Delivery delivery = new Delivery(
+                    DELIVERY_NO, ORDER_ID,
+                    null, null, null, null, null, null, null, null,
+                    3000);
+            delivery.assignRider(CALLER_RIDER_NO);
+            delivery.changeStatus(DeliveryStatus.PICKED_UP, LocalDateTime.now());
+
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            DeliveryTransitionResult result = deliveryService.cancelDelivery(
+                    DELIVERY_NO, CALLER_USER_NO,
+                    new DeliveryCancelReq(DeliveryCancelReason.ACCIDENT));
+
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+            assertThat(delivery.getRiderNo()).isNull();
+            assertThat(result.riderNo()).isEqualTo(CALLER_RIDER_NO);
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+
+            ArgumentCaptor<DeliveryLog> logCaptor = ArgumentCaptor.forClass(DeliveryLog.class);
+            verify(deliveryLogRepository).save(logCaptor.capture());
+            assertThat(logCaptor.getValue().getReason()).isEqualTo(DeliveryCancelReason.ACCIDENT);
+            assertThat(logCaptor.getValue().getActorRole()).isEqualTo(ActorRole.RIDER);
+        }
+
+        @Test
+        @DisplayName("cancelDelivery DELIVERING→WAITING_ASSIGN happy: PERSONAL reason 박제")
+        void cancel_delivering_personal() {
+            Delivery delivery = new Delivery(
+                    DELIVERY_NO, ORDER_ID,
+                    null, null, null, null, null, null, null, null,
+                    3000);
+            delivery.assignRider(CALLER_RIDER_NO);
+            delivery.changeStatus(DeliveryStatus.DELIVERING, LocalDateTime.now());
+
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            DeliveryTransitionResult result = deliveryService.cancelDelivery(
+                    DELIVERY_NO, CALLER_USER_NO,
+                    new DeliveryCancelReq(DeliveryCancelReason.PERSONAL));
+
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+
+            ArgumentCaptor<DeliveryLog> logCaptor = ArgumentCaptor.forClass(DeliveryLog.class);
+            verify(deliveryLogRepository).save(logCaptor.capture());
+            assertThat(logCaptor.getValue().getReason()).isEqualTo(DeliveryCancelReason.PERSONAL);
+            assertThat(logCaptor.getValue().getFromStatus()).isEqualTo(DeliveryStatus.DELIVERING);
+        }
+
+        @Test
+        @DisplayName("cancelDelivery reason null: BAD_REQUEST + 조회/save 미호출")
+        void cancel_nullReason_throwsBadRequest() {
+            assertThatThrownBy(() -> deliveryService.cancelDelivery(
+                    DELIVERY_NO, CALLER_USER_NO, new DeliveryCancelReq(null)))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("reason")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).findById(any());
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+
+        @Test
+        @DisplayName("cancelDelivery WAITING_ASSIGN→WAITING_ASSIGN: 화이트리스트 위반 BAD_REQUEST")
+        void cancel_fromWaitingAssign_throwsBadRequest() {
+            Delivery delivery = deliveryWith(DeliveryStatus.WAITING_ASSIGN, CALLER_RIDER_NO);
+            stubFindAndOwn(delivery);
+
+            assertThatThrownBy(() -> deliveryService.cancelDelivery(
+                    DELIVERY_NO, CALLER_USER_NO,
+                    new DeliveryCancelReq(DeliveryCancelReason.OTHER)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(deliveryRepository, never()).saveAndFlush(any(Delivery.class));
+        }
+
+        @Test
+        @DisplayName("낙관적 락 충돌: BAD → BusinessException CONFLICT")
+        void anyTransition_optimisticLockFailure_throwsConflict() {
+            Delivery delivery = deliveryAssignedToCaller();
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class)))
+                    .thenThrow(new ObjectOptimisticLockingFailureException(Delivery.class, DELIVERY_NO));
+
+            assertThatThrownBy(() -> deliveryService.acceptDelivery(DELIVERY_NO, CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.CONFLICT);
+
+            verify(deliveryLogRepository, never()).save(any(DeliveryLog.class));
+        }
+    }
+
+    // ─── R9 배달내역 (getMyCompletedDeliveries) ─────────────────────
+
+    @org.junit.jupiter.api.Nested
+    @DisplayName("R9 getMyCompletedDeliveries")
+    class GetCompletedDeliveriesTest {
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("happy: from=null/to=null → 최근 30일 자동 적용 + 합계 계산")
+        void happy_defaultsRecent30Days_andAggregates() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            com.green.mmg.rider.delivery.model.Delivery d1 = mock(com.green.mmg.rider.delivery.model.Delivery.class);
+            com.green.mmg.rider.delivery.model.Delivery d2 = mock(com.green.mmg.rider.delivery.model.Delivery.class);
+            when(d1.getDeliveryNo()).thenReturn("D1");
+            when(d1.getOrderId()).thenReturn("O1");
+            when(d1.getPickupAddress()).thenReturn("가게1");
+            when(d1.getDeliveryAddress()).thenReturn("손님1");
+            when(d1.getBaseFee()).thenReturn(3000);
+            when(d1.getExtraFee()).thenReturn(500);
+            when(d1.getDeliveredAt()).thenReturn(LocalDateTime.now().minusHours(1));
+            when(d2.getDeliveryNo()).thenReturn("D2");
+            when(d2.getOrderId()).thenReturn("O2");
+            when(d2.getPickupAddress()).thenReturn("가게2");
+            when(d2.getDeliveryAddress()).thenReturn("손님2");
+            when(d2.getBaseFee()).thenReturn(4000);
+            when(d2.getExtraFee()).thenReturn(0);
+            when(d2.getDeliveredAt()).thenReturn(LocalDateTime.now().minusHours(5));
+
+            ArgumentCaptor<LocalDateTime> fromCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+            ArgumentCaptor<LocalDateTime> toCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+            when(deliveryRepository.findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
+                    eq(CALLER_RIDER_NO), eq(DeliveryStatus.DELIVERED),
+                    fromCaptor.capture(), toCaptor.capture()))
+                    .thenReturn(List.of(d1, d2));
+
+            com.green.mmg.rider.delivery.dto.DeliveryHistoryRes res =
+                    deliveryService.getMyCompletedDeliveries(CALLER_USER_NO, null, null);
+
+            // 기본 30일: from = today - 30, to = today + 1 (종료일 23:59 포함)
+            java.time.LocalDate today = java.time.LocalDate.now();
+            assertThat(fromCaptor.getValue().toLocalDate()).isEqualTo(today.minusDays(30));
+            assertThat(toCaptor.getValue().toLocalDate()).isEqualTo(today.plusDays(1));
+
+            assertThat(res.from()).isEqualTo(today.minusDays(30));
+            assertThat(res.to()).isEqualTo(today);
+            assertThat(res.totalCount()).isEqualTo(2);
+            assertThat(res.totalFee()).isEqualTo(3500 + 4000);
+            assertThat(res.rows()).hasSize(2);
+            assertThat(res.rows().get(0).deliveryNo()).isEqualTo("D1");
+            assertThat(res.rows().get(0).totalFee()).isEqualTo(3500);
+        }
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("from > to → BAD_REQUEST")
+        void fromAfterTo_badRequest() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(callerRider));
+            java.time.LocalDate from = java.time.LocalDate.of(2026, 5, 10);
+            java.time.LocalDate to = java.time.LocalDate.of(2026, 5, 1);
+
+            assertThatThrownBy(() -> deliveryService.getMyCompletedDeliveries(CALLER_USER_NO, from, to))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+        }
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("rider 미등록 → NOT_FOUND")
+        void riderNotFound() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> deliveryService.getMyCompletedDeliveries(CALLER_USER_NO, null, null))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+            verify(deliveryRepository, never()).findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
+                    any(), any(), any(), any());
+        }
+    }
+}

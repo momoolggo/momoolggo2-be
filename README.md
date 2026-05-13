@@ -68,7 +68,31 @@ DB 서버: 학원 공유 MySQL (`112.222.157.157:5012`)
 1. Java 21 설치 확인: `java --version`
 2. `.env` 파일 생성 (`.env.example` 참고)
 3. MySQL 4개 스키마 생성 (`docs/ddl/` 참고)
-4. Redis 실행 (Phase 4부터 필요)
+4. Docker Desktop 설치 (Redis 컨테이너 실행용)
+
+### Redis 실행 (Phase 4-C부터 — auth RT 저장)
+
+```bash
+# 백그라운드로 Redis 띄우기
+docker compose up -d redis
+
+# 상태 확인
+docker compose ps
+
+# 종료
+docker compose down
+```
+
+기본 포트 6379. 포트 변경은 `.env`의 `REDIS_PORT` 수정.
+
+### 환경별 설정 분리 원칙
+
+- 로컬 (`application.yml` + `.env`): 폴백값/유연한 값 (ddl-auto=update 허용, REDIS_HOST=localhost 등)
+- prod (`application-prod.yml` + `mmg-common/application-*-prod.yml`): K8s 고정값 (ddl-auto=none, redis-master.infra.svc.cluster.local 등)
+
+redis/kafka 주소를 변경할 때:
+- 로컬: `.env` 수정
+- prod: `mmg-common/src/main/resources/application-{redis|kafka}-prod.yml` 수정 → 4개 서비스 모두 자동 반영
 
 ### 빌드 & 실행
 

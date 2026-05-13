@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.green.mmg.main.order.OrderMapper">
+
+    <!--
+      Phase 3-D 정리 후 최종 잔존 (3 SQL, 모두 복잡 영구):
+      - findOrdersByUserId, orderHistoryDetail, calSumOrder
+
+      제거: findDefaultAddress (Phase 3-D-B에서 UserAddressRepository로 위임).
+    -->
+
+    <select id="findOrdersByUserId" >
+        SELECT
+            o.order_id      AS orderId,
+            DATE_FORMAT(o.order_time,
+                        CONCAT(MONTH(o.order_time), '월 ',
+                            DAY(o.order_time), '일(',
+                                                    ELT(DAYOFWEEK(o.order_time),'일','월','화','수','목','금','토'), ')')
+            )               AS date,
+    s.store_name    AS storeName,
+    s.store_pic   AS storeImage,
+    o.amount        AS totalPrice,
+    o.delivery_fee  AS deliveryFee,
+    o.order_state   AS orderState,
+    (SELECT COUNT(1) FROM review r WHERE r.order_id = o.order_id) AS hasReview
+        FROM orders o
+            JOIN store s ON s.store_id = o.store_id
+        WHERE o.user_no = #{userId}
+        ORDER BY o.order_time DESC
+            LIMIT #{startIdx}, #{size}
+    </select>
+
+    <select id="orderHistoryDetail">
+       <![CDATA[
+        SELECT
+            o.order_id      AS orderId,
+            DATE_FORMAT(o.order_time,
+                        CONCAT(
+                            YEAR(o.order_time), '년 ',
+                            MONTH(o.order_time), '월 ',
+                            DAY(o.order_time), '일 ',
+                                                IF(HOUR(o.order_time) < 12, '오전 ', '오후 '),
+                                                LPAD(IF(HOUR(o.order_time) % 12 = 0, 12, HOUR(o.order_time) % 12), 1, '0'), ':',
+                                                LPAD(MINUTE(o.order_time), 2, '0')
+                        )
+            )               AS date,
+        s.store_name    AS storeName,
+        s.store_pic     AS storeImage,
+        s.store_id      AS storeId,
+        o.amount        AS totalPrice,
+        o.delivery_fee  AS deliveryFee,
+        o.order_state   AS orderState
+        FROM orders o
+            JOIN store s ON s.store_id = o.store_id
+        WHERE o.order_id = #{id}
+        ]]>
+    </select>
+
+    <!--
+      Phase 2-Backfill-A: 파라미터 orderId → storeId. 이전에는 서브쿼리로
+      orders.order_id에서 store_id를 도출했으나, deleteOrder가 orders row를
+      삭제한 직후 calSumOrder가 호출되면 서브쿼리가 빈 결과 → store.order_count
+      미갱신. 호출자가 storeId를 미리 확보해서 넘기도록 단순화.
+    -->
+    <update id="calSumOrder">
+        update store
+           set order_count = (select count(*) from orders where store_id = #{storeId})
+         where store_id = #{storeId}
+    </update>
+</mapper>

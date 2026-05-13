@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.green.mmg.main.payment.PaymentMapper">
+
+    <!-- 의미: "이 주문이 이미 결제됐는지" — orders.pay_state 검사 (payment 테이블 아님, 의도된 동작) -->
+    <select id="existsByOrderId" resultType="boolean">
+        SELECT COUNT(*) > 0
+        FROM orders
+        WHERE order_id = #{orderId} and pay_state>1
+    </select>
+
+</mapper>

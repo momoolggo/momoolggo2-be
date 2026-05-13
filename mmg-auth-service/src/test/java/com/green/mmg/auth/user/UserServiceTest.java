@@ -1,0 +1,521 @@
+package com.green.mmg.auth.user;
+
+import com.green.mmg.auth.token.RefreshTokenStore;
+import com.green.mmg.auth.user.model.*;
+import com.green.mmg.common.constants.ConstJwt;
+import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.common.jwt.JwtTokenManager;
+import com.green.mmg.common.jwt.JwtTokenProvider;
+import com.green.mmg.common.model.JwtUser;
+import com.green.mmg.common.util.MyCookieUtil;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.security.SignatureException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+import java.time.Duration;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+@DisplayName("UserService 단위 테스트")
+class UserServiceTest {
+
+    @Mock private UserRepository userRepository;
+    @Mock private PasswordEncoder passwordEncoder;
+    @Mock private JwtTokenManager jwtTokenManager;
+    @Mock private JwtTokenProvider jwtTokenProvider;
+    @Mock private MyCookieUtil myCookieUtil;
+    @Mock private ConstJwt constJwt;
+    @Mock private RefreshTokenStore refreshTokenStore;  // Phase 4-C
+    @Mock private HttpServletRequest httpReq;
+    @Mock private HttpServletResponse httpRes;
+
+    @InjectMocks
+    private UserService userService;
+
+    private User existingUser;
+
+    @BeforeEach
+    void setUp() {
+        existingUser = new User();
+        existingUser.setUserNo(42L);
+        existingUser.setUserId("kjh");
+        existingUser.setUserPw("$2a$10$encoded-hash");
+        existingUser.setName("준하");
+        existingUser.setRole("CUSTOMER");
+        existingUser.setBirth("1990-01-01");
+        existingUser.setGender(1);
+        existingUser.setTel("010-1234-5678");
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("checkId — 아이디 중복확인")
+    class CheckId {
+        @Test
+        @DisplayName("DB에 없는 ID → true (사용 가능)")
+        void available() {
+            when(userRepository.existsByUserId("new-id")).thenReturn(false);
+            assertThat(userService.checkId("new-id")).isTrue();
+        }
+
+        @Test
+        @DisplayName("DB에 있는 ID → false (사용 불가)")
+        void taken() {
+            when(userRepository.existsByUserId("kjh")).thenReturn(true);
+            assertThat(userService.checkId("kjh")).isFalse();
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("signup — 회원가입 (BFF: 즉시 AT/RT 발급)")
+    class Signup {
+        @Test
+        @DisplayName("happy path: User 저장 + 비번 BCrypt + AT/RT 분리 발급 + Redis 저장 (D1 정합성)")
+        void happyPath() {
+            UserSignupReq req = newSignupReq();
+            req.setRole("CUSTOMER");
+            when(passwordEncoder.encode("plain-pw")).thenReturn("encoded-pw");
+            when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+                User u = inv.getArgument(0);
+                u.setUserNo(100L);
+                return u;
+            });
+            when(constJwt.getAccessTokenValidityMilliseconds()).thenReturn(60_000L);
+            when(constJwt.getRefreshTokenValidityMilliseconds()).thenReturn(1_296_000_000L);
+            when(jwtTokenProvider.generateAccessToken(any(JwtUser.class))).thenReturn("at-token");
+            when(jwtTokenProvider.generateRefreshToken(any(JwtUser.class))).thenReturn("rt-token");
+
+            UserSigninRes res = userService.signup(req, httpRes);
+
+            ArgumentCaptor<User> savedCaptor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(savedCaptor.capture());
+            User saved = savedCaptor.getValue();
+            assertThat(saved.getUserId()).isEqualTo("kjh");
+            assertThat(saved.getUserPw()).isEqualTo("encoded-pw");
+            assertThat(saved.getUserPw()).isNotEqualTo("plain-pw");
+            assertThat(saved.getName()).isEqualTo("준하");
+            assertThat(saved.getRole()).isEqualTo("CUSTOMER");
+            assertThat(saved.getGender()).isEqualTo(1);
+
+            // 분리 호출 패턴 (D2): generate → 쿠키 → Redis (저장 순서)
+            verify(jwtTokenManager).setAccessTokenInCookie(httpRes, "at-token");
+            verify(jwtTokenManager).setRefreshTokenInCookie(httpRes, "rt-token");
+            verify(refreshTokenStore).save(100L, "rt-token", Duration.ofMillis(1_296_000_000L));
+
+            assertThat(res.getUserNo()).isEqualTo(100L);
+            assertThat(res.getName()).isEqualTo("준하");
+            assertThat(res.getRole()).isEqualTo("CUSTOMER");
+            assertThat(res.getAtExpiresAt()).isGreaterThan(System.currentTimeMillis());
+        }
+
+        @Test
+        @DisplayName("role null → 기본값 CUSTOMER 저장")
+        void roleNull_defaultsToCustomer() {
+            UserSignupReq req = newSignupReq();
+            req.setRole(null);
+            when(passwordEncoder.encode(any())).thenReturn("x");
+            when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(constJwt.getAccessTokenValidityMilliseconds()).thenReturn(0L);
+            when(constJwt.getRefreshTokenValidityMilliseconds()).thenReturn(0L);
+            when(jwtTokenProvider.generateAccessToken(any())).thenReturn("at");
+            when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("rt");
+
+            userService.signup(req, httpRes);
+
+            ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(captor.capture());
+            assertThat(captor.getValue().getRole()).isEqualTo("CUSTOMER");
+        }
+
+        @Test
+        @DisplayName("gender null → 0으로 저장")
+        void genderNull_defaultsToZero() {
+            UserSignupReq req = newSignupReq();
+            req.setGender(null);
+            when(passwordEncoder.encode(any())).thenReturn("x");
+            when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(constJwt.getAccessTokenValidityMilliseconds()).thenReturn(0L);
+            when(constJwt.getRefreshTokenValidityMilliseconds()).thenReturn(0L);
+            when(jwtTokenProvider.generateAccessToken(any())).thenReturn("at");
+            when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("rt");
+
+            userService.signup(req, httpRes);
+
+            ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(captor.capture());
+            assertThat(captor.getValue().getGender()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("D1 정합성: refreshTokenStore.save 실패 → RedisConnectionFailureException 그대로 propagate (signup 자체 실패)")
+        void redisStoreFailure_throws() {
+            UserSignupReq req = newSignupReq();
+            req.setRole("CUSTOMER");
+            when(passwordEncoder.encode(any())).thenReturn("encoded-pw");
+            when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+                User u = inv.getArgument(0);
+                u.setUserNo(100L);
+                return u;
+            });
+            when(constJwt.getRefreshTokenValidityMilliseconds()).thenReturn(1_296_000_000L);
+            when(jwtTokenProvider.generateAccessToken(any())).thenReturn("at-token");
+            when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("rt-token");
+            doThrow(new RedisConnectionFailureException("Redis down"))
+                    .when(refreshTokenStore).save(anyLong(), anyString(), any(Duration.class));
+
+            assertThatThrownBy(() -> userService.signup(req, httpRes))
+                    .isInstanceOf(RedisConnectionFailureException.class)
+                    .hasMessageContaining("Redis down");
+            // best-effort 회피 동결 — 사용자가 5xx 응답으로 실패 인지
+        }
+
+        private UserSignupReq newSignupReq() {
+            UserSignupReq req = new UserSignupReq();
+            req.setUserId("kjh");
+            req.setUserPw("plain-pw");
+            req.setName("준하");
+            req.setBirth("1990-01-01");
+            req.setGender(1);
+            req.setTel("010-1234-5678");
+            return req;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("signin — 로그인")
+    class Signin {
+        @Test
+        @DisplayName("happy path: AT/RT 분리 발급 + Redis 저장 + 응답에 userNo/role/이름 포함")
+        void happyPath() {
+            UserSigninReq req = new UserSigninReq();
+            req.setUserId("kjh");
+            req.setUserPw("plain-pw");
+            when(userRepository.findByUserId("kjh")).thenReturn(Optional.of(existingUser));
+            when(passwordEncoder.matches("plain-pw", existingUser.getUserPw())).thenReturn(true);
+            when(constJwt.getAccessTokenValidityMilliseconds()).thenReturn(60_000L);
+            when(constJwt.getRefreshTokenValidityMilliseconds()).thenReturn(1_296_000_000L);
+            when(jwtTokenProvider.generateAccessToken(any(JwtUser.class))).thenReturn("at-token");
+            when(jwtTokenProvider.generateRefreshToken(any(JwtUser.class))).thenReturn("rt-token");
+
+            UserSigninRes res = userService.signin(req, httpRes);
+
+            // 분리 호출 패턴 (D2)
+            verify(jwtTokenManager).setAccessTokenInCookie(httpRes, "at-token");
+            verify(jwtTokenManager).setRefreshTokenInCookie(httpRes, "rt-token");
+            verify(refreshTokenStore).save(42L, "rt-token", Duration.ofMillis(1_296_000_000L));
+
+            assertThat(res.getUserNo()).isEqualTo(42L);
+            assertThat(res.getRole()).isEqualTo("CUSTOMER");
+            assertThat(res.getName()).isEqualTo("준하");
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 userId → BusinessException(401) + 토큰 발급/Redis 미호출")
+        void userNotFound_throws401() {
+            UserSigninReq req = new UserSigninReq();
+            req.setUserId("ghost");
+            req.setUserPw("anything");
+            when(userRepository.findByUserId("ghost")).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userService.signin(req, httpRes))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("아이디 또는 비밀번호")
+                    .extracting("status").isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            verifyNoInteractions(jwtTokenProvider);
+            verify(jwtTokenManager, never()).setAccessTokenInCookie(any(HttpServletResponse.class), anyString());
+            verifyNoInteractions(refreshTokenStore);
+        }
+
+        @Test
+        @DisplayName("비밀번호 불일치 → BusinessException(401) + 토큰 발급/Redis 미호출")
+        void wrongPassword_throws401() {
+            UserSigninReq req = new UserSigninReq();
+            req.setUserId("kjh");
+            req.setUserPw("wrong-pw");
+            when(userRepository.findByUserId("kjh")).thenReturn(Optional.of(existingUser));
+            when(passwordEncoder.matches("wrong-pw", existingUser.getUserPw())).thenReturn(false);
+
+            assertThatThrownBy(() -> userService.signin(req, httpRes))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("아이디 또는 비밀번호")
+                    .extracting("status").isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            verifyNoInteractions(jwtTokenProvider);
+            verify(jwtTokenManager, never()).setAccessTokenInCookie(any(HttpServletResponse.class), anyString());
+            verifyNoInteractions(refreshTokenStore);
+        }
+
+        @Test
+        @DisplayName("D1 정합성: refreshTokenStore.save 실패 → RedisConnectionFailureException 그대로 propagate (signin 자체 실패)")
+        void redisStoreFailure_throws() {
+            UserSigninReq req = new UserSigninReq();
+            req.setUserId("kjh");
+            req.setUserPw("plain-pw");
+            when(userRepository.findByUserId("kjh")).thenReturn(Optional.of(existingUser));
+            when(passwordEncoder.matches("plain-pw", existingUser.getUserPw())).thenReturn(true);
+            when(constJwt.getRefreshTokenValidityMilliseconds()).thenReturn(1_296_000_000L);
+            when(jwtTokenProvider.generateAccessToken(any())).thenReturn("at-token");
+            when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("rt-token");
+            doThrow(new RedisConnectionFailureException("Redis down"))
+                    .when(refreshTokenStore).save(anyLong(), anyString(), any(Duration.class));
+
+            assertThatThrownBy(() -> userService.signin(req, httpRes))
+                    .isInstanceOf(RedisConnectionFailureException.class)
+                    .hasMessageContaining("Redis down");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("signout — 로그아웃 (Phase 4-C: Redis RT 삭제 + 쿠키 만료)")
+    class Signout {
+        @Test
+        @DisplayName("happy: refreshTokenStore.delete(userNo) + jwtTokenManager.signOut(res) 호출")
+        void deletesRtAndSignsOut() {
+            userService.signout(42L, httpRes);
+
+            verify(refreshTokenStore).delete(42L);
+            verify(jwtTokenManager).signOut(httpRes);
+        }
+
+        @Test
+        @DisplayName("D1-bis best-effort: refreshTokenStore.delete 예외 → 쿠키 만료는 진행 (warn 로그만, 응답 정상)")
+        void redisDeleteFailure_continuesWithCookieDeletion() {
+            doThrow(new RedisConnectionFailureException("Redis down"))
+                    .when(refreshTokenStore).delete(42L);
+
+            // 예외 throw 안 함 — best-effort 동결
+            userService.signout(42L, httpRes);
+
+            // 쿠키 만료는 그대로 진행
+            verify(jwtTokenManager).signOut(httpRes);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("reissue — AT 재발급 + Phase 4-C 저장 RT 비교 (revoke 가능성)")
+    class Reissue {
+        @Test
+        @DisplayName("happy path: 쿠키 RT == 저장 RT → 새 AT만 쿠키 셋팅 (RT는 그대로)")
+        void happyPath() {
+            JwtUser jwtUser = new JwtUser(42L, "CUSTOMER", null, "준하");
+            when(constJwt.getRefreshTokenCookieName()).thenReturn("refresh-token");
+            when(myCookieUtil.getValue(httpReq, "refresh-token")).thenReturn("valid-rt");
+            when(jwtTokenProvider.getJwtUserFromToken("valid-rt")).thenReturn(jwtUser);
+            when(refreshTokenStore.get(42L)).thenReturn(Optional.of("valid-rt"));
+
+            userService.reissue(httpReq, httpRes);
+
+            verify(refreshTokenStore).get(42L);
+            verify(jwtTokenManager).setAccessTokenInCookie(httpRes, jwtUser);
+            verify(jwtTokenManager, never()).setRefreshTokenInCookie(any(HttpServletResponse.class), anyString());
+            verify(refreshTokenStore, never()).save(anyLong(), anyString(), any(Duration.class));
+        }
+
+        @Test
+        @DisplayName("저장 RT 부재 (signout 후 또는 만료) → BusinessException(401) '재로그인 강제'")
+        void storedRtMissing_throws401() {
+            JwtUser jwtUser = new JwtUser(42L, "CUSTOMER", null, "준하");
+            when(constJwt.getRefreshTokenCookieName()).thenReturn("refresh-token");
+            when(myCookieUtil.getValue(httpReq, "refresh-token")).thenReturn("valid-rt");
+            when(jwtTokenProvider.getJwtUserFromToken("valid-rt")).thenReturn(jwtUser);
+            when(refreshTokenStore.get(42L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userService.reissue(httpReq, httpRes))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("로그아웃되었습니다")
+                    .extracting("status").isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            verify(jwtTokenManager, never()).setAccessTokenInCookie(any(HttpServletResponse.class), any(JwtUser.class));
+        }
+
+        @Test
+        @DisplayName("쿠키 RT != 저장 RT (위조 또는 stale) → BusinessException(401) '유효하지 않습니다'")
+        void cookieRtMismatchesStored_throws401() {
+            JwtUser jwtUser = new JwtUser(42L, "CUSTOMER", null, "준하");
+            when(constJwt.getRefreshTokenCookieName()).thenReturn("refresh-token");
+            when(myCookieUtil.getValue(httpReq, "refresh-token")).thenReturn("forged-rt");
+            when(jwtTokenProvider.getJwtUserFromToken("forged-rt")).thenReturn(jwtUser);
+            when(refreshTokenStore.get(42L)).thenReturn(Optional.of("real-rt"));
+
+            assertThatThrownBy(() -> userService.reissue(httpReq, httpRes))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("유효하지 않습니다")
+                    .extracting("status").isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            verify(jwtTokenManager, never()).setAccessTokenInCookie(any(HttpServletResponse.class), any(JwtUser.class));
+        }
+
+        @Test
+        @DisplayName("RT 쿠키 없음 → BusinessException(401)")
+        void rtMissing_throws401() {
+            when(constJwt.getRefreshTokenCookieName()).thenReturn("refresh-token");
+            when(myCookieUtil.getValue(httpReq, "refresh-token")).thenReturn(null);
+
+            assertThatThrownBy(() -> userService.reissue(httpReq, httpRes))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("리프레시 토큰이 없습니다")
+                    .extracting("status").isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            verifyNoInteractions(jwtTokenProvider);
+            verify(jwtTokenManager, never()).setAccessTokenInCookie(any(HttpServletResponse.class), any(JwtUser.class));
+        }
+
+        @Test
+        @DisplayName("RT 만료 → ExpiredJwtException 그대로 전파 (GlobalExceptionHandler가 401로 변환)")
+        void rtExpired_propagatesJwtException() {
+            when(constJwt.getRefreshTokenCookieName()).thenReturn("refresh-token");
+            when(myCookieUtil.getValue(httpReq, "refresh-token")).thenReturn("expired-rt");
+            when(jwtTokenProvider.getJwtUserFromToken("expired-rt"))
+                    .thenThrow(new ExpiredJwtException(null, null, "expired"));
+
+            assertThatThrownBy(() -> userService.reissue(httpReq, httpRes))
+                    .isInstanceOf(ExpiredJwtException.class)
+                    .isInstanceOf(JwtException.class);  // GlobalExceptionHandler.handleJwt가 잡음
+
+            verify(jwtTokenManager, never()).setAccessTokenInCookie(any(HttpServletResponse.class), any(JwtUser.class));
+        }
+
+        @Test
+        @DisplayName("RT 위변조 → SignatureException(JwtException 하위) 그대로 전파")
+        void rtTampered_propagatesJwtException() {
+            when(constJwt.getRefreshTokenCookieName()).thenReturn("refresh-token");
+            when(myCookieUtil.getValue(httpReq, "refresh-token")).thenReturn("tampered-rt");
+            when(jwtTokenProvider.getJwtUserFromToken("tampered-rt"))
+                    .thenThrow(new SignatureException("bad signature"));
+
+            assertThatThrownBy(() -> userService.reissue(httpReq, httpRes))
+                    .isInstanceOf(JwtException.class);
+
+            verify(jwtTokenManager, never()).setAccessTokenInCookie(any(HttpServletResponse.class), any(JwtUser.class));
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("getUser — 내 정보 조회")
+    class GetUser {
+        @Test
+        @DisplayName("happy path: 5개 필드 매핑")
+        void happyPath() {
+            when(userRepository.findById(42L)).thenReturn(Optional.of(existingUser));
+
+            UserGetRes res = userService.getUser(42L);
+
+            assertThat(res.getUserId()).isEqualTo("kjh");
+            assertThat(res.getName()).isEqualTo("준하");
+            assertThat(res.getTel()).isEqualTo("010-1234-5678");
+            assertThat(res.getGender()).isEqualTo(1);
+            assertThat(res.getBirth()).isEqualTo("1990-01-01");
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 userNo → BusinessException(404)")
+        void notFound_throws404() {
+            when(userRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userService.getUser(999L))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("회원 정보를 찾을 수 없습니다")
+                    .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("updateUser — 내 정보 수정 (Step 1-B 핵심 검증)")
+    class UpdateUser {
+        @Test
+        @DisplayName("일부 필드만 변경: name/tel만 수정, 나머지 보존")
+        void partialUpdate() {
+            when(userRepository.findById(42L)).thenReturn(Optional.of(existingUser));
+            UserUpdateReq req = new UserUpdateReq();
+            req.setName("새이름");
+            req.setTel("010-9999-9999");
+            // gender/birth/userPw 미설정
+
+            userService.updateUser(42L, req);
+
+            assertThat(existingUser.getName()).isEqualTo("새이름");
+            assertThat(existingUser.getTel()).isEqualTo("010-9999-9999");
+            assertThat(existingUser.getGender()).isEqualTo(1);          // 그대로
+            assertThat(existingUser.getBirth()).isEqualTo("1990-01-01"); // 그대로
+            verify(passwordEncoder, never()).encode(any());
+        }
+
+        @Test
+        @DisplayName("gender=0 명시 전송 → 0으로 변경됨 (Integer 타입 수정 핵심)")
+        void genderZero_actuallyChanges() {
+            when(userRepository.findById(42L)).thenReturn(Optional.of(existingUser));
+            UserUpdateReq req = new UserUpdateReq();
+            req.setGender(0);  // 명시적으로 0 전송
+
+            userService.updateUser(42L, req);
+
+            assertThat(existingUser.getGender()).isEqualTo(0);  // 변경 반영
+        }
+
+        @Test
+        @DisplayName("gender null (미전송) → gender 변경 안 됨")
+        void genderNull_unchanged() {
+            when(userRepository.findById(42L)).thenReturn(Optional.of(existingUser));
+            UserUpdateReq req = new UserUpdateReq();
+            req.setGender(null);  // 미전송
+
+            userService.updateUser(42L, req);
+
+            assertThat(existingUser.getGender()).isEqualTo(1);  // 기존 값 보존
+        }
+
+        @Test
+        @DisplayName("userPw 변경 → BCrypt 인코딩 후 저장")
+        void passwordChange_encoded() {
+            when(userRepository.findById(42L)).thenReturn(Optional.of(existingUser));
+            when(passwordEncoder.encode("new-pw")).thenReturn("$2a$10$new-encoded");
+            UserUpdateReq req = new UserUpdateReq();
+            req.setUserPw("new-pw");
+
+            userService.updateUser(42L, req);
+
+            assertThat(existingUser.getUserPw()).isEqualTo("$2a$10$new-encoded");
+            verify(passwordEncoder).encode("new-pw");
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 userNo → BusinessException(404)")
+        void notFound_throws404() {
+            when(userRepository.findById(999L)).thenReturn(Optional.empty());
+            UserUpdateReq req = new UserUpdateReq();
+            req.setName("anything");
+
+            assertThatThrownBy(() -> userService.updateUser(999L, req))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
+}

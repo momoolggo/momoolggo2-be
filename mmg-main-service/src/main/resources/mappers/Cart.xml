@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.green.mmg.main.cart.CartMapper">
+
+    <!--
+      Phase 3-C-3 정리 후 잔존 (3 SQL):
+      - findStoreIdByMenuId: menu → menu_category JOIN (영구)
+      - findStoreNameByStoreId: Store 도메인 경계 위반 (Phase 3-D 정리 예정)
+      - findCartItems: cart_detail → menu JOIN + 응답 DTO 직접 매핑 (영구)
+    -->
+
+    <select id="findStoreIdByMenuId" resultType="Long">
+        SELECT mc.store_id
+        FROM menu m
+                 JOIN menu_category mc ON m.category_id = mc.category_id
+        WHERE m.menu_id = #{menuId}
+    </select>
+
+    <select id="findStoreNameByStoreId" resultType="String">
+        SELECT store_name
+        FROM store
+        WHERE store_id = #{storeId}
+    </select>
+
+    <select id="findCartItems" resultType="com.green.mmg.main.cart.model.CartItemRes">
+        SELECT
+            cd.cart_item_id AS id,
+            cd.menu_id      AS menuId,
+            m.name          AS menuName,
+            m.price         AS price,
+            cd.quantity     AS quantity,
+            m.menu_pic      AS menuPic
+        FROM cart_detail cd
+                 JOIN menu m ON cd.menu_id = m.menu_id
+        WHERE cd.cart_id = #{cartId}
+    </select>
+
+</mapper>

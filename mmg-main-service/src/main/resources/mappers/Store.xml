@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.green.mmg.main.store.StoreMapper">
+
+    <select id="findAll">
+        SELECT s.store_id id, s.store_name name, s.min_price min,
+        s.rating_avg avg, s.rating_count sum, s.order_count count,
+        s.store_pic pic, s.state, s.created_at createdAt
+        FROM store s join store_category c on s.store_id=c.store_id
+        <where>
+            <if test="searchText != null and searchText != ''">
+                AND s.store_name LIKE CONCAT('%', #{searchText}, '%')
+            </if>
+            <if test="categoryId != null and categoryId != 0">
+                AND c.category_id = #{categoryId}
+            </if>
+        </where>
+        ORDER BY s.${sortType} ${sortOrder}
+        LIMIT #{startIdx}, #{size}
+    </select>
+
+
+    <!-- Phase 4-A: user JOIN 제거. ownerName은 StoreService에서 AuthFeignClient.getOwner()로 채움. -->
+    <select id="findOne">
+        SELECT
+            s.store_name, s.owner_id AS ownerId, s.business_hours, s.min_price, s.store_pic,
+            s.holiday, s.state, s.location, s.detail_location, s.created_at, s.notice,
+            s.business_number AS businessNumber, s.bank_name AS bankName,
+            s.account_number AS accountNumber, s.account_holder AS accountHolder,
+            s.store_tel, s.rating_avg, s.rating_count, s.order_count
+        FROM store s
+        WHERE s.store_id = #{id}
+    </select>
+
+    <select id="menuAll">
+        SELECT
+            m.menu_id,
+            c.category AS categoryName,
+            m.name AS menuName,
+            m.price,
+            m.menu_pic,
+            m.menu_info,
+            m.soldout                     -- 품절 상태
+        FROM menu_category c
+                 JOIN menu m ON c.category_id = m.category_id
+        WHERE c.store_id = #{id}             -- 조회하려는 매장 아이디
+        ORDER BY c.category_order ASC, m.menu_order ASC
+    </select>
+
+    <select id="getMaxPage">
+        select count(1) from store s join store_category c on c.store_id=s.store_id
+        <where>
+        <if test="searchText != null and searchText != ''">
+        AND s.store_name LIKE CONCAT('%', #{searchText}, '%')
+        </if>
+        <if test="categoryId != null and categoryId != 0">
+            AND c.category_id = #{categoryId}
+        </if>
+        </where>
+    </select>
+
+    <select id="searchStore">
+        SELECT distinct s.store_id AS id, s.store_name AS name, s.min_price min, s.rating_avg avg, s.rating_count sum, s.order_count count, s.store_pic AS pic, s.state
+        FROM store s
+                 JOIN store_category sc ON s.store_id = sc.store_id
+                 LEFT JOIN menu_category mc ON mc.store_id = s.store_id
+                 LEFT JOIN menu m ON m.category_id = mc.category_id
+                 LEFT JOIN category c ON c.category_id = sc.category_id
+        <where>
+            <if test="searchText !=null and searchText !=''">
+                ( m.name LIKE concat('%', #{searchText}, '%')
+                OR s.store_name LIKE concat('%', #{searchText}, '%')
+                OR c.category_name LIKE concat('%', #{searchText}, '%')
+                 )
+            </if>
+        </where>
+        ORDER BY
+            CASE
+            WHEN s.store_name = #{searchText} THEN 1
+            WHEN s.store_name  LIKE concat(#{searchText}, '%') THEN 2
+            WHEN s.store_name LIKE concat('%', #{searchText}, '%') THEN 3
+            ELSE 4
+            END,
+            s.order_count DESC
+    </select>
+
+<select id="menuSearchInStore" resultType="com.green.mmg.main.store.model.MenuGetRes">
+    SELECT distinct
+        s.store_id AS id, m.menu_id, m.name AS menuName, m.price, mc.category AS categoryName,
+        m.menu_pic, m.menu_info, m.soldout
+    FROM store s
+        JOIN  menu_category mc ON mc.store_id = s.store_id
+        LEFT JOIN menu m ON m.category_id = mc.category_id
+    <where>
+        s.store_id = #{storeId}
+        <if test="searchText !=null and searchText !=''">
+            AND
+            ( m.name LIKE concat('%', #{searchText}, '%')
+            OR mc.category LIKE concat('%', #{searchText}, '%')
+            )
+        </if>
+    </where>
+    ORDER BY
+    CASE
+    WHEN m.name = #{searchText} THEN 1
+    WHEN mc.category LIKE concat(#{searchText}, '%') THEN 2
+    ELSE 3
+    END,
+    s.order_count DESC
+
+</select>
+
+
+    <select id="favoriteList">
+        SELECT
+            s.store_id AS id,
+            s.store_name AS name,
+            s.min_price AS min,
+            s.rating_avg AS avg,
+            s.rating_count AS sum,
+            s.order_count AS count,
+            s.store_pic AS pic,
+            s.state
+        FROM likedstore l
+            JOIN store s ON l.store_id = s.store_id
+        WHERE l.user_no = #{userNo}
+        ORDER BY l.created_at DESC
+        LIMIT #{startIdx}, #{size}
+    </select>
+
+    <!-- Phase 3-B-2: favoriteCount / checkWish / deleteWish / insertWish 4개 SQL은 LikedStoreRepository로 이전.
+         favoriteList(JOIN+LIMIT)만 잔존. -->
+
+    <!-- 주변 가게 검색 (3km 이내) -->
+    <select id="findNearby" resultType="com.green.mmg.main.store.model.StoreGetRes">
+        SELECT
+            s.store_id AS id,
+            s.store_name AS name,
+            s.min_price AS min,
+        s.rating_avg AS avg,
+        s.rating_count AS sum,
+        s.state,
+        s.order_count AS count,
+        s.store_pic AS pic,
+        (6371 * ACOS(
+            COS(RADIANS(#{lat})) * COS(RADIANS(s.latitude)) *
+            COS(RADIANS(s.longitude) - RADIANS(#{lng})) +
+            SIN(RADIANS(#{lat})) * SIN(RADIANS(s.latitude))
+            )) AS distance
+        FROM store s
+        HAVING distance &lt;= 3
+        ORDER BY distance ASC
+    </select>
+
+    <select id="getStoreReviews" resultType="map">
+        SELECT
+            r.review_id  AS reviewId,
+            r.rating,
+            r.contents,
+            r.photo,
+            o.user_no    AS userNo,
+            DATE_FORMAT(r.write_at, '%Y.%m.%d') AS date,
+        (SELECT GROUP_CONCAT(od.menu_name SEPARATOR ', ')
+         FROM order_detail od
+         WHERE od.order_id = r.order_id) AS menuName
+        FROM review r
+            JOIN orders o ON o.order_id = r.order_id
+        WHERE o.store_id = #{storeId}
+        ORDER BY r.write_at DESC
+        <!-- Phase 4-A: user JOIN 제거. userName은 StoreService에서 AuthFeignClient.getUsers() batch로 합성 -->
+    </select>
+</mapper>

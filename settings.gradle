@@ -1,0 +1,8 @@
+rootProject.name = 'momoolggo'
+
+include 'mmg-common'
+include 'mmg-auth-service'
+include 'mmg-main-service'
+include 'mmg-rider-service'
+include 'mmg-admin-service'
+include 'mmg-gateway'

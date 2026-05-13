@@ -88,6 +88,22 @@
 > 예: `my_mmg_main.orders.user_no` → `my_mmg_auth.user.user_no`는 논리 FK,
 > 데이터 정합성은 애플리케이션 레벨(Feign 호출)에서 보장.
 
+### 모듈 영역 (작업 권한)
+
+| 모듈 | 영역 | 작업 가능 | 비고 |
+|---|---|---|---|
+| **mmg-rider-service** | 본인 | ✅ 직접 수정 | — |
+| **mmg-auth-service** | 팀원 | ❌ 직접 수정 금지 | 발견 부채는 `docs/team-handoff.md` 등재 |
+| **mmg-main-service** | 팀원 | ❌ 직접 수정 금지 | 발견 부채는 `docs/team-handoff.md` 등재 |
+| **mmg-admin-service** | 팀원 | ❌ 직접 수정 금지 | 라이더 정리 ADR D11 일관 (admin-service 절대 X) |
+| **mmg-gateway** | 팀원 | ❌ 직접 수정 금지 | 발견 부채는 `docs/team-handoff.md` 등재 |
+| **mmg-common** | 팀원 (공용 라이브러리) | ❌ 직접 수정 금지 | 사용 OK / 수정 X — §3 모듈 의존성 그래프 line 55-68 참조 |
+| **docs/** | 프로젝트 레벨 | ✅ 본인 항목 수정 가능 | 디렉토리 레벨, 본인이 작성한 메모리/문서만 |
+| **momoolggo2-fe** (별도 repo `C:\codding\project\momoolggo2-fe`) | rider 부분만 본인 | ✅ `views/rider/**`, 라이더 라우트/스토어/서비스 / ❌ 그 외 (auth/main/admin/customer/owner) | 2026-05-07 신설. BE rider + FE rider 단독 일관. 기존 화면 base 보존(수정 금지). 작업 브랜치 `kjh` |
+
+✅ 영역 매트릭스 확정 (2026-05-06) — main / gateway / common 모두 팀원. 본인 영역 = mmg-rider-service + docs/ 단독.
+✅ FE 영역 추가 (2026-05-07) — `momoolggo2-fe/src/views/rider/**` + 라이더 라우트/스토어/서비스 단독.
+
 ---
 
 ## 4. 패키지 구조
@@ -279,6 +295,43 @@ rider-service, admin-service가 이 API를 Feign으로 호출.
     - 모든 민감값은 `.env` + `spring-dotenv` 사용
     - `.env`는 `.gitignore` 필수, `.env.example`만 git 추적
     - 학원 공유 환경이라 키 노출 시에도 학원 외부에는 게시하지 않음
+
+11. **도메인 분배 결정 우선순위 (ERD = source of truth)**
+    - ERD가 진실의 원천. 도메인 위치(어느 schema에 갈지) 결정 시 ERD 우선 확인.
+    - 코드/테이블명 분석은 ERD 보조 자료.
+    - ERD vs 코드 충돌 시 ERD 따라감. 단, ERD 오타 의심 시 사용자 결정 받고 decisions.md에 기록.
+    - 컬럼명/타입도 ERD 기준 (단순 별칭 차이라도). Phase 2/3에서 같이 정리.
+    - **이 원칙은 Phase 1-B-3에서 user_address를 잘못 my_mmg_auth로 보낸 일을 계기로 명문화함 (Phase 1-B-3.5에서 정정).**
+
+12. **팀원 영역 모듈 직접 수정 금지 (영역 경계 = team boundary)**
+    - §3 모듈 영역 표가 진실의 원천. 작업 전 모듈 영역 확인 필수.
+    - 본인 영역(✅) 외 모듈은 직접 수정 금지. 팀원 영역(❌) 작업 발견 시 `docs/team-handoff.md` 등재.
+    - ❓ 영역 미상 모듈은 본인 확인 후 진행. 추정으로 진행 금지.
+    - 영역 침범 발견 시 즉시 멈춤 + revert + 본인 보고. NAJACKS 변종 회피.
+    - **이 원칙은 R1-A 종결 시점 박제된 R1-B 명세가 mmg-auth-service(팀원 영역)를 B-1/B-3에서 침범한 사건(2026-05-06 revert)을 계기로 명문화함. `feedback_verify_spec_assumptions.md` 1건째 사례.**
+
+---
+
+## 6.5 테스트 작성 규칙 (NAJACKS 재발 방지)
+
+### 가짜 테스트 금지
+- `assertNotNull`만으로 끝나는 테스트 금지
+- 각 테스트는 다음 중 최소 하나를 정확히 검증해야 함:
+  - 반환값 (`assertEquals`, `assertThat` 등)
+  - 발생한 예외의 타입 + 메시지
+  - DB 상태 변화 (저장 여부, 변경된 필드 값)
+  - 외부 호출 발생 여부 (Mockito `verify`)
+
+### 최소 커버리지
+- 새 Service 메서드: happy path + 정상 경계 + 예외 케이스 (최소 3개)
+- 새 Controller 엔드포인트: 200 / 4xx / 5xx 시나리오
+- 외부 호출(Feign, Gemini API): 성공 + 실패 + timeout
+
+### 완료 정의 (Definition of Done)
+"코드 작성 완료" ≠ "작업 완료". 다음을 모두 충족해야 완료:
+1. `./gradlew :{module}:test` 실행하여 통과
+2. 테스트가 실제로 의미 있는 검증인지 `@code-reviewer`로 검증
+3. `docs/PROGRESS.md`에 검증 결과(테스트 N개 추가, 통과 여부) 기록
 
 ---
 
