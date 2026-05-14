@@ -40,7 +40,7 @@ spec:
     environment {
             REGISTRY = "harbor.greenart.n-e.kr"
             PROJECT = "momoolggo"
-            SERVICES = "mmg-auth-service, mmg-rider-service, mmg-main-service, mmg-admin-service, mmg-gateway-service"
+            SERVICES = "mmg-auth-service, mmg-rider-service, mmg-main-service, mmg-admin-service, mmg-gateway"
     }
 
     stages {
@@ -49,7 +49,7 @@ spec:
                         container('gradle') {
                             sh "chmod +x gradlew"
                             // common 모듈을 먼저 빌드하여 이후 병렬 빌드에서 참조할 수 있게 함
-                            sh "./gradlew :mmg-common:clean :mmg-common-service:build -x test"
+                            sh "./gradlew :mmg-common:clean :mmg-common:build -x test"
                         }
                     }
                 }
@@ -104,7 +104,7 @@ def shouldBuild(String serviceName) {
             'mmg-rider-service': 'rider',
             'mmg-main-service': 'main',
             'mmg-admin-service': 'admin',
-            'mmg-gateway-service': 'gateway'
+            'mmg-gateway': 'gateway'
     ]
 
     // 1. 강제 빌드 파라미터 체크
