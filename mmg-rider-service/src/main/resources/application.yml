@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: mmg-rider-service
+  config:
+    import: "optional:file:.env[.properties]"
+  datasource:
+    url: ${RIDER_DB_URL}
+    username: ${DATASOURCE_USERNAME}
+    password: ${DATASOURCE_PASSWORD}
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+  jpa:
+    hibernate:
+      ddl-auto: validate          # validate 외 값 절대 금지 (스키마 변경 X — Phase 1 원칙)
+      naming.physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+    open-in-view: false           # Lazy proxy 트랜잭션 밖 사용 차단
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MariaDBDialect
+        format_sql: true
+    show-sql: true
+
+server:
+  port: 8082
+
+cors:
+  allowed-origins: http://localhost:5173
+
+# Phase 5-R4: Feign client timeout (Phase 4-A 정착 패턴 일관, mmg-main-service application.yml:49 인용)
+spring.cloud.openfeign.client.config.default:
+  connectTimeout: 3000
+  readTimeout: 5000
+
+# === D11 임시 운영 (admin-service 도입 전) ===
+# auto-approve: 가입 직후 자동 ACTIVE 전환
+# - local / dev / 학원 발표: true
+# - prod (admin 도입 후): false
+# 관련 ADR: docs/adr/rider/ADR-001-service-boundary.md "임시 운영" 섹션
+rider:
+  auto-approve: true
+
+# mmg-common ConstJwt 바인딩용 — JWT secret만 .env에서 (시크릿)
+constants:
+  jwt:
+    issuer: green502@green.com
+    bearer-format: JWT
+    claim-key: signedUser
+    secret-key: ${JWT_SECRET}
+    access-token-cookie-name: access-token
+    access-token-cookie-path: /
+    access-token-cookie-validity-seconds: 1296000
+    access-token-validity-milliseconds: 1296000000
+    refresh-token-cookie-name: refresh-token
+    refresh-token-cookie-path: /api/user/reissue
+    refresh-token-cookie-validity-seconds: 1296000
+    refresh-token-validity-milliseconds: 1296000000

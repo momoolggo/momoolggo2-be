@@ -1,0 +1,77 @@
+spring:
+  application:
+    name: mmg-main-service
+  config:
+    import: "optional:file:.env[.properties]"
+  datasource:
+    url: ${MAIN_DB_URL}
+    username: ${DATASOURCE_USERNAME}
+    password: ${DATASOURCE_PASSWORD}
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+server:
+  port: 8080
+
+cors:
+  allowed-origins: http://localhost:5173
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath:mappers/*.xml
+
+# JPA + MyBatis 하이브리드 (Phase 3-B) — 단순 CRUD는 JPA, JOIN/집계는 MyBatis 영구 공존
+spring.jpa:
+  hibernate:
+    ddl-auto: validate          # ⚠️ validate 외 값 절대 금지 (스키마 변경 X)
+    naming.physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+  open-in-view: false
+  properties:
+    hibernate:
+      dialect: org.hibernate.dialect.MariaDBDialect   # 자동감지 시 학원 MariaDB INFORMATION_SCHEMA의 'RESERVED' 컬럼 부재로 실패 → 명시
+      format_sql: true
+  show-sql: true
+
+# 이미지 업로드 (main-service 단독 책임 — CLAUDE.md §5)
+file:
+  upload:
+    menu-path:   C:/uploads/menu/
+    store-path:  C:/uploads/store/
+    review-path: C:/uploads/review/
+    pet-path:    C:/uploads/pet/
+
+# Phase 4-A 백필: Feign client timeout 명시 (60s 기본값 → connect 3s / read 5s)
+spring.cloud.openfeign.client.config.default:
+  connectTimeout: 3000
+  readTimeout: 5000
+
+# 토스페이먼츠 — secret_key만 시크릿 (.env)
+toss:
+  secret-key: ${TOSS_SECRET_KEY}
+
+# 네이버 API — client_secret만 시크릿 (.env), client_id는 공개키
+naver:
+  client-id: l1ytziijx9
+  client-secret: ${NAVER_CLIENT_SECRET}
+  map-client-id: l1ytziijx9
+  search-client-id: Irz0Q0SbBNwf1to6Rjiy
+  search-client-secret: ${NAVER_SEARCH_CLIENT_SECRET}
+
+# mmg-common ConstJwt 바인딩용 — JWT secret만 .env에서 (시크릿)
+constants:
+  jwt:
+    issuer: green502@green.com
+    bearer-format: JWT
+    claim-key: signedUser
+    secret-key: ${JWT_SECRET}
+    access-token-cookie-name: access-token
+    access-token-cookie-path: /
+    access-token-cookie-validity-seconds: 1296000
+    access-token-validity-milliseconds: 1296000000
+    refresh-token-cookie-name: refresh-token
+    refresh-token-cookie-path: /api/user/reissue
+    refresh-token-cookie-validity-seconds: 1296000
+    refresh-token-validity-milliseconds: 1296000000
