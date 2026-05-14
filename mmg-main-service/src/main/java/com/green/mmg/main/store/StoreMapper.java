@@ -2,6 +2,7 @@ package com.green.mmg.main.store;
 
 
 import com.green.mmg.main.internal.dto.InternalOwnerApprovalDetailRes;
+import com.green.mmg.main.internal.dto.InternalStoreListRes;
 import com.green.mmg.main.store.model.*;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -28,11 +29,18 @@ public interface StoreMapper {
     //가게 리뷰 조회
     List<Map<String, Object>> getStoreReviews(long storeId);
 
-    //사장 승인 모달
+    //관리자 사장 가입승인 모달
     InternalOwnerApprovalDetailRes findOwnerApprovalDetail(@Param("ownerNo") long ownerNo);
 
-    //오늘 가게 등록 수
+    //관리자 오늘 가게 등록 수
     long countTodayStores(@Param("start") LocalDateTime start,
                           @Param("end") LocalDateTime end);
+
+    //관리자 가게관리 목록
+    List<InternalStoreListRes> findInternalStoreList(@Param("startIdx") int startIdx,
+                                                     @Param("size") int  size);
+
+    //관리자 회원관리 가게 주소
+    String findStoreLocationByOwnerNo(@Param("ownerNo") long ownerNo);
 
 }
