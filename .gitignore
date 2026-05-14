@@ -63,8 +63,10 @@ logs/
 .env
 .env.local
 .env.*.local
+.env.*
 *.env
 !.env.example
+
 
 # 인증서, 키 파일
 *.pem
