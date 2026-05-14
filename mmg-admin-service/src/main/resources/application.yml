@@ -47,3 +47,5 @@ feign:
     url: ${MAIN_SERVICE_URL:http://localhost:8080}
   rider-service:
     url: ${RIDER_SERVICE_URL:http://localhost:8082}
+  okhttp:
+    enabled: true
