@@ -29,16 +29,16 @@
         r.rating,
         r.contents,
         r.photo,
-        DATE_FORMAT(r.write_at,
-            CONCAT(YEAR(r.write_at), '.',
-                   LPAD(MONTH(r.write_at), 2, '0'), '.',
-                   LPAD(DAY(r.write_at), 2, '0'))
+        DATE_FORMAT(r.written_at,
+            CONCAT(YEAR(r.written_at), '.',
+                   LPAD(MONTH(r.written_at), 2, '0'), '.',
+                   LPAD(DAY(r.written_at), 2, '0'))
         ) AS date
         FROM review r
             JOIN orders o ON o.order_id = r.order_id
             JOIN store s ON s.store_id = o.store_id
         WHERE o.user_no = #{userNo}
-        ORDER BY r.write_at DESC
+        ORDER BY r.written_at DESC
             LIMIT #{size} OFFSET #{startIdx}
     </select>
 
@@ -107,5 +107,22 @@
             )
         WHERE s.store_id = #{storeId}
     </update>
+
+    <!-- 전체 리뷰 목록 -->
+    <select id="findInternalReviewList" resultType="com.green.mmg.main.internal.dto.InternalReviewListRes">
+        SELECT
+            r.review_id AS reviewId,
+            s.store_name AS storeName,
+            o.user_no AS userNo,
+            '' AS writer,
+            r.contents AS content,
+            r.rating AS rating,
+            r.written_at AS createdAt
+        FROM review r
+        JOIN orders o ON o.order_id = r.order_id
+        JOIN store s ON s.store_id = o.store_id
+        ORDER BY r.written_at DESC
+        LIMIT #{startIdx}, #{size}
+    </select>
 
 </mapper>
