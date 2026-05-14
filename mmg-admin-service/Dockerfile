@@ -6,7 +6,7 @@ WORKDIR /deploy
 
 # 3. [중요] 멀티 모듈 경로 반영
 # Kaniko가 루트에서 실행되므로, 모듈명을 포함한 경로에서 jar를 가져옵니다.
-COPY mmg-gateway/build/libs/*.jar app.jar
+COPY mmg-admin-service/build/libs/*.jar app.jar
 
 # 4. 타임존 설정 (Asia/Seoul)
 # Alpine 이미지는 가벼운 대신 tzdata가 없으므로 수동 설치가 필요합니다.
