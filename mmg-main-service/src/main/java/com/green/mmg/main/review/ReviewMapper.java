@@ -1,5 +1,6 @@
 package com.green.mmg.main.review;
 
+import com.green.mmg.main.internal.dto.InternalReviewListRes;
 import com.green.mmg.main.review.model.GetReviewReq;
 import com.green.mmg.main.review.model.ReviewReq;
 import com.green.mmg.main.review.model.ReviewRes;
@@ -37,4 +38,12 @@ public interface ReviewMapper {
 
     // 가게 별점/리뷰수 갱신
     void updateStoreRating(long storeId);
+
+    //전체 리뷰 목록
+    List<InternalReviewListRes> findInternalReviewList(
+            @Param("startIdx") int startIdx,
+            @Param("size") int size
+    );
+
+
 }

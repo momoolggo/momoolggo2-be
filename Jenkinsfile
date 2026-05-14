@@ -38,9 +38,9 @@ spec:
     }
 
     environment {
-        REGISTRY = "harbor.greenart.n-e.kr"
-        PROJECT  = "momoolggo"
-        SERVICES = "auth-service,rider-service,main-service,admin-service, gateway-service"
+            REGISTRY = "harbor.greenart.n-e.kr"
+            PROJECT = "momoolggo"
+            SERVICES = "mmg-auth-service, mmg-rider-service, mmg-main-service, mmg-admin-service, mmg-gateway-service"
     }
 
     stages {
@@ -100,11 +100,11 @@ spec:
 // [수정 포인트] 변경된 파일 경로를 정확히 감지하는 함수
 def shouldBuild(String serviceName) {
     def tagMap = [
-        'auth-service': 'auth',
-        'rider-service': 'rider',
-        'main-service': 'main',
-        'admin-service': 'admin',
-        'gateway-service': 'gateway'
+            'mmg-auth-service': 'auth',
+            'mmg-rider-service': 'rider',
+            'mmg-main-service': 'main',
+            'mmg-admin-service': 'admin',
+            'mmg-gateway-service': 'gateway'
     ]
 
     // 1. 강제 빌드 파라미터 체크
