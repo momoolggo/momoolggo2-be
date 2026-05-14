@@ -36,4 +36,9 @@ public interface AuthFeignClient {
 
     @GetMapping("/internal/auth/stats/new-users")
     ResultResponse<Long> getTodayNewUsers();
+
+    @GetMapping("/internal/auth/stats/new-users/range")
+    ResultResponse<Long> getNewUsersByRange(@RequestParam("start") String start,
+                                            @RequestParam("end") String end);
+
 }
