@@ -63,8 +63,14 @@ logs/
 .env
 .env.local
 .env.*.local
+.env.*
 *.env
 !.env.example
+
+# application.yml = 로컬 개발용 하드코딩 (시크릿 포함, git 추적 X)
+# application-prod.yml만 git 추적 (값은 ${ENV_VAR}로 .env.prod에서 주입)
+**/src/main/resources/application.yml
+!**/src/main/resources/application.yml.example
 
 # 인증서, 키 파일
 *.pem
