@@ -1,11 +1,13 @@
 package com.green.mmg.main.review;
 
+import com.green.mmg.main.internal.dto.InternalReviewListRes;
 import com.green.mmg.main.review.model.Review;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Phase 3-C-2: Review postReview만 JPA 전환 (단순 INSERT).
@@ -24,5 +26,7 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     long countTodayReviews(@Param("start") LocalDateTime start,
                            @Param("end") LocalDateTime end);
+
+
 
 }

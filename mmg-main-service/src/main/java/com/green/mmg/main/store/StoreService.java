@@ -3,6 +3,7 @@ package com.green.mmg.main.store;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.feign.AuthFeignClient;
+import com.green.mmg.main.internal.dto.InternalStoreListRes;
 import com.green.mmg.main.owner.MenuOptionCategoryRepository;
 import com.green.mmg.main.owner.MenuOptionRepository;
 import com.green.mmg.main.owner.entity.MenuOption;
@@ -154,5 +155,31 @@ public class StoreService {
         return rows;
     }
 
+    // 관리자 가게관리 목록 조회
+    @Transactional(readOnly = true)
+    public List<InternalStoreListRes> getInternalStoreList(int page, int size) {
+        int startIdx = page * size;
 
+        List<InternalStoreListRes> stores = storeMapper.findInternalStoreList(startIdx, size);
+        if (stores.isEmpty()) return stores;
+
+        List<Long> ownerIds = stores.stream()
+                .map(InternalStoreListRes::getOwnerId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (!ownerIds.isEmpty()) {
+            List<UserBriefDto> owners = authFeignClient.getUsers(ownerIds).getResultData();
+            Map<Long, String> ownerNameMap = (owners == null ? List.<UserBriefDto>of() : owners)
+                    .stream()
+                    .collect(Collectors.toMap(UserBriefDto::getUserNo, UserBriefDto::getName));
+
+            stores.forEach(store ->
+                    store.setOwnerName(ownerNameMap.getOrDefault(store.getOwnerId(), "")));
+
+
+        }
+        return stores;
+    }
 }

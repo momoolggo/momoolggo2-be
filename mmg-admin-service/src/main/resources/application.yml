@@ -23,29 +23,28 @@ server:
   port: 8083
 
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  allowed-origins: http://localhost:5173
 
+# mmg-common ConstJwt 바인딩용 — JWT secret만 .env에서 (시크릿)
 constants:
   jwt:
-    issuer: ${JWT_ISSUER}
+    issuer: green502@green.com
     bearer-format: JWT
     claim-key: signedUser
     secret-key: ${JWT_SECRET}
     access-token-cookie-name: access-token
     access-token-cookie-path: /
     access-token-cookie-validity-seconds: 1296000
-    access-token-validity-milliseconds: ${JWT_ACCESS_TOKEN_VALIDITY_MS}
+    access-token-validity-milliseconds: 1296000000
     refresh-token-cookie-name: refresh-token
     refresh-token-cookie-path: /api/user/reissue
     refresh-token-cookie-validity-seconds: 1296000
-    refresh-token-validity-milliseconds: ${JWT_REFRESH_TOKEN_VALIDITY_MS}
+    refresh-token-validity-milliseconds: 1296000000
 
 feign:
   auth-service:
-    url: ${AUTH_SERVICE_URL:http://localhost:8081}
+    url: http://localhost:8081
   main-service:
-    url: ${MAIN_SERVICE_URL:http://localhost:8080}
+    url: http://localhost:8080
   rider-service:
-    url: ${RIDER_SERVICE_URL:http://localhost:8082}
-  okhttp:
-    enabled: true
+    url: http://localhost:8082
