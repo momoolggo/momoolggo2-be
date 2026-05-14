@@ -49,7 +49,7 @@ spec:
                         container('gradle') {
                             sh "chmod +x gradlew"
                             // common 모듈을 먼저 빌드하여 이후 병렬 빌드에서 참조할 수 있게 함
-                            sh "./gradlew :common:clean :common:build -x test"
+                            sh "./gradlew :mmg-common:clean :mmg-common-service:build -x test"
                         }
                     }
                 }
@@ -128,7 +128,7 @@ def shouldBuild(String serviceName) {
             def files = entry.affectedFiles
             for (int k = 0; k < files.size(); k++) {
                 def file = files[k]
-                if (file.path.contains(serviceName) || file.path.contains("common/")) {
+                if (file.path.contains(serviceName) || file.path.contains("mmg-common/")) {
                     return true
                 }
             }
