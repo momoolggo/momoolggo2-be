@@ -34,6 +34,32 @@
         WHERE s.store_id = #{id}
     </select>
 
+    <select id="findOwnerApprovalDetail"
+             resultType="com.green.mmg.main.internal.dto.InternalOwnerApprovalDetailRes">
+    SELECT
+        s.store_name AS storeName,
+        CONCAT(IFNULL(s.location, ''), ' ', IFNULL(s.detail_location, '')) AS storeAddress,
+        s.store_tel AS storeTel,
+        s.business_number AS businessNumber,
+        s.business_license_url AS businessLicenseUrl,
+        s.mail_order_license_url AS mailOrderLicenseUrl,
+        s.bank_name AS bankName,
+        s.account_number AS accountNumber,
+        s.account_holder AS accountHolder
+    FROM store s
+    WHERE s.owner_id = #{ownerNo}
+    ORDER BY s.store_id DESC
+        LIMIT 1
+</select>
+
+    <select id="countTodayStores" resultType="long">
+        SELECT COUNT(1)
+        FROM store s
+        WHERE s.created_at >= #{start}
+        AND s.created_at &lt; #{end}
+    </select>
+
+
     <select id="menuAll">
         SELECT
             m.menu_id,

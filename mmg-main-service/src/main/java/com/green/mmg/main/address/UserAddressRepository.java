@@ -2,6 +2,7 @@ package com.green.mmg.main.address;
 
 import com.green.mmg.main.address.model.UserAddress;
 import com.green.mmg.main.address.model.UserAddressRes;
+import com.green.mmg.main.internal.dto.UserDefaultAddressRes;
 import com.green.mmg.main.order.model.OrderAddressInfo;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -39,6 +40,7 @@ public interface UserAddressRepository extends JpaRepository<UserAddress, Long> 
             WHERE a.userNo = :userNo AND a.defaultAd = 1
             ORDER BY a.addressId DESC
             """)
+
     List<OrderAddressInfo> findDefaultByUserNo(@Param("userNo") Long userNo);
 
     default Optional<OrderAddressInfo> findFirstDefaultByUserNo(Long userNo) {
@@ -48,4 +50,19 @@ public interface UserAddressRepository extends JpaRepository<UserAddress, Long> 
 
     @Query("SELECT COUNT(DISTINCT a.userNo) FROM UserAddress a WHERE a.userNo IN :userNos AND a.address LIKE %:district%")
     long countDistinctByUserNosAndDistrict(@Param("userNos") List<Long> userNos, @Param("district") String district);
+
+    @Query("""
+        SELECT new com.green.mmg.main.internal.dto.UserDefaultAddressRes(
+            a.userNo,
+            a.address,
+            a.addressDetail
+        )
+        FROM UserAddress a
+        WHERE a.userNo IN :userNos
+        AND a.defaultAd = 1
+        """)
+    List<UserDefaultAddressRes> findDefaultAddressesByUserNos(@Param("userNos") List<Long> userNos);
+
 }
+
+

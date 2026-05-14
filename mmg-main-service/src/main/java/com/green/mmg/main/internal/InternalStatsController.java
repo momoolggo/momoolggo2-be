@@ -3,7 +3,10 @@ package com.green.mmg.main.internal;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.internal.dto.InternalDailyStatsRes;
+import com.green.mmg.main.internal.dto.InternalTodayStatsRes;
 import com.green.mmg.main.order.OrderRepository;
+import com.green.mmg.main.review.ReviewRepository;
+import com.green.mmg.main.store.StoreMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +23,8 @@ public class InternalStatsController {
 
     private final OrderRepository orderRepository;
     private final AuthFeignClient authFeignClient;
+    private final StoreMapper storeMapper;
+    private final ReviewRepository reviewRepository;
 
     @Transactional(readOnly = true)
     @GetMapping("/daily")
@@ -33,5 +38,20 @@ public class InternalStatsController {
 
         return new ResultResponse<>("일별 통계 조회 완료",
                 new InternalDailyStatsRes(totalOrders, newUsers, totalRevenue));
+    }
+
+    @Transactional(readOnly = true)
+    @GetMapping("/today")
+    public ResultResponse<InternalTodayStatsRes> getTodayStats(){
+        LocalDateTime start = LocalDate.now().atStartOfDay();
+        LocalDateTime end = start.plusDays(1);
+
+        long newUserCount = authFeignClient.getTodayNewUsers().getResultData();
+        long storeCount = storeMapper.countTodayStores(start, end);
+        long reviewCount = reviewRepository.countTodayReviews(start, end);
+
+        return new ResultResponse<>("조회 성공",
+                new InternalTodayStatsRes(newUserCount, storeCount, reviewCount)
+                );
     }
 }
