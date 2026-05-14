@@ -48,3 +48,5 @@ feign:
     url: http://localhost:8080
   rider-service:
     url: http://localhost:8082
+  okhttp:
+    enabled: true
