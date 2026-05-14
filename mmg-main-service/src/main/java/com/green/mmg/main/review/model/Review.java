@@ -21,7 +21,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AttributeOverrides({
-        @AttributeOverride(name = "createdAt", column = @Column(name = "write_at", updatable = false)),
+        @AttributeOverride(name = "createdAt", column = @Column(name = "written_at", updatable = false)),
         @AttributeOverride(name = "updatedAt", column = @Column(name = "amended_at"))
 })
 public class Review extends BaseEntity {

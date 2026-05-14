@@ -180,6 +180,7 @@
         ORDER BY distance ASC
     </select>
 
+    <!-- 가게 리뷰  -->
     <select id="getStoreReviews" resultType="map">
         SELECT
             r.review_id  AS reviewId,
@@ -194,7 +195,30 @@
         FROM review r
             JOIN orders o ON o.order_id = r.order_id
         WHERE o.store_id = #{storeId}
-        ORDER BY r.write_at DESC
+        ORDER BY r.written_at DESC
         <!-- Phase 4-A: user JOIN 제거. userName은 StoreService에서 AuthFeignClient.getUsers() batch로 합성 -->
+    </select>
+
+    <!-- 가게 목록 -->
+    <select id="findInternalStoreList" resultType="com.green.mmg.main.internal.dto.InternalStoreListRes">
+        SELECT
+            s.store_id AS storeId,
+            s.store_name AS storeName,
+            s.owner_id AS ownerId,
+            s.location AS location,
+            s.store_tel AS storeTel,
+            s.created_at AS createdAt,
+            s.state AS state
+        FROM store s
+        ORDER BY s.created_at DESC
+        LIMIT #{startIdx}, #{size}
+    </select>
+
+    <select id="findStoreLocationByOwnerNo" resultType="string">
+        SELECT s.location
+        FROM store s
+        WHERE s.owner_id = #{ownerNo}
+        ORDER BY s.store_id DESC
+        LIMIT 1
     </select>
 </mapper>
