@@ -40,7 +40,7 @@ spec:
     environment {
             REGISTRY = "harbor.greenart.n-e.kr"
             PROJECT = "momoolggo"
-            SERVICES = "mmg-auth-service, mmg-rider-service, mmg-main-service, mmg-admin-service, mmg-gateway-service"
+            SERVICES = "mmg-auth-service, mmg-rider-service, mmg-main-service, mmg-admin-service, mmg-gateway"
     }
 
     stages {
@@ -104,7 +104,7 @@ def shouldBuild(String serviceName) {
             'mmg-rider-service': 'rider',
             'mmg-main-service': 'main',
             'mmg-admin-service': 'admin',
-            'mmg-gateway-service': 'gateway'
+            'mmg-gateway': 'gateway'
     ]
 
     // 1. 강제 빌드 파라미터 체크
