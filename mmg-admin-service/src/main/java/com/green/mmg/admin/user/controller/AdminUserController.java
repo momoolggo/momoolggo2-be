@@ -61,6 +61,13 @@ public class AdminUserController {
         return authFeignClient.releaseSuspension(userNo);
     }
 
+    /** 사장 가게 주소 조회 */
+    @GetMapping("/{userNo}/store-location")
+    public ResponseEntity<String> getStoreLocation(@PathVariable Long userNo) {
+        String location = mainFeignClient.getOwnerStoreLocation(userNo).getResultData();
+        return ResponseEntity.ok(location);
+    }
+
     /** 회원 기본 주소 조회 */
     @GetMapping("/{userNo}/address")
     public ResponseEntity<String> getMemberAddress(@PathVariable Long userNo) {
