@@ -186,4 +186,19 @@ public class InternalUserController {
         return new ResultResponse<>("일별 신규 가입자 조회 완료",
                 userRepository.countByCreatedAtBetween(start, end));
     }
+
+    @Transactional(readOnly = true)
+    @GetMapping("/stats/new-users/range")
+    public ResultResponse<Long> getNewUsersByRange(@RequestParam String start,
+                                                   @RequestParam String end) {
+        LocalDate startDate = LocalDate.parse(start);
+        LocalDate endDate = LocalDate.parse(end);
+
+        Date from = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+        Date to = Date.from(endDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+        return new ResultResponse<>("기간별 신규 가입자 조회 완료",
+                userRepository.countByCreatedAtBetween(from, to));
     }
+
+}

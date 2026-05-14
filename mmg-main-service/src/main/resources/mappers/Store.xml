@@ -188,7 +188,7 @@
             r.contents,
             r.photo,
             o.user_no    AS userNo,
-            DATE_FORMAT(r.write_at, '%Y.%m.%d') AS date,
+            DATE_FORMAT(r.written_at, '%Y.%m.%d') AS date,
         (SELECT GROUP_CONCAT(od.menu_name SEPARATOR ', ')
          FROM order_detail od
          WHERE od.order_id = r.order_id) AS menuName
@@ -220,5 +220,12 @@
         WHERE s.owner_id = #{ownerNo}
         ORDER BY s.store_id DESC
         LIMIT 1
+    </select>
+
+    <select id="countStoresByCreatedAtBetween" resultType="long">
+        SELECT COUNT(1)
+        FROM store s
+        WHERE s.created_at >= #{start}
+            AND s.created_at &lt; #{end}
     </select>
 </mapper>
