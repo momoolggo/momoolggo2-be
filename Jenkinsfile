@@ -49,7 +49,7 @@ spec:
                         container('gradle') {
                             sh "chmod +x gradlew"
                             // common 모듈을 먼저 빌드하여 이후 병렬 빌드에서 참조할 수 있게 함
-                            sh "./gradlew :mmg-common:clean :mmg-common-service:build -x test"
+                            sh "./gradlew :mmg-common:clean :mmg-common:build -x test"
                         }
                     }
                 }
