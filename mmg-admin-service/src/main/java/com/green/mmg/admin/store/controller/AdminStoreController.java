@@ -1,5 +1,6 @@
 package com.green.mmg.admin.store.controller;
 
+import com.green.mmg.admin.dto.feign.InternalStoreListPageRes;
 import com.green.mmg.admin.dto.feign.InternalStoreListRes;
 import com.green.mmg.admin.feign.MainFeignClient;
 import com.green.mmg.common.dto.ResultResponse;
@@ -17,11 +18,12 @@ public class AdminStoreController {
 
     /** 가게 목록 조회 */
     @GetMapping
-    public ResultResponse<List<InternalStoreListRes>> getStoreList(
+    public ResultResponse<InternalStoreListPageRes> getStoreList(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "15") int size
+            @RequestParam(defaultValue = "15") int size,
+            @RequestParam(required = false) String date
     ) {
-        return mainFeignClient.getStoreList(page, size);
+        return mainFeignClient.getStoreList(page, size, date);
     }
 
     @GetMapping("/{storeId}")

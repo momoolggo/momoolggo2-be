@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import com.green.mmg.admin.dto.feign.InternalStoreListPageRes;
+
 import java.util.List;
 
 @FeignClient(name = "mmg-main-service", url = "${feign.main-service.url}")
@@ -28,9 +30,10 @@ public interface MainFeignClient {
     );
 
     @GetMapping("/internal/store/list")
-    ResultResponse<List<InternalStoreListRes>> getStoreList(
+    ResultResponse<InternalStoreListPageRes> getStoreList(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "15") int size
+            @RequestParam(defaultValue = "15") int size,
+            @RequestParam(required = false) String date
     );
 
     @GetMapping("/internal/stats/chart")
