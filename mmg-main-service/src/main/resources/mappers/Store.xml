@@ -202,17 +202,33 @@
     <!-- 가게 목록 -->
     <select id="findInternalStoreList" resultType="com.green.mmg.main.internal.dto.InternalStoreListRes">
         SELECT
-            s.store_id AS storeId,
-            s.store_name AS storeName,
-            s.owner_id AS ownerId,
-            s.location AS location,
-            s.store_tel AS storeTel,
-            s.created_at AS createdAt,
-            s.state AS state
+        s.store_id AS storeId,
+        s.store_name AS storeName,
+        s.owner_id AS ownerId,
+        s.location AS location,
+        s.store_tel AS storeTel,
+        s.created_at AS createdAt,
+        s.state AS state
         FROM store s
+        <where>
+            <if test="date != null and date != ''">
+                DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+            </if>
+        </where>
         ORDER BY s.created_at DESC
         LIMIT #{startIdx}, #{size}
     </select>
+
+    <select id="countInternalStoreList" resultType="long">
+        SELECT COUNT(1)
+        FROM store s
+        <where>
+            <if test="date != null and date != ''">
+                DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+            </if>
+        </where>
+    </select>
+
 
     <select id="findStoreLocationByOwnerNo" resultType="string">
         SELECT s.location
