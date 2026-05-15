@@ -13,4 +13,6 @@ public class InternalUserDetailRes {
     private String tel;
     private Integer green;
     private Date createdAt;
+    private String status;
+    private String role;
 }

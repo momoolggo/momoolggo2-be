@@ -97,7 +97,8 @@ public class InternalUserController {
                 user.getName(),
                 user.getTel(),
                 user.getGreen(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getStatus()
         ));
     }
     /** 회원 목록 조회 */
