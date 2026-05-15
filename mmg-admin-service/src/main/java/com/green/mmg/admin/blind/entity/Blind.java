@@ -77,6 +77,18 @@ public class Blind {
 
     }
 
+    // 신고 접수용 생성자 (REVIEWING 상태)
+    public Blind(Long reviewNo, Long userNo, BlindReason reason) {
+        this.reviewNo = reviewNo;
+        this.userNo = userNo;
+        this.reason = reason;
+        this.durationDays = 7;
+        this.startAt = LocalDateTime.now();
+        this.endsAt = LocalDateTime.now().plusDays(7);
+        this.status = BlindStatus.REVIEWING;
+        this.createdAt = LocalDateTime.now();
+    }
+
     // 블라인드 확정 (REVIEWING → BLINDED)
     public void confirm() {
         this.status = BlindStatus.BLINDED;

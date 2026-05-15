@@ -1,6 +1,7 @@
 package com.green.mmg.admin.feign;
 
 import com.green.mmg.admin.dto.feign.AdminUserRes;
+import com.green.mmg.admin.dto.feign.InternalUserDetailRes;
 import com.green.mmg.admin.dto.feign.UserApprovalReq;
 import com.green.mmg.admin.dto.feign.UserSuspensionReq;
 import com.green.mmg.common.dto.ResultResponse;
@@ -59,4 +60,7 @@ public interface AuthFeignClient {
     // 라이더 수 조회
     @GetMapping("/internal/auth/rider/count")
     ResultResponse<Long> getRiderCount();
+
+    @GetMapping("/internal/auth/user/{userNo}/detail")
+    ResultResponse<InternalUserDetailRes> getUserDetail(@PathVariable("userNo") Long userNo);
 }
