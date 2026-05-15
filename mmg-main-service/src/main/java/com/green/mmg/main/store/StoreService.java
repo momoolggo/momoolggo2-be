@@ -3,6 +3,7 @@ package com.green.mmg.main.store;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.feign.AuthFeignClient;
+import com.green.mmg.main.internal.dto.InternalStoreListPageRes;
 import com.green.mmg.main.internal.dto.InternalStoreListRes;
 import com.green.mmg.main.owner.MenuOptionCategoryRepository;
 import com.green.mmg.main.owner.MenuOptionRepository;
@@ -157,29 +158,30 @@ public class StoreService {
 
     // 관리자 가게관리 목록 조회
     @Transactional(readOnly = true)
-    public List<InternalStoreListRes> getInternalStoreList(int page, int size) {
+    public InternalStoreListPageRes getInternalStoreList(int page, int size, String date) {
         int startIdx = page * size;
 
-        List<InternalStoreListRes> stores = storeMapper.findInternalStoreList(startIdx, size);
-        if (stores.isEmpty()) return stores;
+        List<InternalStoreListRes> stores = storeMapper.findInternalStoreList(startIdx, size, date);
+        long totalCount = storeMapper.countInternalStoreList(date);
 
-        List<Long> ownerIds = stores.stream()
-                .map(InternalStoreListRes::getOwnerId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
+        if (!stores.isEmpty()) {
+            List<Long> ownerIds = stores.stream()
+                    .map(InternalStoreListRes::getOwnerId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
 
-        if (!ownerIds.isEmpty()) {
-            List<UserBriefDto> owners = authFeignClient.getUsers(ownerIds).getResultData();
-            Map<Long, String> ownerNameMap = (owners == null ? List.<UserBriefDto>of() : owners)
-                    .stream()
-                    .collect(Collectors.toMap(UserBriefDto::getUserNo, UserBriefDto::getName));
+            if (!ownerIds.isEmpty()) {
+                List<UserBriefDto> owners = authFeignClient.getUsers(ownerIds).getResultData();
+                Map<Long, String> ownerNameMap = (owners == null ? List.<UserBriefDto>of() : owners)
+                        .stream()
+                        .collect(Collectors.toMap(UserBriefDto::getUserNo, UserBriefDto::getName));
 
-            stores.forEach(store ->
-                    store.setOwnerName(ownerNameMap.getOrDefault(store.getOwnerId(), "")));
-
-
+                stores.forEach(store ->
+                        store.setOwnerName(ownerNameMap.getOrDefault(store.getOwnerId(), "")));
+            }
         }
-        return stores;
+
+        return new InternalStoreListPageRes(stores, totalCount);
     }
 }

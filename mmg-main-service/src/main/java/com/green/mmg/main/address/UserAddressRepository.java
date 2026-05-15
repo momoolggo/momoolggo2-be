@@ -23,7 +23,7 @@ public interface UserAddressRepository extends JpaRepository<UserAddress, Long> 
             SELECT new com.green.mmg.main.address.model.UserAddressRes(
                 a.addressId, a.address, a.addressDetail, a.latitude, a.longitude, a.defaultAd)
             FROM UserAddress a
-            WHERE a.userNo IN (:userNos)
+            WHERE a.userNo = :userNo
             ORDER BY a.defaultAd DESC, a.addressId DESC
             """)
     List<UserAddressRes> findAllByUserNo(@Param("userNo") long userNo);

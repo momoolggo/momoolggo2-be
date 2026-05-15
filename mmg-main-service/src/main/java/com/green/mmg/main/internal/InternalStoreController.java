@@ -2,13 +2,11 @@ package com.green.mmg.main.internal;
 
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.exception.ResourceNotFoundException;
-import com.green.mmg.main.internal.dto.InternalStoreListRes;
+import com.green.mmg.main.internal.dto.InternalStoreListPageRes;
 import com.green.mmg.main.store.StoreService;
 import com.green.mmg.main.store.model.StoreOneGetRes;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -17,10 +15,15 @@ public class InternalStoreController {
     private final StoreService storeService;
 
     @GetMapping("/list")
-    public ResultResponse<List<InternalStoreListRes>> getStoreList(@RequestParam(defaultValue = "0") int page,
-                                                                   @RequestParam(defaultValue = "15") int size){
-        return new ResultResponse<>("가게 목록 조회 완료", storeService.getInternalStoreList(page, size));
+    public ResultResponse<InternalStoreListPageRes> getStoreList(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "15") int size,
+            @RequestParam(required = false) String date) {
+        return new ResultResponse<>("가게 목록 조회 완료",
+                storeService.getInternalStoreList(page, size, date));
     }
+
+
 
     @GetMapping("/{storeId}")
     public ResultResponse<StoreOneGetRes> getStoreDetail(@PathVariable long storeId) {
