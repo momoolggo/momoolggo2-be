@@ -19,4 +19,10 @@ public class OwnerReviewRes {
     private String photo;
     private LocalDateTime writtenAt;
     private LocalDateTime amendedAt;
+    private Double writerAvgRating;
+    private Long writerReviewCount;
+    private Long replyId;
+    private String replyContent;
+    private LocalDateTime replyWrittenAt;
+
 }
