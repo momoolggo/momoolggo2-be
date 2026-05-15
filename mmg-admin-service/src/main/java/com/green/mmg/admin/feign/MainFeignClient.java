@@ -1,8 +1,6 @@
 package com.green.mmg.admin.feign;
 
-import com.green.mmg.admin.dto.feign.InternalReviewListRes;
-import com.green.mmg.admin.dto.feign.TodayStatsRes;
-import com.green.mmg.admin.dto.feign.UserAddressRes;
+import com.green.mmg.admin.dto.feign.*;
 import com.green.mmg.common.dto.ResultResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,5 +26,20 @@ public interface MainFeignClient {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size
     );
+
+    @GetMapping("/internal/store/list")
+    ResultResponse<List<InternalStoreListRes>> getStoreList(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "15") int size
+    );
+
+    @GetMapping("/internal/stats/chart")
+    ResultResponse<List<InternalChartStatsRes>> getChartStats(
+            @RequestParam(defaultValue = "weekly") String period,
+            @RequestParam(defaultValue = "storeCount") String metric
+    );
+
+    @GetMapping("/internal/store/{storeId}")
+    ResultResponse<?> getStoreDetail(@PathVariable("storeId") Long storeId);
 
 }

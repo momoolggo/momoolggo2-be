@@ -16,4 +16,5 @@ public class InternalReviewListRes {
     private String content;
     private Integer rating;
     private LocalDateTime createdAt;
+    private Long userNo;
 }
