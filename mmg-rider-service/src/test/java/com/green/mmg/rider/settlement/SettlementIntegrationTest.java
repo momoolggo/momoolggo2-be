@@ -63,7 +63,7 @@ class SettlementIntegrationTest {
 
     private Delivery seedDeliveredOf(Long riderNo, int baseFee, LocalDateTime deliveredAt) {
         String deliveryNo = "ST" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-        String orderId = "OR" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        Long orderId = System.nanoTime();
         Delivery delivery = new Delivery(
                 deliveryNo, orderId,
                 "010-1111-1111", "010-2222-2222",

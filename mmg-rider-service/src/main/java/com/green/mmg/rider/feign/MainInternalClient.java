@@ -30,6 +30,6 @@ public interface MainInternalClient {
      */
     @PutMapping("/internal/order/{orderId}/delivery-status")
     DeliveryStatusUpdateRes updateDeliveryStatus(
-            @PathVariable("orderId") String orderId,
+            @PathVariable("orderId") Long orderId,
             @RequestBody DeliveryStatusUpdateReq req);
 }

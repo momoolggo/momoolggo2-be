@@ -57,7 +57,7 @@ import static org.mockito.Mockito.*;
 class DeliveryServiceTest {
 
     private static final String DELIVERY_NO = "00001ABC";
-    private static final String ORDER_ID = "0000001A";
+    private static final Long ORDER_ID = 1L;
     private static final long CALLER_USER_NO = 42L;
     private static final Long CALLER_RIDER_NO = 5L;
 
@@ -341,7 +341,7 @@ class DeliveryServiceTest {
 
         private RiderInternalAssignReq sampleReq() {
             return new RiderInternalAssignReq(
-                    "ORD0001", 7L, "맛있는집",
+                    1L, 7L, "맛있는집",
                     "가게 주소", 35.123, 128.456,
                     "053-111-2222",
                     "손님 주소", 35.130, 128.460,
@@ -375,7 +375,7 @@ class DeliveryServiceTest {
             Delivery saved = deliveryCaptor.getValue();
             assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
             assertThat(saved.getRiderNo()).isEqualTo(CALLER_RIDER_NO);
-            assertThat(saved.getOrderId()).isEqualTo("ORD0001");
+            assertThat(saved.getOrderId()).isEqualTo(1L);
             assertThat(saved.getAssignedAt()).isNotNull();
             assertThat(saved.getBaseFee()).isEqualTo(4000);
 
@@ -990,14 +990,14 @@ class DeliveryServiceTest {
             com.green.mmg.rider.delivery.model.Delivery d1 = mock(com.green.mmg.rider.delivery.model.Delivery.class);
             com.green.mmg.rider.delivery.model.Delivery d2 = mock(com.green.mmg.rider.delivery.model.Delivery.class);
             when(d1.getDeliveryNo()).thenReturn("D1");
-            when(d1.getOrderId()).thenReturn("O1");
+            when(d1.getOrderId()).thenReturn(101L);
             when(d1.getPickupAddress()).thenReturn("가게1");
             when(d1.getDeliveryAddress()).thenReturn("손님1");
             when(d1.getBaseFee()).thenReturn(3000);
             when(d1.getExtraFee()).thenReturn(500);
             when(d1.getDeliveredAt()).thenReturn(LocalDateTime.now().minusHours(1));
             when(d2.getDeliveryNo()).thenReturn("D2");
-            when(d2.getOrderId()).thenReturn("O2");
+            when(d2.getOrderId()).thenReturn(102L);
             when(d2.getPickupAddress()).thenReturn("가게2");
             when(d2.getDeliveryAddress()).thenReturn("손님2");
             when(d2.getBaseFee()).thenReturn(4000);

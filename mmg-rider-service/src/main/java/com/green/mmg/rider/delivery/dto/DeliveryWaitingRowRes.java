@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
  */
 public record DeliveryWaitingRowRes(
         String deliveryNo,
-        String orderId,
+        Long orderId,
         String status,
         String pickupAddress,
         Double pickupLat,

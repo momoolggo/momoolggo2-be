@@ -8,7 +8,7 @@ package com.green.mmg.rider.internal.dto;
  * 시 활용 후보). {@code extraFee}도 R7 점주 추가 배달료 정책 확장 시 활용.</p>
  */
 public record RiderInternalAssignReq(
-        String orderId,
+        Long orderId,
         Long storeNo,
         String storeName,
         String storeAddress,

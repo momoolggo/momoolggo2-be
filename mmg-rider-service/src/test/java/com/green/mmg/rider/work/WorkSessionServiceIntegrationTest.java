@@ -85,7 +85,7 @@ class WorkSessionServiceIntegrationTest {
 
     private Delivery seedDelivery(Long riderNo, DeliveryStatus status) {
         String deliveryNo = "IT" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-        String orderId = "OR" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        Long orderId = System.nanoTime();
         Delivery delivery = new Delivery(
                 deliveryNo, orderId,
                 "010-1111-1111", "010-2222-2222",
@@ -105,7 +105,7 @@ class WorkSessionServiceIntegrationTest {
         em.clear();
 
         RiderInternalAssignReq req = new RiderInternalAssignReq(
-                "OR" + UUID.randomUUID().toString().substring(0, 6).toUpperCase(),
+                System.nanoTime(),
                 1L, "가게이름", "가게 주소",
                 37.5665, 126.978,
                 "010-1111-1111",

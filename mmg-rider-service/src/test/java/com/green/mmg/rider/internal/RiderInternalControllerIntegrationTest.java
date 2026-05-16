@@ -98,10 +98,10 @@ class RiderInternalControllerIntegrationTest {
      * sample assign request JSON — interfaces.md §1.1 Body 박제 일관.
      * ObjectMapper 의존 회피 (mmg-rider-service implementation 스코프 격리), text block 직접 박제.
      */
-    private String sampleReqJson(String orderId) {
+    private String sampleReqJson(Long orderId) {
         return String.format("""
                 {
-                  "orderId": "%s",
+                  "orderId": %d,
                   "storeNo": 7,
                   "storeName": "맛있는집",
                   "storeAddress": "가게 주소",
@@ -123,7 +123,7 @@ class RiderInternalControllerIntegrationTest {
     void assign_happy() throws Exception {
         Rider rider = seedRider(true);
         // 학원 공유 DB 잔존 데이터 격리 — UUID 기반 orderId 고정값 회피 (W-1 정정)
-        String orderId = "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        Long orderId = System.nanoTime();
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
                 .thenReturn(new DeliveryStatusUpdateRes(orderId, 0, 1));
 
@@ -171,7 +171,7 @@ class RiderInternalControllerIntegrationTest {
     @DisplayName("POST /assign rider PENDING: 400 BAD_REQUEST + Main 동기화 미호출")
     void assign_pendingRider_returns400() throws Exception {
         Rider rider = seedRider(false);
-        String reqJson = sampleReqJson("ORD0002");
+        String reqJson = sampleReqJson(2L);
 
         mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
                         .contentType(APPLICATION_JSON).content(reqJson))
@@ -197,9 +197,9 @@ class RiderInternalControllerIntegrationTest {
     void status_withProgress() throws Exception {
         Rider rider = seedRider(true);
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
-                .thenReturn(new DeliveryStatusUpdateRes("ORD0003", 0, 1));
+                .thenReturn(new DeliveryStatusUpdateRes(3L, 0, 1));
 
-        String reqJson = sampleReqJson("ORD0003");
+        String reqJson = sampleReqJson(3L);
         mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
                         .contentType(APPLICATION_JSON).content(reqJson))
                 .andExpect(status().isOk());
@@ -231,10 +231,10 @@ class RiderInternalControllerIntegrationTest {
     void monitor_returnsSummaryAndDeliveries() throws Exception {
         Rider rider = seedRider(true);
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
-                .thenReturn(new DeliveryStatusUpdateRes("ORD", 0, 1));
+                .thenReturn(new DeliveryStatusUpdateRes(System.nanoTime(), 0, 1));
 
         // 1건 ASSIGNED 시드
-        String orderId = "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        Long orderId = System.nanoTime();
         mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
                         .contentType(APPLICATION_JSON).content(sampleReqJson(orderId)))
                 .andExpect(status().isOk());
@@ -256,9 +256,9 @@ class RiderInternalControllerIntegrationTest {
     void monitor_assignedFilter_returnsAssignedRows() throws Exception {
         Rider rider = seedRider(true);
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
-                .thenReturn(new DeliveryStatusUpdateRes("ORD", 0, 1));
+                .thenReturn(new DeliveryStatusUpdateRes(System.nanoTime(), 0, 1));
 
-        String orderId = "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        Long orderId = System.nanoTime();
         mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
                         .contentType(APPLICATION_JSON).content(sampleReqJson(orderId)))
                 .andExpect(status().isOk());
@@ -269,7 +269,7 @@ class RiderInternalControllerIntegrationTest {
         mockMvc.perform(get("/internal/rider/monitor").param("status", "assigned"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.deliveries").isArray())
-                .andExpect(jsonPath("$.deliveries[?(@.orderId == '" + orderId + "')].status")
+                .andExpect(jsonPath("$.deliveries[?(@.orderId == " + orderId + ")].status")
                         .value("ASSIGNED"));
     }
 
