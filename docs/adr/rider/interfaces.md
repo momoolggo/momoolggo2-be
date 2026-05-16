@@ -1,8 +1,10 @@
 # 라이더 Feign 인터페이스 명세
 
-> **상태**: Accepted (2026-05-05)
+> **상태**: Accepted (2026-05-05) — orderId 타입 정정 (case-#34, 2026-05-16)
 > **목적**: ADR-001~009 결정에 따른 서비스 간 인터페이스 시그니처. 구현 0, Phase 5-R1~R9에서 작성.
 > **공통**: 모든 Feign client에 timeout `connect 3s / read 5s` 명시 (Phase 4-A 패턴)
+> **orderId 박제**: Long (main `orders.order_id` BIGINT AUTO_INCREMENT 일관). Figma "000001A" 표기는 UI zero-pad formatter 의도 (Phase 6+ tech-debt 별 트랙).
+> **case-#33 잔존 path 차이**: §3.3/§3.4 settlement path는 실제 rider Provider 박제(`/internal/rider/settlement/...`)와 차이. 별 정정 트랙 (작업 A 범위 외).
 
 ---
 
@@ -27,7 +29,7 @@ POST /internal/rider/{riderNo}/assign
 Headers: X-Internal: true
 Body:
   {
-    "orderId": "000001A",
+    "orderId": 1,
     "storeNo": 1,
     "storeName": "string",
     "storeAddress": "string",
@@ -107,7 +109,7 @@ Body:
   }
 Response 200:
   {
-    "orderId": "000001A",
+    "orderId": 1,
     "previousDeliveryState": 1,
     "newDeliveryState": 2            // ADR-004 매핑 (정정 3)
   }
@@ -134,7 +136,7 @@ Body:
   }
 Response 200:
   {
-    "orderId": "000001A",
+    "orderId": 1,
     "deliveryState": 3
   }
 ```
