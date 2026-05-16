@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.*;
 )
 public interface RiderFeignClient {
 
-    @PostMapping("/internal/rider/assign")
-    RiderAssignRes assignRider(@RequestBody RiderAssignReq req);
+    @PostMapping("/internal/rider/{riderNo}/assign")
+    RiderAssignRes assignRider(@PathVariable("riderNo") Long riderNo, @RequestBody RiderAssignReq req);
 
     @GetMapping("/internal/rider/{riderNo}/location")
     RiderLocationRes getRiderLocation(
