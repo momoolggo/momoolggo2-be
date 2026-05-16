@@ -24,6 +24,11 @@ public class MainSecurityConfig {
                         // 가게 조회 (목록/상세/메뉴/검색은 누구나)
                         .requestMatchers(HttpMethod.GET, "/api/store/**").permitAll()
 
+                        // 회원가입 *전* 호출: 주소 검색·역지오코딩 + 지도 SDK key (비로그인 OK)
+                        // rate limit 미적용 — NCP 무료 quota 소진 방지는 Phase 6+ tech-debt 등재 (Bucket4j/Gateway 글로벌 필터)
+                        .requestMatchers(HttpMethod.GET, "/api/address/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/map/**").permitAll()
+
                         // OWNER 전용 (사장 관리)
                         .requestMatchers("/api/owner/**").hasRole("OWNER")
 
