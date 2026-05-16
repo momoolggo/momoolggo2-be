@@ -44,6 +44,10 @@ spring:
               uri: http://localhost:8080
               predicates:
                 - Path=/api/address/**
+            - id: main-map-route          # 회원가입 화면 지도 SDK key 노출 (MapConfigController.getMapKey)
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/map/**
             - id: main-owner-route
               uri: http://localhost:8080
               predicates:
