@@ -52,12 +52,12 @@ spring.cloud.openfeign.client.config.default:
 toss:
   secret-key: ${TOSS_SECRET_KEY}
 
-# 네이버 API — client_secret만 시크릿 (.env), client_id는 공개키
+# 네이버 API (지도/검색 — main-service만 사용, CLAUDE.md §2) — prod와 일관 패턴, 5키 모두 .env
 naver:
-  client-id: l1ytziijx9
+  client-id: ${NAVER_CLIENT_ID}
   client-secret: ${NAVER_CLIENT_SECRET}
-  map-client-id: l1ytziijx9
-  search-client-id: Irz0Q0SbBNwf1to6Rjiy
+  map-client-id: ${NAVER_MAP_CLIENT_ID}
+  search-client-id: ${NAVER_SEARCH_CLIENT_ID}
   search-client-secret: ${NAVER_SEARCH_CLIENT_SECRET}
 
 # mmg-common ConstJwt 바인딩용 — JWT secret만 .env에서 (시크릿)
