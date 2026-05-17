@@ -249,7 +249,10 @@ class RiderOrderControllerIntegrationTest {
         assertThat(saved.getDeliveredPhotoUrl()).isEqualTo("/uploads/delivery/x.jpg");
         assertThat(saved.getDeliveredAt()).isNotNull();
 
-        verify(mainInternalClient).updateDeliveryStatus(eq(d.getOrderId()),
+        // Group 3 정정 — complete는 notifyMainComplete 흐름 (mainInternalClient.complete 호출, updateDeliveryStatus 호출 X)
+        verify(mainInternalClient).complete(eq(d.getOrderId()),
+                any(com.green.mmg.rider.feign.dto.DeliveryCompleteReq.class));
+        verify(mainInternalClient, never()).updateDeliveryStatus(eq(d.getOrderId()),
                 any(DeliveryStatusUpdateReq.class));
     }
 

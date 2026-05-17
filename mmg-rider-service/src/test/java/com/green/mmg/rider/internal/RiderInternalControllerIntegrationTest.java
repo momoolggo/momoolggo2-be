@@ -98,10 +98,11 @@ class RiderInternalControllerIntegrationTest {
      * sample assign request JSON — interfaces.md §1.1 Body 박제 일관.
      * ObjectMapper 의존 회피 (mmg-rider-service implementation 스코프 격리), text block 직접 박제.
      */
-    private String sampleReqJson(Long orderId) {
+    private String sampleReqJson(Long orderId, Long riderNo) {
         return String.format("""
                 {
                   "orderId": %d,
+                  "riderNo": %d,
                   "storeNo": 7,
                   "storeName": "맛있는집",
                   "storeAddress": "가게 주소",
@@ -115,7 +116,7 @@ class RiderInternalControllerIntegrationTest {
                   "baseFee": 4000,
                   "extraFee": 1500
                 }
-                """, orderId);
+                """, orderId, riderNo);
     }
 
     @Test
@@ -127,9 +128,9 @@ class RiderInternalControllerIntegrationTest {
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
                 .thenReturn(new DeliveryStatusUpdateRes(orderId, 0, 1));
 
-        String reqJson = sampleReqJson(orderId);
+        String reqJson = sampleReqJson(orderId, rider.getRiderNo());
 
-        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
+        mockMvc.perform(post("/internal/rider/assign")
                         .contentType(APPLICATION_JSON).content(reqJson))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.assigned").value(true))
@@ -171,9 +172,9 @@ class RiderInternalControllerIntegrationTest {
     @DisplayName("POST /assign rider PENDING: 400 BAD_REQUEST + Main 동기화 미호출")
     void assign_pendingRider_returns400() throws Exception {
         Rider rider = seedRider(false);
-        String reqJson = sampleReqJson(2L);
+        String reqJson = sampleReqJson(2L, rider.getRiderNo());
 
-        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
+        mockMvc.perform(post("/internal/rider/assign")
                         .contentType(APPLICATION_JSON).content(reqJson))
                 .andExpect(status().isBadRequest());
 
@@ -199,8 +200,8 @@ class RiderInternalControllerIntegrationTest {
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
                 .thenReturn(new DeliveryStatusUpdateRes(3L, 0, 1));
 
-        String reqJson = sampleReqJson(3L);
-        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
+        String reqJson = sampleReqJson(3L, rider.getRiderNo());
+        mockMvc.perform(post("/internal/rider/assign")
                         .contentType(APPLICATION_JSON).content(reqJson))
                 .andExpect(status().isOk());
 
@@ -235,8 +236,8 @@ class RiderInternalControllerIntegrationTest {
 
         // 1건 ASSIGNED 시드
         Long orderId = System.nanoTime();
-        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
-                        .contentType(APPLICATION_JSON).content(sampleReqJson(orderId)))
+        mockMvc.perform(post("/internal/rider/assign")
+                        .contentType(APPLICATION_JSON).content(sampleReqJson(orderId, rider.getRiderNo())))
                 .andExpect(status().isOk());
 
         em.flush();
@@ -259,8 +260,8 @@ class RiderInternalControllerIntegrationTest {
                 .thenReturn(new DeliveryStatusUpdateRes(System.nanoTime(), 0, 1));
 
         Long orderId = System.nanoTime();
-        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
-                        .contentType(APPLICATION_JSON).content(sampleReqJson(orderId)))
+        mockMvc.perform(post("/internal/rider/assign")
+                        .contentType(APPLICATION_JSON).content(sampleReqJson(orderId, rider.getRiderNo())))
                 .andExpect(status().isOk());
 
         em.flush();
