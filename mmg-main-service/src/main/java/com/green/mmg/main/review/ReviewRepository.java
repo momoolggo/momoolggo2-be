@@ -28,5 +28,13 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
                            @Param("end") LocalDateTime end);
 
 
+    @Query("""
+        SELECT COUNT(r)
+        FROM Review r
+        WHERE r.createdAt >= :start
+        AND r.createdAt < :end
+""")
 
+    long countReviewsByCreatedAtBetween(@Param("start") LocalDateTime start,
+                                        @Param("end") LocalDateTime end);
 }

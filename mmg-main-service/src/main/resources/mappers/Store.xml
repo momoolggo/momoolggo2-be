@@ -188,12 +188,16 @@
             r.contents,
             r.photo,
             o.user_no    AS userNo,
-            DATE_FORMAT(r.write_at, '%Y.%m.%d') AS date,
+            DATE_FORMAT(r.written_at, '%Y.%m.%d') AS date,
+            rr.reply_id AS replyId,
+            rr.content AS replyContent,
+            rr.written_at AS replyWrittenAt,
         (SELECT GROUP_CONCAT(od.menu_name SEPARATOR ', ')
          FROM order_detail od
          WHERE od.order_id = r.order_id) AS menuName
         FROM review r
             JOIN orders o ON o.order_id = r.order_id
+            LEFT JOIN review_reply rr ON rr.review_id = r.review_id
         WHERE o.store_id = #{storeId}
         ORDER BY r.written_at DESC
         <!-- Phase 4-A: user JOIN 제거. userName은 StoreService에서 AuthFeignClient.getUsers() batch로 합성 -->
@@ -202,17 +206,33 @@
     <!-- 가게 목록 -->
     <select id="findInternalStoreList" resultType="com.green.mmg.main.internal.dto.InternalStoreListRes">
         SELECT
-            s.store_id AS storeId,
-            s.store_name AS storeName,
-            s.owner_id AS ownerId,
-            s.location AS location,
-            s.store_tel AS storeTel,
-            s.created_at AS createdAt,
-            s.state AS state
+        s.store_id AS storeId,
+        s.store_name AS storeName,
+        s.owner_id AS ownerId,
+        s.location AS location,
+        s.store_tel AS storeTel,
+        s.created_at AS createdAt,
+        s.state AS state
         FROM store s
+        <where>
+            <if test="date != null and date != ''">
+                DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+            </if>
+        </where>
         ORDER BY s.created_at DESC
         LIMIT #{startIdx}, #{size}
     </select>
+
+    <select id="countInternalStoreList" resultType="long">
+        SELECT COUNT(1)
+        FROM store s
+        <where>
+            <if test="date != null and date != ''">
+                DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+            </if>
+        </where>
+    </select>
+
 
     <select id="findStoreLocationByOwnerNo" resultType="string">
         SELECT s.location
@@ -220,5 +240,12 @@
         WHERE s.owner_id = #{ownerNo}
         ORDER BY s.store_id DESC
         LIMIT 1
+    </select>
+
+    <select id="countStoresByCreatedAtBetween" resultType="long">
+        SELECT COUNT(1)
+        FROM store s
+        WHERE s.created_at >= #{start}
+            AND s.created_at &lt; #{end}
     </select>
 </mapper>

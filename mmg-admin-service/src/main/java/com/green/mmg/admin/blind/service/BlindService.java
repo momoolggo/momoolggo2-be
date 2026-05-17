@@ -118,4 +118,6 @@ public class BlindService {
                 .findByStatusAndEndsAtBefore(BlindStatus.BLINDED, LocalDateTime.now());
         expiredList.forEach(Blind::suspend);
     }
+
+
 }

@@ -4,6 +4,8 @@ package com.green.mmg.main.owner.model;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.List;
+
 @Getter
 @Setter
 public class OwnerMenuRes { //서버가 주는 최종 메뉴등록 결과
@@ -13,5 +15,6 @@ public class OwnerMenuRes { //서버가 주는 최종 메뉴등록 결과
     private String menuInfo;
     private String price;
     private String menuPic;
+    private List<OwnerMenuOptionCategoryRes> optionCategories;
 
 }

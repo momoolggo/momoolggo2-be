@@ -318,7 +318,22 @@ public class OwnerService {
     @Transactional(readOnly = true)
     public List<OwnerMenuRes> getMenusByStoreId(long callerOwnerNo, Long storeId) {
         verifyStoreOwner(callerOwnerNo, storeId);
-        return ownerMapper.getMenusByStoreId(storeId);
+
+        List<OwnerMenuRes> menus = ownerMapper.getMenusByStoreId(storeId);
+
+        for (OwnerMenuRes menu : menus) {
+            List<MenuOptionCategory> categories = menuOptionCategoryRepository.findByMenuId(menu.getMenuId());
+
+            List<OwnerMenuOptionCategoryRes> optionCategories = categories.stream()
+                    .map(category -> {
+                        List<MenuOption> options = menuOptionRepository.findByOptionCategoryNo(category.getOptionCategoryNo());
+                        return OwnerMenuOptionCategoryRes.from(category, options);
+                    })
+                    .toList();
+            menu.setOptionCategories(optionCategories);
+        }
+
+        return menus;
     }
 
     // ========== 매출 관련 (D-bis 그룹 ㄹ: 권한 분기 추가) ==========
