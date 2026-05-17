@@ -4,6 +4,7 @@ import com.green.mmg.admin.dto.feign.RiderApproveReq;
 import com.green.mmg.admin.dto.feign.RiderInternalMonitorRes;
 import com.green.mmg.admin.dto.feign.RiderInternalNoticeReq;
 import com.green.mmg.admin.dto.feign.RiderInternalNoticeRes;
+import com.green.mmg.admin.dto.feign.RiderLocationRes;
 import com.green.mmg.admin.dto.feign.RiderNoticeRes;
 import com.green.mmg.admin.dto.feign.RiderProfileRes;
 import com.green.mmg.admin.dto.feign.RiderSettlementCalculateReq;
@@ -81,4 +82,12 @@ public interface RiderFeignClient {
     /** 라이더 목록 조회 — interfaces.md §3.5 (Q-A1 (라++) Group 8 신설). status null=전체. List 반환 (case-#36 자가 정정). */
     @GetMapping("/internal/rider/list")
     List<RiderProfileRes> getRiderList(@RequestParam(value = "status", required = false) String status);
+
+    // ─── §1.3 라이더 위치 다건 조회 (Group 10 신설, 2026-05-17) ──────
+    // 결정 (가) Redis TTL 기준 — 위치 송신 fresh 라이더만. 빈 결과는 빈 List.
+    // case-#34 일관: rider Provider RiderInternalLocationRes 1:1.
+
+    /** Admin 배달 관제 지도용 — TTL 살아있는 모든 라이더 위치. */
+    @GetMapping("/internal/rider/locations/active")
+    List<RiderLocationRes> getActiveRiderLocations();
 }

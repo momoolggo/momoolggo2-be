@@ -94,6 +94,25 @@ Response 200:
   }
 ```
 
+### 1.4 라이더 위치 다건 조회 (Admin → Rider) — Group 10 신설 (2026-05-17, 결정 (가) Redis TTL 기준)
+
+```
+GET /internal/rider/locations/active
+Headers: X-Internal: true
+Response 200:
+  [
+    {"riderNo": 1, "lat": 35.125, "lng": 128.456, "updatedAt": "2026-05-17T23:30:00"},
+    {"riderNo": 7, "lat": 35.130, "lng": 128.460, "updatedAt": "2026-05-17T23:30:02"}
+  ]
+
+부재(빈 SCAN): []  // NOT_FOUND throw X (admin 화면 정상 동작)
+```
+
+- **결정 (가)**: Redis TTL 30s 살아있는 라이더만 (rider.status/WorkSession ACTIVE 무관)
+- **사용처**: AdminDeliveryView 5초 폴링 + AdminDeliveryMap.vue 다중 마커 (Group 10, 2026-05-17)
+- **구현**: Redis SCAN `rider:loc:*` (KEYS 회피, 운영 안전)
+- **case-#34 일관**: admin 측 `RiderLocationRes` record 1:1 매핑
+
 ---
 
 ## 2. MainInternalClient (Rider → Main)

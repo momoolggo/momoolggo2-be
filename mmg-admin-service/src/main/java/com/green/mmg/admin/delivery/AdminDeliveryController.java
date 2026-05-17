@@ -3,6 +3,7 @@ package com.green.mmg.admin.delivery;
 import com.green.mmg.admin.dto.feign.RiderInternalMonitorRes;
 import com.green.mmg.admin.dto.feign.RiderInternalNoticeReq;
 import com.green.mmg.admin.dto.feign.RiderInternalNoticeRes;
+import com.green.mmg.admin.dto.feign.RiderLocationRes;
 import com.green.mmg.admin.dto.feign.RiderNoticeRes;
 import com.green.mmg.admin.feign.RiderFeignClient;
 import lombok.RequiredArgsConstructor;
@@ -60,5 +61,11 @@ public class AdminDeliveryController {
     @GetMapping("/rider-count")
     public ResponseEntity<?> getRiderCount() {
         return ResponseEntity.ok(Map.of("count", 0));
+    }
+
+    /** Admin 배달 관제 지도용 — TTL 살아있는 라이더 위치 다건 (Group 10, 2026-05-17). */
+    @GetMapping("/rider-locations")
+    public List<RiderLocationRes> getRiderLocations() {
+        return riderFeignClient.getActiveRiderLocations();
     }
 }

@@ -80,6 +80,15 @@ public class RiderInternalController {
         return locationService.getInternalLocation(riderNo);
     }
 
+    /**
+     * Admin 배달 관제 — TTL 살아있는 모든 라이더 위치 다건 조회 (Group 10, 2026-05-17).
+     * 결정 (가) Redis TTL 기준. 빈 결과는 빈 List 반환.
+     */
+    @GetMapping("/locations/active")
+    public List<RiderInternalLocationRes> activeLocations() {
+        return locationService.getActiveLocations();
+    }
+
     @GetMapping("/{riderNo}/status")
     public RiderInternalStatusRes status(@PathVariable Long riderNo) {
         return deliveryService.getRiderInternalStatus(riderNo);
