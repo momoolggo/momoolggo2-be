@@ -231,6 +231,43 @@ Response 4xx:
 
 내부 흐름: settlement.status PENDING → CONFIRMED (D10-b, ADR-007)
 
+### 3.5 라이더 목록 조회 (Admin → Rider) — Q-A1 (라++) Group 8 신설 (2026-05-17)
+
+```
+GET /internal/rider/list?status=PENDING
+Headers: X-Internal: true
+Query:
+  - status: nullable, 4값 enum (PENDING/ACTIVE/EATING/SUSPENDED) — null이면 전체
+Response 200:
+  [
+    {
+      "riderNo": 5,
+      "userNo": 42,
+      "status": "PENDING",
+      "licenseNo": "11-22-...",
+      "licenseType": "2종보통",
+      "vehicleType": "MOTORBIKE",
+      "accountBank": "신한",
+      "accountNo": "110-1",
+      "accountHolder": "홍길동"
+    }
+  ]
+```
+
+내부 흐름: rider 측 `RiderRepository.findByStatusOrderByRiderNoDesc(status)` 또는 `findAll()` → `RiderProfileRes.from` 매핑.
+
+**박제 결정 사유** (Q-A1 (라++)):
+- 학원 발표 시연 가치 — admin 라이더 관리 화면에 *rider.status* 표시 필수
+- auth `getUserList(role=RIDER)`는 user.status만, rider 도메인 status 부재 → 시연 가치 ↓
+- case-#33 후행 박제 누락 회피 학습 적용
+
+**분류 B 자율 정정 (Page → List, case-#36 변종)**:
+- 사용자 박제 시그니처: `Page<RiderProfileRes>` (Spring Data Page)
+- 본인 정정: `List<RiderProfileRes>` — Spring Data Page Jackson 기본 역직렬화 X, Feign 호환성 위험 회피
+- MVP 학원 발표 = List 충분. page/size query 제거, status 필터만 유지
+
+---
+
 ### 3.4 정산 집계 (Admin → Rider)
 
 ```

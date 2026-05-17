@@ -5,12 +5,15 @@ import com.green.mmg.rider.config.RiderProperties;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderProfileReq;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
+import com.green.mmg.rider.rider.model.RiderStatus;
 import com.green.mmg.rider.rider.model.VehicleType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * 라이더 도메인 서비스 — Phase 5-R1 범위.
@@ -117,6 +120,19 @@ public class RiderService {
         rider.suspend();  // ?→SUSPENDED 전이 검증 (Q-A20 (가))
         log.info("라이더 제재 완료: riderNo={}, reason={} (audit log Phase 6+ outbox 위임)", riderNo, reason);
         return RiderProfileRes.from(rider);
+    }
+
+    /**
+     * admin 라이더 목록 조회 (interfaces.md §3.5, Q-A1 (라++) Group 8 신설 2026-05-17).
+     *
+     * <p>{@code status} null이면 전체, 명시되면 필터. 학원 발표 MVP — List 반환 (Page 미사용, case-#36 자가 정정).</p>
+     */
+    @Transactional(readOnly = true)
+    public List<RiderProfileRes> listRiders(RiderStatus status) {
+        List<Rider> riders = (status == null)
+                ? riderRepository.findAll()
+                : riderRepository.findByStatusOrderByRiderNoDesc(status);
+        return riders.stream().map(RiderProfileRes::from).toList();
     }
 
     private void validate(RiderProfileReq req) {

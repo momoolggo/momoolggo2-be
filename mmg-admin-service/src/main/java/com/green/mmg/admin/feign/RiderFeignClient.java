@@ -5,6 +5,7 @@ import com.green.mmg.admin.dto.feign.RiderInternalMonitorRes;
 import com.green.mmg.admin.dto.feign.RiderInternalNoticeReq;
 import com.green.mmg.admin.dto.feign.RiderInternalNoticeRes;
 import com.green.mmg.admin.dto.feign.RiderNoticeRes;
+import com.green.mmg.admin.dto.feign.RiderProfileRes;
 import com.green.mmg.admin.dto.feign.RiderSettlementCalculateReq;
 import com.green.mmg.admin.dto.feign.RiderSettlementConfirmReq;
 import com.green.mmg.admin.dto.feign.RiderSettlementRowRes;
@@ -76,4 +77,8 @@ public interface RiderFeignClient {
     /** 라이더 제재 — interfaces.md §3.2. ?→SUSPENDED 전이 (Q-A20 (가) entity 검증). */
     @PostMapping("/internal/rider/{riderNo}/suspend")
     void suspendRider(@PathVariable("riderNo") Long riderNo, @RequestBody RiderSuspendReq req);
+
+    /** 라이더 목록 조회 — interfaces.md §3.5 (Q-A1 (라++) Group 8 신설). status null=전체. List 반환 (case-#36 자가 정정). */
+    @GetMapping("/internal/rider/list")
+    List<RiderProfileRes> getRiderList(@RequestParam(value = "status", required = false) String status);
 }

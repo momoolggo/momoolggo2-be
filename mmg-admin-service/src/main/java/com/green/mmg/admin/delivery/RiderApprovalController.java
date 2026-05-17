@@ -1,11 +1,14 @@
 package com.green.mmg.admin.delivery;
 
 import com.green.mmg.admin.dto.feign.RiderApproveReq;
+import com.green.mmg.admin.dto.feign.RiderProfileRes;
 import com.green.mmg.admin.dto.feign.RiderSuspendReq;
 import com.green.mmg.admin.feign.RiderFeignClient;
 import com.green.mmg.common.dto.ResultResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * admin 측 라이더 관리 화면 endpoint — Group 8.5 신설 (2026-05-17, Q-A1 (라+) + Q-A14.b (3)).
@@ -37,5 +40,15 @@ public class RiderApprovalController {
                                      @RequestBody RiderSuspendReq req) {
         riderFeignClient.suspendRider(riderNo, req);
         return new ResultResponse<>("라이더 제재 완료", null);
+    }
+
+    /**
+     * 라이더 목록 조회 — interfaces.md §3.5 (Q-A1 (라++) Group 8 신설). status null=전체.
+     * Q-A19 (다) 분리 패턴 일관 — GET 외부 endpoint (조회 의미, BlindController PATCH는 status 정정).
+     */
+    @GetMapping("/list")
+    public ResultResponse<List<RiderProfileRes>> getRiderList(
+            @RequestParam(required = false) String status) {
+        return new ResultResponse<>("조회 성공", riderFeignClient.getRiderList(status));
     }
 }

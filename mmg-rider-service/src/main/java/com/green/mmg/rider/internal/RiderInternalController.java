@@ -18,6 +18,7 @@ import com.green.mmg.rider.notice.NoticeService;
 import com.green.mmg.rider.notice.model.Notice;
 import com.green.mmg.rider.rider.RiderService;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
+import com.green.mmg.rider.rider.model.RiderStatus;
 import com.green.mmg.rider.settlement.SettlementService;
 import com.green.mmg.rider.settlement.dto.CalculateReq;
 import com.green.mmg.rider.settlement.dto.ConfirmReq;
@@ -165,5 +166,14 @@ public class RiderInternalController {
     public RiderProfileRes suspend(@PathVariable Long riderNo,
                                    @RequestBody RiderSuspendReq req) {
         return riderService.suspendRider(riderNo, req.reason());
+    }
+
+    /**
+     * 라이더 목록 조회 — interfaces.md §3.5 (Q-A1 (라++) Group 8 신설 2026-05-17).
+     * {@code status} null이면 전체, 명시되면 4값 enum 필터. 학원 발표 MVP List 반환 (case-#36 자가 정정).
+     */
+    @GetMapping("/list")
+    public List<RiderProfileRes> list(@RequestParam(required = false) RiderStatus status) {
+        return riderService.listRiders(status);
     }
 }
