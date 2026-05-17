@@ -199,7 +199,40 @@ class UserServiceTest {
             req.setBirth("1990-01-01");
             req.setGender(1);
             req.setTel("010-1234-5678");
+            req.setAgreedToTerms(true);  // 작업 C (2026-05-18): happy path fixture, 미동의 케이스는 별 테스트
             return req;
+        }
+
+        @Test
+        @DisplayName("agreedToTerms null: 400 BAD_REQUEST + Repository 미호출 (작업 C, 2026-05-18)")
+        void agreedToTerms_null_throwsBadRequest() {
+            UserSignupReq req = newSignupReq();
+            req.setAgreedToTerms(null);
+
+            assertThatThrownBy(() -> userService.signup(req, httpRes))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("이용약관에 동의")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(userRepository, never()).save(any(User.class));
+            verify(refreshTokenStore, never()).save(anyLong(), any(), any());
+        }
+
+        @Test
+        @DisplayName("agreedToTerms false: 400 BAD_REQUEST + Repository 미호출 (작업 C, 2026-05-18)")
+        void agreedToTerms_false_throwsBadRequest() {
+            UserSignupReq req = newSignupReq();
+            req.setAgreedToTerms(false);
+
+            assertThatThrownBy(() -> userService.signup(req, httpRes))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("이용약관에 동의")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(userRepository, never()).save(any(User.class));
+            verify(refreshTokenStore, never()).save(anyLong(), any(), any());
         }
     }
 
