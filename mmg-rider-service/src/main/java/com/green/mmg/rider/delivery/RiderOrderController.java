@@ -132,7 +132,7 @@ public class RiderOrderController {
             @RequestBody DeliveryCompleteReq req) {
         DeliveryTransitionResult result = deliveryService.completeDelivery(
                 deliveryNo, principal.getSignedUserNo(), req);
-        notifyMain(result);
+        notifyMainComplete(deliveryNo, result, req);
         return new ResultResponse<>("배달 완료 처리 성공", null);
     }
 
@@ -167,6 +167,34 @@ public class RiderOrderController {
         } catch (Exception e) {
             log.warn("Main 동기화 실패: orderId={}, status={}, ex={}",
                     result.orderId(), result.newStatus(), e.getMessage());
+        }
+    }
+
+    /**
+     * Main 완료 동기화 — interfaces.md §2.2. best-effort try-catch (notifyMain 패턴 일관, D1-bis).
+     *
+     * <p>complete 호출이 {@code delivery_state=3} + {@code order_state=6} 동반 UPDATE이라
+     * {@code updateDeliveryStatus(DELIVERED)} 중복 호출 X (Q-A4-호출 흐름 (나)).
+     * Feign DTO는 외부 endpoint DTO와 같은 클래스명이라 full qualified name 사용 (case-#34 영역 분리 일관).</p>
+     *
+     * <p>매핑: {@code deliveryNo}는 path variable에서, {@code riderNo}+{@code completedAt}는 result에서,
+     * {@code deliveredMethod}+{@code deliveredPhotoUrl}는 외부 req에서 보강.</p>
+     */
+    private void notifyMainComplete(String deliveryNo,
+                                    DeliveryTransitionResult result,
+                                    DeliveryCompleteReq externalReq) {
+        try {
+            mainInternalClient.complete(
+                    result.orderId(),
+                    new com.green.mmg.rider.feign.dto.DeliveryCompleteReq(
+                            deliveryNo,
+                            result.riderNo(),
+                            externalReq.deliveredMethod(),
+                            externalReq.deliveredPhotoUrl(),
+                            result.changedAt()));
+        } catch (Exception e) {
+            log.warn("Main 완료 동기화 실패: orderId={}, deliveryNo={}, ex={}",
+                    result.orderId(), deliveryNo, e.getMessage());
         }
     }
 }
