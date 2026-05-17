@@ -68,13 +68,13 @@ public class RiderService {
         );
         rider = riderRepository.save(rider);
 
-        // === 임시: admin-service 미도입 시 자동 ACTIVE (D11 옵션 A-1) ===
-        // TODO: admin-service approve endpoint 도입 후 이 블록 제거
-        //       + application.yml RIDER_AUTO_APPROVE=false
-        // 관련 ADR: docs/adr/rider/ADR-001-service-boundary.md "임시 운영" 섹션
+        // === D11 (Q-A17 (iii) 정정 2026-05-17): admin approve endpoint 도입 완료 ===
+        // dev 환경 시연용 backup 유지 (운영 false). Phase 6+ 제거 검토.
+        // 관련 ADR: docs/adr/rider/ADR-001-service-boundary.md "임시 운영" + Q-A1 (라+) 박제.
+        // case-#33 후속 정정 누락 패턴 회피 — 박제 인용 명시.
         if (riderProperties.autoApprove()) {
             rider.approve();
-            log.debug("D11 auto-approve applied: riderNo={}, userNo={}", rider.getRiderNo(), callerUserNo);
+            log.debug("D11 auto-approve (dev backup) applied: riderNo={}, userNo={}", rider.getRiderNo(), callerUserNo);
         }
 
         return RiderProfileRes.from(rider);
@@ -89,6 +89,33 @@ public class RiderService {
         Rider rider = riderRepository.findByUserNo(callerUserNo)
                 .orElseThrow(() -> new BusinessException(
                         "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        return RiderProfileRes.from(rider);
+    }
+
+    /**
+     * admin 승인 처리 (interfaces.md §3.1, Q-A1 (라+) Group 8.5 신설 2026-05-17).
+     * PENDING → ACTIVE 전이 (Rider entity approve() 메서드 박제 검증 동반).
+     */
+    @Transactional
+    public RiderProfileRes approveRider(Long riderNo) {
+        Rider rider = riderRepository.findById(riderNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        rider.approve();  // PENDING → ACTIVE 전이 검증 (Q-A20 (가))
+        return RiderProfileRes.from(rider);
+    }
+
+    /**
+     * admin 제재 처리 (interfaces.md §3.2, Q-A1 (라+) Group 8.5 신설 2026-05-17).
+     * PENDING/ACTIVE/EATING → SUSPENDED 전이. reason은 본 메서드 인자 X (Q-A18 (b) audit log Phase 6+ outbox 위임).
+     */
+    @Transactional
+    public RiderProfileRes suspendRider(Long riderNo, String reason) {
+        Rider rider = riderRepository.findById(riderNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        rider.suspend();  // ?→SUSPENDED 전이 검증 (Q-A20 (가))
+        log.info("라이더 제재 완료: riderNo={}, reason={} (audit log Phase 6+ outbox 위임)", riderNo, reason);
         return RiderProfileRes.from(rider);
     }
 
