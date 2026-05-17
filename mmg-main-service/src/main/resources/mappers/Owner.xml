@@ -387,6 +387,30 @@
         WHERE mc.category_id = #{categoryId}
     </select>
 
+    <!-- 점주 수락 시점 라이더 배차 정보 조회 — Phase 5+ 작업 A Group 4, interfaces.md §1.1 박제 14 필드.
+         Q-A9.c MyBatis 박제 일관. Q-A9.e (나) NULL/0 패스 (orders.delivery_lat/lng/customer_phone/extra_fee 부재, case-#34-후속).
+         resultType=RiderAssignReq record 직접 매핑 (분류 B 자율, StoreInfoDto 신설 X). -->
+    <select id="findStoreInfoByOrderId" resultType="com.green.mmg.main.feign.model.RiderAssignReq">
+        SELECT
+            o.order_id                                                AS orderId,
+            NULL                                                      AS riderNo,
+            s.store_id                                                AS storeNo,
+            s.store_name                                              AS storeName,
+            s.location                                                AS storeAddress,
+            s.latitude                                                AS storeLat,
+            s.longitude                                               AS storeLng,
+            s.store_tel                                               AS storePhone,
+            CONCAT(o.address, ' ', IFNULL(o.address_detail, ''))      AS deliveryAddress,
+            NULL                                                      AS deliveryLat,
+            NULL                                                      AS deliveryLng,
+            NULL                                                      AS customerPhone,
+            o.delivery_fee                                            AS baseFee,
+            0                                                         AS extraFee
+        FROM orders o
+        JOIN store s ON o.store_id = s.store_id
+        WHERE o.order_id = #{orderId}
+    </select>
+
     <!-- 가게 리뷰 조회 — Phase 4-A: user JOIN 제거, OwnerService에서 Feign batch 합성 -->
     <select id="getStoreReviews" resultType="map">
         SELECT

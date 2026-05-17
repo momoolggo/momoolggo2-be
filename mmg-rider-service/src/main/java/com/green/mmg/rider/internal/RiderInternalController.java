@@ -44,21 +44,26 @@ public class RiderInternalController {
     private final MainInternalClient mainInternalClient;
     private final SettlementService settlementService;
 
-    @PostMapping("/{riderNo}/assign")
-    public RiderInternalAssignRes assign(
-            @PathVariable Long riderNo,
-            @RequestBody RiderInternalAssignReq req) {
-        RiderInternalAssignRes res = deliveryService.assignDelivery(riderNo, req);
+    /**
+     * 배차 요청 — interfaces.md §1.1 (case-#33-후속 정정, Q-A9.a (β+δ)).
+     * req.riderNo null/0 = 라이더 풀 (WAITING_ASSIGN), 명시 = 강제 배차 (ASSIGNED).
+     * Main 동기화는 ASSIGNED 시점만 (라이더 풀은 main이 호출자라 자동 인지, 라이더 수락 시점에 R6 흐름이 동기화).
+     */
+    @PostMapping("/assign")
+    public RiderInternalAssignRes assign(@RequestBody RiderInternalAssignReq req) {
+        RiderInternalAssignRes res = deliveryService.assignDelivery(req);
 
-        try {
-            mainInternalClient.updateDeliveryStatus(req.orderId(),
-                    new DeliveryStatusUpdateReq(
-                            DeliveryStatus.ASSIGNED.name(),
-                            riderNo,
-                            res.assignedAt()));
-        } catch (Exception e) {
-            log.warn("Main 동기화 실패 (배차는 성공): orderId={}, deliveryNo={}, ex={}",
-                    req.orderId(), res.deliveryNo(), e.getMessage());
+        if (res.riderNo() != null) {
+            try {
+                mainInternalClient.updateDeliveryStatus(req.orderId(),
+                        new DeliveryStatusUpdateReq(
+                                DeliveryStatus.ASSIGNED.name(),
+                                res.riderNo(),
+                                res.assignedAt()));
+            } catch (Exception e) {
+                log.warn("Main 동기화 실패 (배차는 성공): orderId={}, deliveryNo={}, ex={}",
+                        req.orderId(), res.deliveryNo(), e.getMessage());
+            }
         }
 
         return res;

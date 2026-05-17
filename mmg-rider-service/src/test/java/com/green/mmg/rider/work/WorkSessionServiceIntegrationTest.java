@@ -106,6 +106,7 @@ class WorkSessionServiceIntegrationTest {
 
         RiderInternalAssignReq req = new RiderInternalAssignReq(
                 System.nanoTime(),
+                eating.getRiderNo(),
                 1L, "가게이름", "가게 주소",
                 37.5665, 126.978,
                 "010-1111-1111",
@@ -113,7 +114,7 @@ class WorkSessionServiceIntegrationTest {
                 "010-2222-2222",
                 3000, 0);
 
-        assertThatThrownBy(() -> deliveryService.assignDelivery(eating.getRiderNo(), req))
+        assertThatThrownBy(() -> deliveryService.assignDelivery(req))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("배차 가능 상태가 아닙니다")
                 .hasMessageContaining("EATING");

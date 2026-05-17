@@ -1,9 +1,10 @@
 # 라이더 Feign 인터페이스 명세
 
-> **상태**: Accepted (2026-05-05) — orderId 타입 정정 (case-#34, 2026-05-16)
+> **상태**: Accepted (2026-05-05) — orderId 타입 정정 (case-#34, 2026-05-16) + §1.1 path 정정 (case-#33-후속, 2026-05-17)
 > **목적**: ADR-001~009 결정에 따른 서비스 간 인터페이스 시그니처. 구현 0, Phase 5-R1~R9에서 작성.
 > **공통**: 모든 Feign client에 timeout `connect 3s / read 5s` 명시 (Phase 4-A 패턴)
 > **orderId 박제**: Long (main `orders.order_id` BIGINT AUTO_INCREMENT 일관). Figma "000001A" 표기는 UI zero-pad formatter 의도 (Phase 6+ tech-debt 별 트랙).
+> **§1.1 배차 흐름**: 라이더 풀 모델 박제 (team-handoff §8 R6 종결 결과 우선, Q-A9.a (β+δ) 정정). path `POST /internal/rider/assign` (riderNo path 제거), body 박제 — riderNo NULL/0이면 WAITING_ASSIGN, 명시되면 강제 배차 (admin 시연 호환).
 > **case-#33 잔존 path 차이**: §3.3/§3.4 settlement path는 실제 rider Provider 박제(`/internal/rider/settlement/...`)와 차이. 별 정정 트랙 (작업 A 범위 외).
 
 ---
@@ -22,14 +23,15 @@
 
 ## 1. RiderInternalClient (Main/Admin → Rider)
 
-### 1.1 배차 요청 (Main → Rider)
+### 1.1 배차 요청 (Main → Rider) — case-#33-후속 정정 (2026-05-17, Q-A9.a (β+δ))
 
 ```
-POST /internal/rider/{riderNo}/assign
+POST /internal/rider/assign
 Headers: X-Internal: true
 Body:
   {
     "orderId": 1,
+    "riderNo": null,                        // null/0 = 라이더 풀(WAITING_ASSIGN), 명시 = 강제 배차(admin 시연 호환)
     "storeNo": 1,
     "storeName": "string",
     "storeAddress": "string",

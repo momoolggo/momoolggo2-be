@@ -139,18 +139,26 @@ public class DeliveryService {
     }
 
     /**
-     * 배차 요청 처리 — interfaces.md §1.1 (Main → Rider).
-     * Rider ACTIVE 검증 + Delivery 생성(WAITING_ASSIGN → ASSIGNED 즉시 전환) + delivery_log INSERT.
-     * actorRole = SYSTEM (자동 처리, actorUserNo = null).
+     * 배차 요청 처리 — interfaces.md §1.1 (Main → Rider, case-#33-후속 정정, Q-A9.a (β+δ)).
+     *
+     * <p>req.riderNo null/0 = 라이더 풀 모델 (status=WAITING_ASSIGN, riderNo 미할당, rider 검증 X).
+     * 명시 = 강제 배차 (rider ACTIVE 검증 + status=ASSIGNED). admin 시연 호환 박제.</p>
+     *
+     * <p>delivery_log INSERT: status (WAITING_ASSIGN 또는 ASSIGNED) 동일 박제. actorRole=SYSTEM.</p>
      */
     @Transactional
-    public RiderInternalAssignRes assignDelivery(Long riderNo, RiderInternalAssignReq req) {
-        Rider rider = riderRepository.findById(riderNo)
-                .orElseThrow(() -> new BusinessException("라이더를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (rider.getStatus() != RiderStatus.ACTIVE) {
-            throw new BusinessException(
-                    "라이더가 배차 가능 상태가 아닙니다 (현재: " + rider.getStatus() + ").",
-                    HttpStatus.BAD_REQUEST);
+    public RiderInternalAssignRes assignDelivery(RiderInternalAssignReq req) {
+        Long reqRiderNo = req.riderNo();
+        boolean isPool = (reqRiderNo == null || reqRiderNo == 0L);
+
+        if (!isPool) {
+            Rider rider = riderRepository.findById(reqRiderNo)
+                    .orElseThrow(() -> new BusinessException("라이더를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+            if (rider.getStatus() != RiderStatus.ACTIVE) {
+                throw new BusinessException(
+                        "라이더가 배차 가능 상태가 아닙니다 (현재: " + rider.getStatus() + ").",
+                        HttpStatus.BAD_REQUEST);
+            }
         }
 
         String deliveryNo = generateDeliveryNo();
@@ -160,9 +168,15 @@ public class DeliveryService {
                 req.storeAddress(), req.storeLat(), req.storeLng(),
                 req.deliveryAddress(), req.deliveryLat(), req.deliveryLng(),
                 req.baseFee());
-        delivery.assignRider(riderNo);
         LocalDateTime now = LocalDateTime.now();
-        delivery.changeStatus(DeliveryStatus.ASSIGNED, now);
+        DeliveryStatus initialStatus;
+        if (!isPool) {
+            delivery.assignRider(reqRiderNo);
+            delivery.changeStatus(DeliveryStatus.ASSIGNED, now);
+            initialStatus = DeliveryStatus.ASSIGNED;
+        } else {
+            initialStatus = DeliveryStatus.WAITING_ASSIGN;
+        }
 
         try {
             deliveryRepository.saveAndFlush(delivery);
@@ -173,9 +187,9 @@ public class DeliveryService {
         }
 
         deliveryLogRepository.save(new DeliveryLog(
-                deliveryNo, null, DeliveryStatus.ASSIGNED, ActorRole.SYSTEM, null));
+                deliveryNo, null, initialStatus, ActorRole.SYSTEM, null));
 
-        return new RiderInternalAssignRes(true, deliveryNo, riderNo, now);
+        return new RiderInternalAssignRes(true, deliveryNo, isPool ? null : reqRiderNo, now);
     }
 
     /**
