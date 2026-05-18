@@ -186,4 +186,24 @@ class LocationIntegrationTest {
         mockMvc.perform(get("/internal/rider/" + rider.getRiderNo() + "/location"))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    @DisplayName("GET /internal/rider/locations/active: TTL 살아있는 라이더만 반환 (Group 10 신설)")
+    void activeLocations_returnsTtlAlive() throws Exception {
+        Rider rider = seedRider(true);
+        authenticateAs(rider.getUserNo());
+
+        // 본 라이더 위치 PUT
+        String body = """
+                {"lat": 35.125, "lng": 128.456}
+                """;
+        mockMvc.perform(put("/api/rider/location").contentType(APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+
+        // SCAN 결과 본 라이더 포함 확인 (다른 테스트의 Redis 키와 격리되도록 본 라이더만 검증)
+        mockMvc.perform(get("/internal/rider/locations/active"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.riderNo == " + rider.getRiderNo() + ")].lat").value(35.125))
+                .andExpect(jsonPath("$[?(@.riderNo == " + rider.getRiderNo() + ")].lng").value(128.456));
+    }
 }

@@ -1,6 +1,11 @@
 package com.green.mmg.main.internal;
 
 import com.green.mmg.common.dto.ResultResponse;
+import com.green.mmg.main.internal.dto.DeliveryCompleteReq;
+import com.green.mmg.main.internal.dto.DeliveryCompleteRes;
+import com.green.mmg.main.internal.dto.DeliveryStatusUpdateReq;
+import com.green.mmg.main.internal.dto.DeliveryStatusUpdateRes;
+import com.green.mmg.main.order.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,32 +16,38 @@ import java.util.Map;
 @RequestMapping("/internal/order")
 public class InternalOrderController {
 
-    /** 배달 상태 변경 알림/ PUT /internal/order/{orderId}/delivery-status */
-    @PutMapping("/{orderId}/delivery-status")
-    public ResultResponse<Void> updateDeliveryStatus(
-            @PathVariable String orderId,
-            @RequestBody Map<String, Object> body
-    ) {
-        // TODO: 라이더가 보낸 배달 상태를 주문 상태에 반영
+    private final OrderService orderService;
 
-        return new ResultResponse<>("상태 변경 완료", null);
+    /**
+     * 배달 상태 변경 알림 — interfaces.md §2.1. rider → main.
+     * ADR-004 매핑(line 90-98) — OrderService.updateDeliveryStatus가 7값 String → 1/2/3 int 매핑.
+     * X-Internal 검증 X (Gateway InternalBlockController 차단 일관, Phase 6+ mTLS 강화 박제).
+     */
+    @PutMapping("/{orderId}/delivery-status")
+    public DeliveryStatusUpdateRes updateDeliveryStatus(
+            @PathVariable Long orderId,
+            @RequestBody DeliveryStatusUpdateReq req
+    ) {
+        return orderService.updateDeliveryStatus(orderId, req.deliveryStatus());
     }
 
-    /** 배달 완료 처리/ POST /internal/order/{orderId}/complete */
+    /**
+     * 배달 완료 처리 — interfaces.md §2.2. rider → main.
+     * delivery_state=3 (DELIVERED 종결, ADR-004) + order_state=6 (CLAUDE.md §7 종결, Q-A8.e-2 (가)).
+     * completedAt body 인자 수신 후 무시 (Q-A8.e-1 (나), orders.completed_at 컬럼 부재 — tech-debt).
+     */
     @PostMapping("/{orderId}/complete")
-    public ResultResponse<Void> completeDelivery(
-            @PathVariable String orderId,
-            @RequestBody Map<String, Object> body
+    public DeliveryCompleteRes completeDelivery(
+            @PathVariable Long orderId,
+            @RequestBody DeliveryCompleteReq req
     ) {
-        // TODO: 배달 완료 처리 + 주문 상태 최종 변경 + 고객 알림 트리거
-
-        return new ResultResponse<>("배달 완료 처리", null);
+        return orderService.completeDelivery(orderId, req.completedAt());
     }
 
     /** 그린포인트 적립/POST /internal/order/{orderId}/greenpoint */
     @PostMapping("/{orderId}/greenpoint")
     public ResultResponse<Map<String, Integer>> addGreenPoint(
-            @PathVariable String orderId,
+            @PathVariable Long orderId,
             @RequestBody Map<String, Object> body
     ) {
         // TODO: 일회용품 미사용 주문 완료 시 그린포인트 적립

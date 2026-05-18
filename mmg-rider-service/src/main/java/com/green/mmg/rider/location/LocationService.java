@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -78,6 +79,21 @@ public class LocationService {
                         riderNo, loc.lat(), loc.lng(), loc.updatedAt()))
                 .orElseThrow(() -> new BusinessException(
                         "위치 송신 0회 또는 TTL 만료.", HttpStatus.NOT_FOUND));
+    }
+
+    /**
+     * Admin 배달 관제 — TTL 살아있는 모든 라이더 위치 (Group 10, 2026-05-17).
+     * Redis SCAN 기준 (가) — rider.status / WorkSession ACTIVE 무관, 위치 송신 fresh 라이더만.
+     * 빈 결과는 빈 List 반환 (NOT_FOUND throw X — admin 화면 정상 동작).
+     */
+    public List<RiderInternalLocationRes> getActiveLocations() {
+        return riderLocationStore.getAll().entrySet().stream()
+                .map(e -> new RiderInternalLocationRes(
+                        e.getKey(),
+                        e.getValue().lat(),
+                        e.getValue().lng(),
+                        e.getValue().updatedAt()))
+                .toList();
     }
 
     private void validate(LocationUpdateReq req) {

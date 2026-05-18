@@ -1,10 +1,12 @@
 package com.green.mmg.rider.rider.model;
 
 import com.green.mmg.common.entity.BaseEntity;
+import com.green.mmg.common.exception.BusinessException;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.http.HttpStatus;
 
 /**
  * rider 테이블 엔티티 (my_mmg_rider.rider).
@@ -70,11 +72,40 @@ public class Rider extends BaseEntity {
     }
 
     /**
-     * D11 auto-approve 임시 처리 — admin-service approve endpoint 도입 후 제거 대상.
-     * 관련 ADR: docs/adr/rider/ADR-001-service-boundary.md "임시 운영" 섹션.
+     * admin 승인 처리 (interfaces.md §3.1, Q-A1 (라+) + Q-A20 (가) Group 8.5 정정 2026-05-17).
+     *
+     * <p>전이 검증: PENDING → ACTIVE만 허용. 다른 상태(ACTIVE/EATING/SUSPENDED)에서 호출 시 BAD_REQUEST.
+     * interfaces.md §3.1 박제 "rider 이미 ACTIVE — 400 BAD_REQUEST" 일관.
+     * ADR-004 ALLOWED_TRANSITIONS 패턴 일관 (전이 규칙 entity 박제).</p>
+     *
+     * <p>D11 auto-approve 시점에도 본 메서드 호출 — joinProfile 직후 PENDING → ACTIVE 안전.
+     * Q-A17 (iii) toggle 운영 false + dev backup 박제 일관.</p>
      */
     public void approve() {
+        if (this.status != RiderStatus.PENDING) {
+            throw new BusinessException(
+                    "PENDING 상태만 승인 가능합니다 (현재: " + this.status + ").",
+                    HttpStatus.BAD_REQUEST);
+        }
         this.status = RiderStatus.ACTIVE;
+    }
+
+    /**
+     * admin 제재 처리 (interfaces.md §3.2, Q-A1 (라+) + Q-A20 (가) Group 8.5 신설 2026-05-17).
+     *
+     * <p>전이 검증: PENDING/ACTIVE/EATING → SUSPENDED 허용. SUSPENDED → SUSPENDED 중복 시 BAD_REQUEST.
+     * interfaces.md §3.2 박제 일관.</p>
+     *
+     * <p>{@code reason}은 entity 박제 X — audit log/blind 테이블 별 영역 (Q-A18 (b) cross-schema 정합성
+     * Phase 6+ outbox 위임 일관). 본 메서드는 단순 status 전이.</p>
+     */
+    public void suspend() {
+        if (this.status == RiderStatus.SUSPENDED) {
+            throw new BusinessException(
+                    "이미 SUSPENDED 상태입니다.",
+                    HttpStatus.BAD_REQUEST);
+        }
+        this.status = RiderStatus.SUSPENDED;
     }
 
     /**

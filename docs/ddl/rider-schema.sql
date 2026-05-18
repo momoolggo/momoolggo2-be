@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS `rider` (
 -- 인덱스 3건: rider_no / order_id / status (Q-R2a2 (나), 2026-05-06)
 CREATE TABLE IF NOT EXISTS `delivery` (
   `delivery_no`         VARCHAR(20)    NOT NULL                                COMMENT '배차번호 PK (형식 00001ABC, application 생성 — Figma 정정 9)',
-  `order_id`            VARCHAR(20)    NOT NULL                                COMMENT '논리 FK → my_mmg_main.orders.order_id (형식 000001A) — Figma 정정 9',
+  `order_id`            BIGINT         NOT NULL                                COMMENT '논리 FK → my_mmg_main.orders.order_id (BIGINT AUTO_INCREMENT — case-#34 정정 2026-05-16). Figma 정정 9 "000001A" 표기는 UI zero-pad formatter 별 트랙(Phase 6+ tech-debt)',
   `rider_no`            BIGINT         DEFAULT NULL                            COMMENT '논리 FK → rider.rider_no (NULL = WAITING_ASSIGN)',
   `status`              VARCHAR(30)    NOT NULL                                COMMENT '7개 상태 enum — ADR-004',
   `pickup_phone`        VARCHAR(20)    DEFAULT NULL                            COMMENT '가게 전화 snapshot — Figma 정정 11 평문',

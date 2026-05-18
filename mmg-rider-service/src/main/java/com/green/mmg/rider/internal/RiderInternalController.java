@@ -4,6 +4,7 @@ import com.green.mmg.rider.delivery.DeliveryService;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
 import com.green.mmg.rider.feign.MainInternalClient;
 import com.green.mmg.rider.feign.dto.DeliveryStatusUpdateReq;
+import com.green.mmg.rider.internal.dto.RiderApproveReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
 import com.green.mmg.rider.internal.dto.RiderInternalLocationRes;
@@ -11,9 +12,13 @@ import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
 import com.green.mmg.rider.internal.dto.RiderInternalNoticeReq;
 import com.green.mmg.rider.internal.dto.RiderInternalNoticeRes;
 import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
+import com.green.mmg.rider.internal.dto.RiderSuspendReq;
 import com.green.mmg.rider.location.LocationService;
 import com.green.mmg.rider.notice.NoticeService;
 import com.green.mmg.rider.notice.model.Notice;
+import com.green.mmg.rider.rider.RiderService;
+import com.green.mmg.rider.rider.model.RiderProfileRes;
+import com.green.mmg.rider.rider.model.RiderStatus;
 import com.green.mmg.rider.settlement.SettlementService;
 import com.green.mmg.rider.settlement.dto.CalculateReq;
 import com.green.mmg.rider.settlement.dto.ConfirmReq;
@@ -43,22 +48,28 @@ public class RiderInternalController {
     private final NoticeService noticeService;
     private final MainInternalClient mainInternalClient;
     private final SettlementService settlementService;
+    private final RiderService riderService;  // Group 8.5 §3.1/§3.2 신설
 
-    @PostMapping("/{riderNo}/assign")
-    public RiderInternalAssignRes assign(
-            @PathVariable Long riderNo,
-            @RequestBody RiderInternalAssignReq req) {
-        RiderInternalAssignRes res = deliveryService.assignDelivery(riderNo, req);
+    /**
+     * 배차 요청 — interfaces.md §1.1 (case-#33-후속 정정, Q-A9.a (β+δ)).
+     * req.riderNo null/0 = 라이더 풀 (WAITING_ASSIGN), 명시 = 강제 배차 (ASSIGNED).
+     * Main 동기화는 ASSIGNED 시점만 (라이더 풀은 main이 호출자라 자동 인지, 라이더 수락 시점에 R6 흐름이 동기화).
+     */
+    @PostMapping("/assign")
+    public RiderInternalAssignRes assign(@RequestBody RiderInternalAssignReq req) {
+        RiderInternalAssignRes res = deliveryService.assignDelivery(req);
 
-        try {
-            mainInternalClient.updateDeliveryStatus(req.orderId(),
-                    new DeliveryStatusUpdateReq(
-                            DeliveryStatus.ASSIGNED.name(),
-                            riderNo,
-                            res.assignedAt()));
-        } catch (Exception e) {
-            log.warn("Main 동기화 실패 (배차는 성공): orderId={}, deliveryNo={}, ex={}",
-                    req.orderId(), res.deliveryNo(), e.getMessage());
+        if (res.riderNo() != null) {
+            try {
+                mainInternalClient.updateDeliveryStatus(req.orderId(),
+                        new DeliveryStatusUpdateReq(
+                                DeliveryStatus.ASSIGNED.name(),
+                                res.riderNo(),
+                                res.assignedAt()));
+            } catch (Exception e) {
+                log.warn("Main 동기화 실패 (배차는 성공): orderId={}, deliveryNo={}, ex={}",
+                        req.orderId(), res.deliveryNo(), e.getMessage());
+            }
         }
 
         return res;
@@ -67,6 +78,15 @@ public class RiderInternalController {
     @GetMapping("/{riderNo}/location")
     public RiderInternalLocationRes location(@PathVariable Long riderNo) {
         return locationService.getInternalLocation(riderNo);
+    }
+
+    /**
+     * Admin 배달 관제 — TTL 살아있는 모든 라이더 위치 다건 조회 (Group 10, 2026-05-17).
+     * 결정 (가) Redis TTL 기준. 빈 결과는 빈 List 반환.
+     */
+    @GetMapping("/locations/active")
+    public List<RiderInternalLocationRes> activeLocations() {
+        return locationService.getActiveLocations();
     }
 
     @GetMapping("/{riderNo}/status")
@@ -131,5 +151,38 @@ public class RiderInternalController {
     @GetMapping("/settlement/pending")
     public List<SettlementRowRes> pendingSettlements() {
         return settlementService.findPending();
+    }
+
+    // ─── §3.1/§3.2 라이더 관리 (Group 8.5 신설, Q-A1 (라+)) ──────
+
+    /**
+     * 라이더 승인 — interfaces.md §3.1. PENDING → ACTIVE 전이 (Q-A20 (가) entity 검증).
+     * {@code req.approvedByAdminNo}는 audit log 별 영역 (Q-A18 (b) Phase 6+ outbox 위임) — 본 단계 미사용.
+     * Phase 6+ audit log 도입 시 req 인자 service 메서드로 전달 연결.
+     */
+    @PostMapping("/{riderNo}/approve")
+    public RiderProfileRes approve(@PathVariable Long riderNo,
+                                   @RequestBody RiderApproveReq req) {
+        return riderService.approveRider(riderNo);
+    }
+
+    /**
+     * 라이더 제재 — interfaces.md §3.2. ?→SUSPENDED 전이 (Q-A20 (가) entity 검증).
+     * {@code reason}/{@code untilAt}은 본 단계 수신 + log.info만 (audit log Phase 6+ 위임).
+     * Phase 6+ scheduler 도입 시 untilAt 인자 활용 (자동 SUSPENDED 해제).
+     */
+    @PostMapping("/{riderNo}/suspend")
+    public RiderProfileRes suspend(@PathVariable Long riderNo,
+                                   @RequestBody RiderSuspendReq req) {
+        return riderService.suspendRider(riderNo, req.reason());
+    }
+
+    /**
+     * 라이더 목록 조회 — interfaces.md §3.5 (Q-A1 (라++) Group 8 신설 2026-05-17).
+     * {@code status} null이면 전체, 명시되면 4값 enum 필터. 학원 발표 MVP List 반환 (case-#36 자가 정정).
+     */
+    @GetMapping("/list")
+    public List<RiderProfileRes> list(@RequestParam(required = false) RiderStatus status) {
+        return riderService.listRiders(status);
     }
 }

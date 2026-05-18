@@ -7,13 +7,18 @@ import com.green.mmg.main.cart.CartMapper;
 import com.green.mmg.main.cart.CartRepository;
 import com.green.mmg.main.cart.model.Cart;
 import com.green.mmg.main.cart.model.CartItemRes;
+import com.green.mmg.main.internal.dto.DeliveryCompleteRes;
+import com.green.mmg.main.internal.dto.DeliveryStatusUpdateRes;
 import com.green.mmg.main.order.model.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -36,9 +41,22 @@ import java.util.Objects;
  *   <li>cartMapper.findStoreNameByStoreId: Store 도메인 — Phase 3-D 정리 예정</li>
  * </ul>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderService {
+
+    // ADR-004 line 90-98 매핑 표 — rider DeliveryStatus(String) → orders.delivery_state(int).
+    // 신규 enum 도입 X (영역 분리 + case-#34 양 schema 일관성 검증 일관). 매핑 박제 그대로.
+    private static final Map<String, Integer> DELIVERY_STATE_MAP = Map.of(
+            "WAITING_ASSIGN", 1,
+            "ASSIGNED", 1,
+            "ARRIVED_AT_STORE", 1,
+            "AWAITING_PICKUP", 1,
+            "PICKED_UP", 2,
+            "DELIVERING", 2,
+            "DELIVERED", 3
+    );
 
     private final OrderMapper orderMapper;
     private final OrderRepository orderRepository;
@@ -221,5 +239,45 @@ public class OrderService {
         }
         // 응답 동결: 기존 OrderMapper.maxHistoryPage가 int 반환 → 동일 타입 유지
         return (int) orderRepository.countByUserNo(userId);
+    }
+
+    /**
+     * rider → main 배달 상태 변경 알림 (interfaces.md §2.1, ADR-004 매핑).
+     * 트랜잭션: 단일 UPDATE — orderRepository.findById 후 setDeliveryState, JPA dirty checking으로 commit 시점 자동 UPDATE.
+     */
+    @Transactional
+    public DeliveryStatusUpdateRes updateDeliveryStatus(Long orderId, String deliveryStatus) {
+        Orders order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다: " + orderId, HttpStatus.NOT_FOUND));
+
+        Integer newState = DELIVERY_STATE_MAP.get(deliveryStatus);
+        if (newState == null) {
+            throw new BusinessException("유효하지 않은 배달 상태입니다: " + deliveryStatus, HttpStatus.BAD_REQUEST);
+        }
+
+        Integer previousState = order.getDeliveryState();
+        order.setDeliveryState(newState);
+
+        return new DeliveryStatusUpdateRes(orderId, previousState, newState);
+    }
+
+    /**
+     * rider → main 배달 완료 처리 (interfaces.md §2.2).
+     * delivery_state=3 (DELIVERED 종결, ADR-004) + order_state=6 (배달완료, CLAUDE.md §7).
+     * completedAt body 인자는 수신 후 무시 (Q-A8.e-1 (나), orders.completed_at 컬럼 부재 — tech-debt).
+     */
+    @Transactional
+    public DeliveryCompleteRes completeDelivery(Long orderId, LocalDateTime completedAt) {
+        Orders order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다: " + orderId, HttpStatus.NOT_FOUND));
+
+        if (completedAt != null) {
+            log.info("배달 완료 알림 수신 (completedAt={}, orderId={}) — orders.completed_at 컬럼 부재로 무시", completedAt, orderId);
+        }
+
+        order.setDeliveryState(3);
+        order.setOrderState(6);
+
+        return new DeliveryCompleteRes(orderId, 3);
     }
 }

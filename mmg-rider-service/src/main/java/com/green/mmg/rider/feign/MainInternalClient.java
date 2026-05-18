@@ -1,10 +1,13 @@
 package com.green.mmg.rider.feign;
 
+import com.green.mmg.rider.feign.dto.DeliveryCompleteReq;
+import com.green.mmg.rider.feign.dto.DeliveryCompleteRes;
 import com.green.mmg.rider.feign.dto.DeliveryStatusUpdateReq;
 import com.green.mmg.rider.feign.dto.DeliveryStatusUpdateRes;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -30,6 +33,16 @@ public interface MainInternalClient {
      */
     @PutMapping("/internal/order/{orderId}/delivery-status")
     DeliveryStatusUpdateRes updateDeliveryStatus(
-            @PathVariable("orderId") String orderId,
+            @PathVariable("orderId") Long orderId,
             @RequestBody DeliveryStatusUpdateReq req);
+
+    /**
+     * 배달 완료 처리 — interfaces.md §2.2.
+     * Main이 orders.delivery_state=3 (DELIVERED 종결, ADR-004) + orders.order_state=6 (CLAUDE.md §7 종결) 동반 UPDATE.
+     * complete 호출 시점에 별 {@code updateDeliveryStatus(DELIVERED)} 중복 호출 X (Q-A4-호출 흐름 (나)).
+     */
+    @PostMapping("/internal/order/{orderId}/complete")
+    DeliveryCompleteRes complete(
+            @PathVariable("orderId") Long orderId,
+            @RequestBody DeliveryCompleteReq req);
 }

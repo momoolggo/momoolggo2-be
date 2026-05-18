@@ -24,7 +24,7 @@ public record RiderInternalMonitorRes(
 
     public record DeliveryRow(
             String deliveryNo,
-            String orderId,
+            Long orderId,
             Long riderNo,
             String status,
             Integer baseFee,

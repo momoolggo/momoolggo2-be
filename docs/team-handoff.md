@@ -133,6 +133,51 @@
 
 ---
 
+## 10. admin `ddl-auto=update` (W-1, 작업 A Group 5 code-reviewer 발견, 2026-05-17 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-admin-service` ❌ 팀원 |
+| **위치** | `mmg-admin-service/src/main/resources/application.yml:12` |
+| **경위** | 작업 A Group 5 code-reviewer 빡센 검증 W-1 발견 |
+| **현재 동작** | `ddl-auto: update` — 엔티티 변경 시 학원 공유 DB 자동 ALTER. prod는 `none`으로 보호. dev 환경에서 팀원이 엔티티 추가하면 스키마 silent 변경. |
+| **권장 처리** | `ddl-auto: validate` (rider/main/auth 일관). CLAUDE.md §6 절대 규칙 일관. |
+| **참조** | code-reviewer agent agentId `a54e3c0939eaa31f4` Warning 1 |
+
+---
+
+## 11. admin OkHttp timeout 미설정 (W-3, 작업 A Group 5 code-reviewer 발견, 2026-05-17 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-admin-service` ❌ 팀원 |
+| **위치** | `mmg-admin-service/.../configuration/FeignConfiguration.java` `return new OkHttpClient()` (기본 10s connect / 10s read) |
+| **경위** | 작업 A Group 5 code-reviewer 빡센 검증 W-3 발견. Phase 4-A 패턴 (connect 3s / read 5s)과 불일치. |
+| **현재 동작** | OkHttp 기본 timeout 10s. Group 5에서 settlement 3 endpoint 추가됐고 calculate는 전체 라이더 순회 + DB INSERT — 처리 시간 risk 증가. |
+| **권장 처리** | OkHttpClient.Builder().connectTimeout(3, SECONDS).readTimeout(5, SECONDS) 명시 (Phase 4-A 일관) |
+| **참조** | code-reviewer agent agentId `a54e3c0939eaa31f4` Warning 3 |
+
+---
+
+## 12. admin FE `AdminSettlementView.vue` 라이더 정산 연결 (W-4 Suggestion, 작업 A Group 5.5 code-reviewer 발견, 2026-05-17 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `momoolggo2-fe` (FE) ❌ 팀원 (admin/customer/owner FE 영역) |
+| **위치** | `momoolggo2-fe/src/views/admin/AdminSettlementView.vue` (현재 admin 자체 DB settlement만 표시) |
+| **경위** | 작업 A Group 5.5 code-reviewer 빡센 검증 Suggestion. BE는 `/api/admin/rider-settlement/pending` 가동 완료, 응답 JSON에 `riderNo` 노출 (Group 5.5 정정). FE 연결 시 학원 발표 시연 완성도 ↑ |
+| **권장 처리** | admin FE에 별 라이더 정산 화면 추가 (또는 AdminSettlementView.vue에 탭 추가) + `/api/admin/rider-settlement/pending` 호출 + riderNo 컬럼 표시 + confirm 버튼 (`PATCH /{settlementNo}/confirm` 호출) |
+| **참조** | code-reviewer agent agentId `a7b4040531272da8f` Suggestion |
+
+---
+
 ## 처리 완료
 
 (팀원 처리 완료 시 이력 박제 — 항목 / 처리 커밋 / 처리일)
+
+### 작업 A 본인 처리 완료 (2026-05-17)
+
+| 항목 | 처리 결과 |
+|---|---|
+| **§8 main → rider 자동 배차 트리거** | ✅ Group 4 처리 완료. `OwnerService.updateOrderState` ORDER_STATE_COOKING(=3) 진입 시점에 `triggerRiderAssign(orderId)` 호출 추가 (Q-A9.a (β+δ) 라이더 풀 모델 — riderNo=null 전달, rider 측 WAITING_ASSIGN 생성, R6 선착순 수락 흐름). interfaces.md §1.1 path 정정 (case-#33-후속 통합). RiderAssignReq 14 필드 보강 (interfaces.md 박제 일관). OwnerMapper `findStoreInfoByOrderId` 신설 (Phase 3-D MyBatis 박제 일관, NULL/0 패스 Q-A9.e (나)). |
+| **§9 R7 정산 admin 측 호출처** | ✅ Group 5 처리 완료. admin `RiderSettlementController` 신설 (Q-A10.b (iii) admin Settlement과 결 분리). 기존 `RiderFeignClient`에 settlement 3 메서드 추가 (Q-A10.c (a) 재사용). admin 측 별도 `Settlement` 도메인은 라이더 외 정산 (target_type enum, Q-A10.a (옵션 1)). Group 5.5 W-2 정정 — `SettlementRowRes`에 `riderNo` 필드 추가 (admin 모니터 식별 가능). 본인 처리 완료라 팀원 위임 자리 아님. |

@@ -2,6 +2,7 @@ package com.green.mmg.rider.location;
 
 import com.green.mmg.rider.location.model.RiderLocation;
 
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -23,4 +24,10 @@ public interface RiderLocationStore {
 
     /** 위치 삭제 — 업무 종료 시 호출 (R8 work_session 종료 시점). */
     void delete(long riderNo);
+
+    /**
+     * TTL 살아있는 모든 라이더 위치 — Admin 배달 관제 지도용 (Group 10, 2026-05-17).
+     * Redis SCAN 기반 (KEYS 회피, 운영 안전). 반환 키 = riderNo, 값 = RiderLocation.
+     */
+    Map<Long, RiderLocation> getAll();
 }

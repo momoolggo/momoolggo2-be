@@ -47,6 +47,11 @@ public class UserService {
     // 가입 후 즉시 AT/RT 발급. user_address 등록은 프론트가 별도 POST /api/address 호출 (main-service).
     @Transactional
     public UserSigninRes signup(UserSignupReq req, HttpServletResponse res) {
+        // 작업 C (2026-05-18): 이용약관 동의 검증 — 미동의 시 가입 차단 (이력 저장 X)
+        if (req.getAgreedToTerms() == null || !req.getAgreedToTerms()) {
+            throw new BusinessException("이용약관에 동의해야 회원가입이 가능합니다.", HttpStatus.BAD_REQUEST);
+        }
+
         String role = (req.getRole() == null || req.getRole().isBlank()) ? "CUSTOMER" : req.getRole();
 
         User user = new User();
