@@ -13,6 +13,7 @@ public class SettlementRes {
     private Long settlementId;
     private SettlementTargetType targetType;
     private Long targetNo;
+    private String targetName;
     private LocalDate periodStart;
     private LocalDate periodEnd;
     private Integer itemCount;
