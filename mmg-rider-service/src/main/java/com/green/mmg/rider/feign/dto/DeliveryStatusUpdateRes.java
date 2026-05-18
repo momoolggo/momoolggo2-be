@@ -7,7 +7,7 @@ package com.green.mmg.rider.feign.dto;
  * orders 테이블 1/2/3 매핑 (ADR-004 line 86-96).</p>
  */
 public record DeliveryStatusUpdateRes(
-        String orderId,
+        Long orderId,
         Integer previousDeliveryState,
         Integer newDeliveryState
 ) {

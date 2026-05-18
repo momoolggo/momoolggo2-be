@@ -39,8 +39,8 @@ public class Delivery extends BaseEntity {
     @Column(name = "delivery_no", length = 20)
     private String deliveryNo;
 
-    @Column(name = "order_id", length = 20, nullable = false)
-    private String orderId;
+    @Column(name = "order_id", nullable = false)
+    private Long orderId;
 
     @Column(name = "rider_no")
     private Long riderNo;
@@ -113,7 +113,7 @@ public class Delivery extends BaseEntity {
      * status 고정: WAITING_ASSIGN (가입 시점 PENDING 패턴 일관, R1-A Rider 일관).
      * extra_fee 고정: 0 (DDL DEFAULT 0 일관).
      */
-    public Delivery(String deliveryNo, String orderId,
+    public Delivery(String deliveryNo, Long orderId,
                     String pickupPhone, String customerPhone,
                     String pickupAddress, Double pickupLat, Double pickupLng,
                     String deliveryAddress, Double deliveryLat, Double deliveryLng,

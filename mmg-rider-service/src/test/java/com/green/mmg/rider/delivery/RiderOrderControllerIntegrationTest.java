@@ -76,7 +76,7 @@ class RiderOrderControllerIntegrationTest {
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
-                .thenReturn(new DeliveryStatusUpdateRes("ORD", 0, 1));
+                .thenReturn(new DeliveryStatusUpdateRes(System.nanoTime(), 0, 1));
     }
 
     @AfterEach
@@ -88,8 +88,8 @@ class RiderOrderControllerIntegrationTest {
         return Math.abs(System.nanoTime() + ThreadLocalRandom.current().nextLong(1, 10_000));
     }
 
-    private String uniqueOrderId() {
-        return "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+    private Long uniqueOrderId() {
+        return System.nanoTime();
     }
 
     private String uniqueDeliveryNo() {
@@ -249,7 +249,10 @@ class RiderOrderControllerIntegrationTest {
         assertThat(saved.getDeliveredPhotoUrl()).isEqualTo("/uploads/delivery/x.jpg");
         assertThat(saved.getDeliveredAt()).isNotNull();
 
-        verify(mainInternalClient).updateDeliveryStatus(eq(d.getOrderId()),
+        // Group 3 정정 — complete는 notifyMainComplete 흐름 (mainInternalClient.complete 호출, updateDeliveryStatus 호출 X)
+        verify(mainInternalClient).complete(eq(d.getOrderId()),
+                any(com.green.mmg.rider.feign.dto.DeliveryCompleteReq.class));
+        verify(mainInternalClient, never()).updateDeliveryStatus(eq(d.getOrderId()),
                 any(DeliveryStatusUpdateReq.class));
     }
 

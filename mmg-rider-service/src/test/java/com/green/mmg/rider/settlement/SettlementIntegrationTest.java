@@ -63,7 +63,7 @@ class SettlementIntegrationTest {
 
     private Delivery seedDeliveredOf(Long riderNo, int baseFee, LocalDateTime deliveredAt) {
         String deliveryNo = "ST" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-        String orderId = "OR" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        Long orderId = System.nanoTime();
         Delivery delivery = new Delivery(
                 deliveryNo, orderId,
                 "010-1111-1111", "010-2222-2222",
@@ -97,13 +97,12 @@ class SettlementIntegrationTest {
 
         List<SettlementRowRes> result = settlementService.calculate(periodStart, periodEnd);
 
+        // Group 5.5 정정 후 단순화 — riderNo 필드 직접 사용 (DB findById 추가 조회 제거).
         SettlementRowRes mine = result.stream()
-                .filter(r -> {
-                    Settlement s = settlementRepository.findById(r.settlementNo()).orElseThrow();
-                    return s.getRiderNo().equals(rider.getRiderNo());
-                })
+                .filter(r -> rider.getRiderNo().equals(r.riderNo()))
                 .findFirst().orElseThrow();
 
+        assertThat(mine.riderNo()).isEqualTo(rider.getRiderNo());  // Group 5.5 신규 필드 검증
         assertThat(mine.deliveryCount()).isEqualTo(2);
         assertThat(mine.totalBaseFee()).isEqualTo(100000);
         assertThat(mine.commission()).isEqualTo(10000);

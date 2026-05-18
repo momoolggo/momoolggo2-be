@@ -211,4 +211,67 @@ class RiderServiceTest {
                     .isEqualTo(HttpStatus.NOT_FOUND);
         }
     }
+
+    @Nested
+    @DisplayName("ApproveRider (Group 8.5 §3.1, Q-A20 (가))")
+    class ApproveRider {
+
+        private static final long RIDER_NO = 5L;
+
+        @Test
+        @DisplayName("happy: PENDING → ACTIVE 전이 + 응답 status ACTIVE")
+        void happy_pendingToActive() {
+            Rider rider = new Rider(CALLER_USER_NO, "lic", "2종보통", VehicleType.MOTORBIKE, "신한", "110-1", "홍길동");
+            when(riderRepository.findById(RIDER_NO)).thenReturn(Optional.of(rider));
+
+            RiderProfileRes res = riderService.approveRider(RIDER_NO);
+
+            assertThat(res.status()).isEqualTo(RiderStatus.ACTIVE.name());
+            assertThat(rider.getStatus()).isEqualTo(RiderStatus.ACTIVE);
+        }
+
+        @Test
+        @DisplayName("부재: findById empty → BusinessException NOT_FOUND")
+        void notFound_throwsNotFound() {
+            when(riderRepository.findById(RIDER_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> riderService.approveRider(RIDER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("라이더를 찾을 수 없습니다.")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("SuspendRider (Group 8.5 §3.2, Q-A20 (가))")
+    class SuspendRider {
+
+        private static final long RIDER_NO = 5L;
+
+        @Test
+        @DisplayName("happy: ACTIVE → SUSPENDED 전이 + 응답 status SUSPENDED")
+        void happy_activeToSuspended() {
+            Rider rider = new Rider(CALLER_USER_NO, "lic", "2종보통", VehicleType.MOTORBIKE, "신한", "110-1", "홍길동");
+            rider.approve();  // PENDING → ACTIVE 시드
+            when(riderRepository.findById(RIDER_NO)).thenReturn(Optional.of(rider));
+
+            RiderProfileRes res = riderService.suspendRider(RIDER_NO, "위반 사유");
+
+            assertThat(res.status()).isEqualTo(RiderStatus.SUSPENDED.name());
+            assertThat(rider.getStatus()).isEqualTo(RiderStatus.SUSPENDED);
+        }
+
+        @Test
+        @DisplayName("부재: findById empty → BusinessException NOT_FOUND")
+        void notFound_throwsNotFound() {
+            when(riderRepository.findById(RIDER_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> riderService.suspendRider(RIDER_NO, "사유"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("라이더를 찾을 수 없습니다.")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
 }

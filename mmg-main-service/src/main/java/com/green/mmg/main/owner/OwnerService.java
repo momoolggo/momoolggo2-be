@@ -4,6 +4,8 @@ package com.green.mmg.main.owner;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.feign.AuthFeignClient;
+import com.green.mmg.main.feign.RiderFeignClient;
+import com.green.mmg.main.feign.model.RiderAssignReq;
 import com.green.mmg.main.owner.entity.MenuOption;
 import com.green.mmg.main.owner.entity.MenuOptionCategory;
 import com.green.mmg.main.owner.model.*;
@@ -31,8 +33,13 @@ public class OwnerService {
 
     private final OwnerMapper ownerMapper;
     private final AuthFeignClient authFeignClient;   // Phase 4-A: cross-schema customerName/tel 합성
+    private final RiderFeignClient riderFeignClient; // Phase 5+ Group 4: 점주 수락 시점 자동 배차 트리거 (team-handoff §8)
     private final MenuOptionRepository menuOptionRepository;
     private final MenuOptionCategoryRepository menuOptionCategoryRepository;
+
+    // ORDER_STATE 매핑 (CLAUDE.md §7) — 본 작업 A Group 4에서 3(조리중) 진입 시점만 인용.
+    // Q-A9.d (ii) 일관: order_state=4/5 변경 책임 추가 X (admin 시연 수동 변경 가능, ADR-004 박제 범위 좁힘).
+    private static final int ORDER_STATE_COOKING = 3;
 
     // ========== 이미지 업로드 (공통) ==========
 
@@ -163,6 +170,31 @@ public class OwnerService {
         int result = ownerMapper.updateOrderState(req);
         if (result == 0){
             throw new RuntimeException("주문 상태 변경 실패: 주문을 찾을 수 없습니다.");
+        }
+
+        // 점주 수락 시점 (order_state=3 진입)에 자동 배차 트리거 (team-handoff §8, Q-A9.a (β+δ)).
+        // 라이더 풀 모델 — req.riderNo=null로 호출 → rider 측 WAITING_ASSIGN 생성 → 라이더가 R6 GET /api/rider/order/waiting 선착순 수락.
+        // best-effort try-catch (D1-bis 일관) — 배차 실패해도 order_state 전환은 성공.
+        if (req.getOrderState() == ORDER_STATE_COOKING) {
+            triggerRiderAssign(req.getOrderId());
+        }
+    }
+
+    /**
+     * 점주 수락 시점 라이더 배차 트리거 — interfaces.md §1.1 박제 + team-handoff §8.
+     * OwnerMapper.findStoreInfoByOrderId가 RiderAssignReq 14 필드 매핑 (Q-A9.e (나) NULL/0 패스 일관).
+     * Phase 6 outbox 검토 (보상 트랜잭션) — 현재는 best-effort.
+     */
+    private void triggerRiderAssign(long orderId) {
+        try {
+            RiderAssignReq req = ownerMapper.findStoreInfoByOrderId(orderId);
+            if (req == null) {
+                log.warn("배차 트리거 skip: orderId={} — store/orders 조회 결과 부재", orderId);
+                return;
+            }
+            riderFeignClient.assignRider(req);
+        } catch (Exception e) {
+            log.warn("배차 트리거 실패 (order_state=3 전환은 성공): orderId={}, ex={}", orderId, e.getMessage());
         }
     }
 

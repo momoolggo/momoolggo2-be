@@ -18,4 +18,7 @@ public class UserSignupReq {
     private String addressDetail;
     private Double lat;
     private Double lng;
+
+    // 작업 C (2026-05-18): 이용약관 동의. true 아니면 가입 차단 (이력 저장 X).
+    private Boolean agreedToTerms;
 }

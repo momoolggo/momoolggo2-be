@@ -22,7 +22,7 @@ class DeliveryTest {
     @DisplayName("생성자: 필수 필드 + status WAITING_ASSIGN 고정 + extra_fee 0 고정")
     void constructor_setsRequiredFields_andDefaults() {
         Delivery delivery = new Delivery(
-                "00001ABC", "0000001A",
+                "00001ABC", 1L,
                 "010-1111-1111", "010-2222-2222",
                 "가게 주소", 37.1234567890123, 127.1234567890123,
                 "손님 주소", 37.5678901234567, 127.5678901234567,
@@ -30,7 +30,7 @@ class DeliveryTest {
         );
 
         assertThat(delivery.getDeliveryNo()).isEqualTo("00001ABC");
-        assertThat(delivery.getOrderId()).isEqualTo("0000001A");
+        assertThat(delivery.getOrderId()).isEqualTo(1L);
         assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
         assertThat(delivery.getBaseFee()).isEqualTo(3000);
         assertThat(delivery.getExtraFee()).isEqualTo(0);
@@ -49,7 +49,7 @@ class DeliveryTest {
     @DisplayName("생성자: 좌표/전화/주소 nullable 필드 null 허용 + status 고정 유지")
     void constructor_nullableFields_allowsNull() {
         Delivery delivery = new Delivery(
-                "00002ABC", "0000002A",
+                "00002ABC", 2L,
                 null, null, null, null, null, null, null, null,
                 3000
         );
@@ -70,7 +70,7 @@ class DeliveryTest {
     @DisplayName("생성자: DECIMAL(16,13) 좌표 정밀도 보존 (Java Double 한계 내)")
     void constructor_decimalCoordinates_precisionPreserved() {
         Delivery delivery = new Delivery(
-                "00003ABC", "0000003A",
+                "00003ABC", 3L,
                 null, null, null,
                 37.1234567890123, 127.1234567890123,
                 null,

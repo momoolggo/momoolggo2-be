@@ -1,8 +1,11 @@
 # 라이더 Feign 인터페이스 명세
 
-> **상태**: Accepted (2026-05-05)
+> **상태**: Accepted (2026-05-05) — orderId 타입 정정 (case-#34, 2026-05-16) + §1.1 path 정정 (case-#33-후속, 2026-05-17)
 > **목적**: ADR-001~009 결정에 따른 서비스 간 인터페이스 시그니처. 구현 0, Phase 5-R1~R9에서 작성.
 > **공통**: 모든 Feign client에 timeout `connect 3s / read 5s` 명시 (Phase 4-A 패턴)
+> **orderId 박제**: Long (main `orders.order_id` BIGINT AUTO_INCREMENT 일관). Figma "000001A" 표기는 UI zero-pad formatter 의도 (Phase 6+ tech-debt 별 트랙).
+> **§1.1 배차 흐름**: 라이더 풀 모델 박제 (team-handoff §8 R6 종결 결과 우선, Q-A9.a (β+δ) 정정). path `POST /internal/rider/assign` (riderNo path 제거), body 박제 — riderNo NULL/0이면 WAITING_ASSIGN, 명시되면 강제 배차 (admin 시연 호환).
+> **case-#33 잔존 path 차이**: §3.3/§3.4 settlement path는 실제 rider Provider 박제(`/internal/rider/settlement/...`)와 차이. 별 정정 트랙 (작업 A 범위 외).
 
 ---
 
@@ -20,14 +23,15 @@
 
 ## 1. RiderInternalClient (Main/Admin → Rider)
 
-### 1.1 배차 요청 (Main → Rider)
+### 1.1 배차 요청 (Main → Rider) — case-#33-후속 정정 (2026-05-17, Q-A9.a (β+δ))
 
 ```
-POST /internal/rider/{riderNo}/assign
+POST /internal/rider/assign
 Headers: X-Internal: true
 Body:
   {
-    "orderId": "000001A",
+    "orderId": 1,
+    "riderNo": null,                        // null/0 = 라이더 풀(WAITING_ASSIGN), 명시 = 강제 배차(admin 시연 호환)
     "storeNo": 1,
     "storeName": "string",
     "storeAddress": "string",
@@ -90,6 +94,25 @@ Response 200:
   }
 ```
 
+### 1.4 라이더 위치 다건 조회 (Admin → Rider) — Group 10 신설 (2026-05-17, 결정 (가) Redis TTL 기준)
+
+```
+GET /internal/rider/locations/active
+Headers: X-Internal: true
+Response 200:
+  [
+    {"riderNo": 1, "lat": 35.125, "lng": 128.456, "updatedAt": "2026-05-17T23:30:00"},
+    {"riderNo": 7, "lat": 35.130, "lng": 128.460, "updatedAt": "2026-05-17T23:30:02"}
+  ]
+
+부재(빈 SCAN): []  // NOT_FOUND throw X (admin 화면 정상 동작)
+```
+
+- **결정 (가)**: Redis TTL 30s 살아있는 라이더만 (rider.status/WorkSession ACTIVE 무관)
+- **사용처**: AdminDeliveryView 5초 폴링 + AdminDeliveryMap.vue 다중 마커 (Group 10, 2026-05-17)
+- **구현**: Redis SCAN `rider:loc:*` (KEYS 회피, 운영 안전)
+- **case-#34 일관**: admin 측 `RiderLocationRes` record 1:1 매핑
+
 ---
 
 ## 2. MainInternalClient (Rider → Main)
@@ -107,7 +130,7 @@ Body:
   }
 Response 200:
   {
-    "orderId": "000001A",
+    "orderId": 1,
     "previousDeliveryState": 1,
     "newDeliveryState": 2            // ADR-004 매핑 (정정 3)
   }
@@ -134,7 +157,7 @@ Body:
   }
 Response 200:
   {
-    "orderId": "000001A",
+    "orderId": 1,
     "deliveryState": 3
   }
 ```
@@ -226,6 +249,43 @@ Response 4xx:
 ```
 
 내부 흐름: settlement.status PENDING → CONFIRMED (D10-b, ADR-007)
+
+### 3.5 라이더 목록 조회 (Admin → Rider) — Q-A1 (라++) Group 8 신설 (2026-05-17)
+
+```
+GET /internal/rider/list?status=PENDING
+Headers: X-Internal: true
+Query:
+  - status: nullable, 4값 enum (PENDING/ACTIVE/EATING/SUSPENDED) — null이면 전체
+Response 200:
+  [
+    {
+      "riderNo": 5,
+      "userNo": 42,
+      "status": "PENDING",
+      "licenseNo": "11-22-...",
+      "licenseType": "2종보통",
+      "vehicleType": "MOTORBIKE",
+      "accountBank": "신한",
+      "accountNo": "110-1",
+      "accountHolder": "홍길동"
+    }
+  ]
+```
+
+내부 흐름: rider 측 `RiderRepository.findByStatusOrderByRiderNoDesc(status)` 또는 `findAll()` → `RiderProfileRes.from` 매핑.
+
+**박제 결정 사유** (Q-A1 (라++)):
+- 학원 발표 시연 가치 — admin 라이더 관리 화면에 *rider.status* 표시 필수
+- auth `getUserList(role=RIDER)`는 user.status만, rider 도메인 status 부재 → 시연 가치 ↓
+- case-#33 후행 박제 누락 회피 학습 적용
+
+**분류 B 자율 정정 (Page → List, case-#36 변종)**:
+- 사용자 박제 시그니처: `Page<RiderProfileRes>` (Spring Data Page)
+- 본인 정정: `List<RiderProfileRes>` — Spring Data Page Jackson 기본 역직렬화 X, Feign 호환성 위험 회피
+- MVP 학원 발표 = List 충분. page/size query 제거, status 필터만 유지
+
+---
 
 ### 3.4 정산 집계 (Admin → Rider)
 
