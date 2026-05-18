@@ -3,6 +3,7 @@ package com.green.mmg.admin.settlement.service;
 import com.green.mmg.admin.common.enums.SettlementsStatus;
 import com.green.mmg.admin.common.enums.SettlementTargetType;
 import com.green.mmg.admin.settlement.dto.SettlementReq;
+import com.green.mmg.admin.settlement.dto.SettlementRes;
 import com.green.mmg.admin.settlement.dto.SettlementSummaryRes;
 import com.green.mmg.admin.settlement.entity.Settlement;
 import com.green.mmg.admin.settlement.repository.SettlementRepository;
@@ -64,5 +65,17 @@ public class SettlementService {
         Settlement settlement = settlementRepository.findById(settlementId)
                 .orElseThrow(() -> new ResourceNotFoundException("정산 정보를 찾을 수 없습니다."));
         settlement.hold();
+    }
+
+    public List<SettlementRes> getSettlementsByStoreId(Long storeId) {
+        return settlementRepository.findByTargetTypeAndTargetNo(
+                        SettlementTargetType.STORE, storeId)
+                .stream().map(s -> new SettlementRes(
+                        s.getSettlementId(), s.getTargetType(), s.getTargetNo(),
+                        s.getPeriodStart(), s.getPeriodEnd(), s.getItemCount(),
+                        s.getGrossAmount(), s.getFeeAmount(), s.getTaxAmount(),
+                        s.getOtherDeduction(), s.getNetAmount(), s.getStatus(),
+                        s.getPaidAt(), s.getBankAccount(), s.getCreatedAt()
+                )).toList();
     }
 }

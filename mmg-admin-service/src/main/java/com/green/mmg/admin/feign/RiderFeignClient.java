@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
+import java.util.Map;
 
 @FeignClient(name = "mmg-rider-service",
         url = "${feign.rider-service.url:http://localhost:8082}")
@@ -90,4 +91,5 @@ public interface RiderFeignClient {
     /** Admin 배달 관제 지도용 — TTL 살아있는 모든 라이더 위치. */
     @GetMapping("/internal/rider/locations/active")
     List<RiderLocationRes> getActiveRiderLocations();
+
 }

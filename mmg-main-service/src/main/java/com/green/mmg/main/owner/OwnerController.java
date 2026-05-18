@@ -237,6 +237,15 @@ public class OwnerController {
         return new ResultResponse<>("매출 통계 조회 성공", stats);
     }
 
+    // ========== 정산 관련 ==========
+    @GetMapping("/settlement")
+    public ResultResponse<?> getMySettlements(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam Long storeId) {
+        return new ResultResponse<>("정산 내역 조회 성공",
+                ownerService.getMySettlements(principal.getSignedUserNo(), storeId));
+    }
+
     // ranking도 동일하게
     @GetMapping("/sales/ranking")
     public ResultResponse<List<OwnerSalesRankingRes>> getSalesRanking(
@@ -246,4 +255,14 @@ public class OwnerController {
         List<OwnerSalesRankingRes> ranking = ownerService.getSalesRanking(principal.getSignedUserNo(), storeId, period);
         return new ResultResponse<>("매출 순위 조회 성공", ranking);
     }
+
+    @PostMapping("/settlement/inquiry")
+    public ResultResponse<?> submitInquiry(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody Map<String, String> req) {
+        ownerService.submitSettlementInquiry(
+                principal.getSignedUserNo(), req.get("content"));
+        return new ResultResponse<>("문의 접수 완료", null);
+    }
+
 }
