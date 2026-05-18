@@ -71,4 +71,12 @@ public class OrderController {
         return new ResultResponse<>("조회성공",result);
     }
 
+    // 재주문
+    @PostMapping("/{orderId}/reorder")
+    public ResultResponse<Void> reorder(@AuthenticationPrincipal UserPrincipal principal,
+                                        @PathVariable long orderId) {
+        orderService.reorder(principal.getSignedUserNo(), orderId);
+        return new ResultResponse<>("재주문: 장바구니 담기 완료", null);
+    }
+
 }

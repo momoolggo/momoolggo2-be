@@ -65,4 +65,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u.userNo FROM User u WHERE u.role = :role")
     List<Long> findAllUserNosByRole(@Param("role") String role);
 
+    @Query("""
+    SELECT u.userNo
+    FROM User u 
+    WHERE u.role = 'OWNER'
+     AND (:userId IS NULL OR :userId = '' OR u.userId LIKE CONCAT('%', :userId, '%'))
+     AND (:name IS NULL OR :name = '' OR u.name LIKE CONCAT('%', :name, '%'))
+""")
+
+    List<Long> findOwnerUserNosBySearch(@Param("userId") String userId, @Param("name") String name);
+
 }

@@ -25,6 +25,10 @@ public interface AuthFeignClient {
     @GetMapping("/internal/auth/owner/{userNo}")
     ResultResponse<UserBriefDto> getOwnerInfo(@PathVariable("userNo") Long userNo);
 
+    @GetMapping("/internal/auth/owners/search")
+    ResultResponse<List<Long>> searchOwnerUserNos(@RequestParam(required = false) String userId,
+                                                  @RequestParam(required = false) String name);
+
     @GetMapping("/internal/auth/rider/user-nos")
     ResultResponse<List<Long>> getRiderUserNos();
 

@@ -39,10 +39,15 @@ public interface StoreMapper {
     //관리자 가게관리 목록
     List<InternalStoreListRes> findInternalStoreList(@Param("startIdx") int startIdx,
                                                      @Param("size") int size,
-                                                     @Param("date") String date);
+                                                     @Param("storeName") String storeName,
+                                                     @Param("businessNo") String businessNo,
+                                                     @Param("date") String date,
+                                                     @Param("ownerIds") List<Long> ownerIds);
 
-    long countInternalStoreList(@Param("date") String date);
-
+    long countInternalStoreList(@Param("storeName") String storeName,
+                                @Param("businessNo") String businessNo,
+                                @Param("date") String date,
+                                @Param("ownerIds") List<Long> ownerIds);
     //관리자 회원관리 가게 주소
     String findStoreLocationByOwnerNo(@Param("ownerNo") long ownerNo);
 

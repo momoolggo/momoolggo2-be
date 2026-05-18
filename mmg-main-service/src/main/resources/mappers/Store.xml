@@ -215,8 +215,20 @@
         s.state AS state
         FROM store s
         <where>
+            <if test="storeName != null and storeName != ''">
+                AND s.store_name LIKE CONCAT('%', #{storeName}, '%')
+            </if>
+            <if test="businessNo != null and businessNo != ''">
+                AND s.business_number LIKE CONCAT('%', #{businessNo}, '%')
+            </if>
             <if test="date != null and date != ''">
-                DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+                AND DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+            </if>
+            <if test="ownerIds != null and ownerIds.size() > 0">
+                AND s.owner_id IN
+                <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                    #{ownerId}
+                </foreach>
             </if>
         </where>
         ORDER BY s.created_at DESC
@@ -227,8 +239,20 @@
         SELECT COUNT(1)
         FROM store s
         <where>
+            <if test="storeName != null and storeName != ''">
+                AND s.store_name LIKE CONCAT('%', #{storeName}, '%')
+            </if>
+            <if test="businessNo != null and businessNo != ''">
+                AND s.business_number LIKE CONCAT('%', #{businessNo}, '%')
+            </if>
             <if test="date != null and date != ''">
-                DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+                AND DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+            </if>
+            <if test="ownerIds != null and ownerIds.size() > 0">
+                AND s.owner_id IN
+                <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                    #{ownerId}
+                </foreach>
             </if>
         </where>
     </select>

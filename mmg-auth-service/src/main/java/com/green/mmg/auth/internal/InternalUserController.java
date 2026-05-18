@@ -50,6 +50,14 @@ public class InternalUserController {
         return new ResultResponse<>("유저 조회 완료", user);
     }
 
+    /** 가게 검색 API */
+    @Transactional(readOnly = true)
+    @GetMapping("/owners/search")
+    public ResultResponse<List<Long>> searchOwnerNos(@RequestParam(required = false) String userId,
+                                                     @RequestParam(required = false) String name) {
+        return new ResultResponse<>("검색 완료", userRepository.findOwnerUserNosBySearch(userId, name));
+    }
+
     /** Batch 조회 — N+1 회피용 (1회 호출 최대 100개 권장) */
     @Transactional(readOnly = true)
     @GetMapping("/users")

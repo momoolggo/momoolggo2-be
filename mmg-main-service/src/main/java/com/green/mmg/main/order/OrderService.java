@@ -1,6 +1,8 @@
 package com.green.mmg.main.order;
 
 import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.main.cart.CartDetailRepository;
+import com.green.mmg.main.cart.model.CartDetail;
 import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.address.UserAddressRepository;
 import com.green.mmg.main.cart.CartMapper;
@@ -63,6 +65,7 @@ public class OrderService {
     private final OrderDetailRepository orderDetailRepository;
     private final CartMapper cartMapper;          // findCartItems (JOIN) + findStoreNameByStoreId 잔존
     private final CartRepository cartRepository;  // Phase 3-C-3: findCartEntityByUserNo 위임
+    private final CartDetailRepository cartDetailRepository;
     private final UserAddressRepository userAddressRepository;  // Phase 3-D-B: findDefaultAddress 위임
     private final OrderStatusLogRepository orderStatusLogRepository;
     private final AuthFeignClient authFeignClient;
@@ -239,6 +242,43 @@ public class OrderService {
         }
         // 응답 동결: 기존 OrderMapper.maxHistoryPage가 int 반환 → 동일 타입 유지
         return (int) orderRepository.countByUserNo(userId);
+    }
+
+    // 주문 취소 건 재주문(장바구니 다시 담기)
+    @Transactional
+    public void reorder(long callUserNo, long orderId) {
+        Orders order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if(!Objects.equals(order.getUserNo(), callUserNo)) {
+            throw new BusinessException("본인 주문만 재주문할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
+        if(!Objects.equals(order.getOrderState(), ORDER_STATE_CANCELED)) {
+            throw new BusinessException("취소된 주문만 재주문할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        List<OrderDetail> orderDetails = orderDetailRepository.findAllByOrderId(orderId);
+
+        if(orderDetails.isEmpty()) {
+            throw new BusinessException("재주문할 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        cartRepository.findByUserNo(callUserNo).ifPresent(cart -> {
+            cartDetailRepository.deleteByCartId(cart.getCartId());
+            cartRepository.delete(cart);
+            cartRepository.flush();
+        });
+
+        Cart newCart = new Cart();
+        newCart.setUserNo(callUserNo);
+        newCart.setStoreId(order.getStoreId());
+        cartRepository.saveAndFlush(newCart);
+
+        for(OrderDetail orderDetail : orderDetails) {
+            CartDetail cartDetail = new CartDetail();
+            cartDetail.setCartId(newCart.getCartId());
+            cartDetail.setMenuId(orderDetail.getMenuId());
+            cartDetail.setQuantity(orderDetail.getQuantity());
+            cartDetailRepository.save(cartDetail);
+        }
     }
 
     /**
