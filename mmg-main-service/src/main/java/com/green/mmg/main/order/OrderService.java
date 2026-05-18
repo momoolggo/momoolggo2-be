@@ -14,6 +14,7 @@ import com.green.mmg.main.internal.dto.DeliveryStatusUpdateRes;
 import com.green.mmg.main.internal.dto.InternalSettlementOrderListRes;
 import com.green.mmg.main.internal.dto.InternalSettlementOrderRes;
 import com.green.mmg.main.order.model.*;
+import com.green.mmg.main.owner.OwnerOrderSseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -77,6 +78,7 @@ public class OrderService {
     private static final int ORDER_STATE_CANCELED = 2;
 
     private static final int DELIVERY_FEE = 1500;
+    private final OwnerOrderSseService ownerOrderSseService;
 
     // 주문 화면 초기 데이터 조회
     @Transactional(readOnly = true)
@@ -157,8 +159,16 @@ public class OrderService {
 
         // 가게 누적 주문 수(store.order_count) 갱신 — 같은 트랜잭션 내 처리
         orderMapper.calSumOrder(cart.getStoreId());
+
+        ownerOrderSseService.sendNewOrder(cart.getStoreId(), Map.of(
+                "orderId", uniqueId,
+                "storeId", cart.getStoreId()
+        ));
+
         return uniqueId;
     }
+
+
 
     // 주문 취소
 

@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.Map;
 public class OwnerController {
 
     private final OwnerService ownerService;
+    private final OwnerOrderSseService ownerOrderSseService;
 
     @Value("${file.upload.menu-path:C:/uploads/menu/}")
     private String menuUploadPath;
@@ -107,6 +109,14 @@ public class OwnerController {
         ownerService.deleteOrder(principal.getSignedUserNo(), order_id);
         return new ResultResponse<>("주문 삭제 성공", null);
     }
+
+    @GetMapping("/order/subscribe")
+    public SseEmitter subscribeOrder(@AuthenticationPrincipal UserPrincipal principal,
+                                     @RequestParam Long storeId) {
+        ownerService.validateStoreOwner(principal.getSignedUserNo(), storeId);
+        return ownerOrderSseService.subscribe(storeId);
+    }
+
 
     // ========== 메뉴 관련 ==========
 

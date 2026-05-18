@@ -37,6 +37,7 @@ public class OwnerService {
     private final MenuOptionRepository menuOptionRepository;
     private final MenuOptionCategoryRepository menuOptionCategoryRepository;
     private final AdminFeignClient adminFeignClient;
+    private final OwnerOrderSseService ownerOrderSseService;
 
     // ORDER_STATE 매핑 (CLAUDE.md §7) — 본 작업 A Group 4에서 3(조리중) 진입 시점만 인용.
     // Q-A9.d (ii) 일관: order_state=4/5 변경 책임 추가 X (admin 시연 수동 변경 가능, ADR-004 박제 범위 좁힘).
@@ -204,6 +205,11 @@ public class OwnerService {
         verifyOrderOwner(callerOwnerNo, orderId);
         ownerMapper.deleteOrderDetail(orderId);
         ownerMapper.deleteOrder(orderId);
+    }
+
+    @Transactional(readOnly = true)
+    public void validateStoreOwner(long ownerNo, Long storeId) {
+        verifyStoreOwner(ownerNo, storeId);
     }
 
     // ========== 메뉴 관련 (D-bis 그룹 ㄷ: 권한 분기 추가) ==========
