@@ -199,6 +199,7 @@
             JOIN orders o ON o.order_id = r.order_id
             LEFT JOIN review_reply rr ON rr.review_id = r.review_id
         WHERE o.store_id = #{storeId}
+        AND r.blinded = false
         ORDER BY r.written_at DESC
         <!-- Phase 4-A: user JOIN 제거. userName은 StoreService에서 AuthFeignClient.getUsers() batch로 합성 -->
     </select>

@@ -41,6 +41,13 @@ constants:
     refresh-token-cookie-validity-seconds: 1296000
     refresh-token-validity-milliseconds: 1296000000
 
+app:
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    base-url: https://generativelanguage.googleapis.com
+    default-model: gemini-2.5-flash
+    lite-model: gemini-2.0-flash
+
 feign:
   auth-service:
     url: http://localhost:8081

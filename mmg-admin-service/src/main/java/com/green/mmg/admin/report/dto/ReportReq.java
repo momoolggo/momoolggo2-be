@@ -10,4 +10,5 @@ public class ReportReq {
     private Long reporterNo;
     private String reason;
     private String content;
+    private String reviewContent; // AI 판정용 리뷰 본문 스냅샷
 }
