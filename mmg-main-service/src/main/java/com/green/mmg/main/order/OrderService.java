@@ -11,6 +11,8 @@ import com.green.mmg.main.cart.model.Cart;
 import com.green.mmg.main.cart.model.CartItemRes;
 import com.green.mmg.main.internal.dto.DeliveryCompleteRes;
 import com.green.mmg.main.internal.dto.DeliveryStatusUpdateRes;
+import com.green.mmg.main.internal.dto.InternalSettlementOrderListRes;
+import com.green.mmg.main.internal.dto.InternalSettlementOrderRes;
 import com.green.mmg.main.order.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -279,6 +282,28 @@ public class OrderService {
             cartDetail.setQuantity(orderDetail.getQuantity());
             cartDetailRepository.save(cartDetail);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public InternalSettlementOrderListRes getSettlementOrders(Long storeId,
+                                                              LocalDate startDate,
+                                                              LocalDate endDate) {
+        LocalDateTime start = startDate.atStartOfDay();
+        LocalDateTime end = endDate.plusDays(1).atStartOfDay();
+
+        List<InternalSettlementOrderRes> orders =
+                orderMapper.findSettlementOrderDetails(storeId, start, end);
+
+        long totalSales =
+                orderMapper.sumSettlementSales(storeId, start, end);
+
+        return new InternalSettlementOrderListRes(
+                storeId,
+                startDate,
+                endDate,
+                totalSales,
+                orders
+        );
     }
 
     /**
