@@ -1,8 +1,10 @@
 package com.green.mmg.main.owner;
 
 
+import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.feign.RiderFeignClient;
 import com.green.mmg.main.feign.model.RiderAssignReq;
@@ -20,10 +22,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -36,6 +36,7 @@ public class OwnerService {
     private final RiderFeignClient riderFeignClient; // Phase 5+ Group 4: 점주 수락 시점 자동 배차 트리거 (team-handoff §8)
     private final MenuOptionRepository menuOptionRepository;
     private final MenuOptionCategoryRepository menuOptionCategoryRepository;
+    private final AdminFeignClient adminFeignClient;
 
     // ORDER_STATE 매핑 (CLAUDE.md §7) — 본 작업 A Group 4에서 3(조리중) 진입 시점만 인용.
     // Q-A9.d (ii) 일관: order_state=4/5 변경 책임 추가 X (admin 시연 수동 변경 가능, ADR-004 박제 범위 좁힘).
@@ -439,5 +440,18 @@ public class OwnerService {
     public void deleteCategory(long callerOwnerNo, Long categoryId) {
         verifyCategoryOwner(callerOwnerNo, categoryId);
         ownerMapper.deleteCategory(categoryId);
+    }
+    // 사장님 정산 내역 조회
+    public List<Object> getMySettlements(Long userNo, Long storeId) {
+        verifyStoreOwner(userNo, storeId);
+        ResultResponse<List<Object>> res = adminFeignClient.getSettlementsByStore(storeId);
+        return res.getResultData() != null ? res.getResultData() : new ArrayList<>();
+    }
+
+    public void submitSettlementInquiry(Long userNo, String content) {
+        adminFeignClient.createInquiry(Map.of(
+                "userNo", userNo,
+                "content", content
+        ));
     }
 }

@@ -8,6 +8,8 @@ import com.green.mmg.common.dto.ResultResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/admin/cs")
 @RequiredArgsConstructor
@@ -42,4 +44,14 @@ public class CsController {
         csService.replyInquiry(inquiryId, req);
         return new ResultResponse<>("답변 등록 완료", null);
     }
+
+    @PostMapping("/internal/inquiry")
+    public ResultResponse<?> createInquiry(@RequestBody Map<String, Object> req) {
+        Long userNo = Long.valueOf(req.get("userNo").toString());
+        String content = req.get("content").toString();
+        csService.createInquiry(userNo, content);
+        return new ResultResponse<>("문의 접수 완료", null);
+    }
+
+
 }

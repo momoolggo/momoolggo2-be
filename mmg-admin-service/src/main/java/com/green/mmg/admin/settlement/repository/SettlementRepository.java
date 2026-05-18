@@ -31,4 +31,6 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
     // 예상 금액 합계
     @Query("SELECT COALESCE(SUM(s.netAmount), 0) FROM Settlement s WHERE s.status = 'PENDING'")
     Integer sumExpectedAmount();
+
+    List<Settlement> findByTargetTypeAndTargetNo(SettlementTargetType targetType, Long targetNo);
 }
