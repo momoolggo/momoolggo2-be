@@ -158,21 +158,41 @@ public class StoreService {
 
     // 관리자 가게관리 목록 조회
     @Transactional(readOnly = true)
-    public InternalStoreListPageRes getInternalStoreList(int page, int size, String date) {
+    public InternalStoreListPageRes getInternalStoreList(int page,
+                                                         int size,
+                                                         String storeName,
+                                                         String businessNo,
+                                                         String userId,
+                                                         String date,
+                                                         String name) {
         int startIdx = page * size;
 
-        List<InternalStoreListRes> stores = storeMapper.findInternalStoreList(startIdx, size, date);
-        long totalCount = storeMapper.countInternalStoreList(date);
+        List<Long> ownerIds = null;
+
+        if ((userId != null && !userId.isBlank()) || (name != null && !name.isBlank())) {
+            ownerIds = authFeignClient.searchOwnerUserNos(userId, name).getResultData();
+
+            if (ownerIds == null || ownerIds.isEmpty()) {
+                return new InternalStoreListPageRes(List.of(), 0);
+            }
+        }
+
+        List<InternalStoreListRes> stores =
+                storeMapper.findInternalStoreList(startIdx, size, storeName, businessNo, date, ownerIds);
+
+        long totalCount =
+                storeMapper.countInternalStoreList(storeName, businessNo, date, ownerIds);
 
         if (!stores.isEmpty()) {
-            List<Long> ownerIds = stores.stream()
+            List<Long> storeOwnerIds = stores.stream()
                     .map(InternalStoreListRes::getOwnerId)
                     .filter(Objects::nonNull)
                     .distinct()
                     .toList();
 
-            if (!ownerIds.isEmpty()) {
-                List<UserBriefDto> owners = authFeignClient.getUsers(ownerIds).getResultData();
+            if (!storeOwnerIds.isEmpty()) {
+                List<UserBriefDto> owners = authFeignClient.getUsers(storeOwnerIds).getResultData();
+
                 Map<Long, String> ownerNameMap = (owners == null ? List.<UserBriefDto>of() : owners)
                         .stream()
                         .collect(Collectors.toMap(UserBriefDto::getUserNo, UserBriefDto::getName));

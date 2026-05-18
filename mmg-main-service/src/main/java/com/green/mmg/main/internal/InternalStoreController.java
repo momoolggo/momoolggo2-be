@@ -18,9 +18,13 @@ public class InternalStoreController {
     public ResultResponse<InternalStoreListPageRes> getStoreList(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size,
-            @RequestParam(required = false) String date) {
+            @RequestParam(required = false) String storeName,
+            @RequestParam(required = false) String businessNo,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String name) {
         return new ResultResponse<>("가게 목록 조회 완료",
-                storeService.getInternalStoreList(page, size, date));
+                storeService.getInternalStoreList(page, size, storeName, businessNo, userId, date, name));
     }
 
 

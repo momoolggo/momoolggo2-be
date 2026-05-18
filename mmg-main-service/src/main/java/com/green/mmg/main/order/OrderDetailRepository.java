@@ -17,4 +17,5 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, Long> 
             WHERE od.orderId = :orderId
             """)
     List<OrderHistoryDto.OrderItemDto> findItemsByOrderId(@Param("orderId") Long orderId);
+    List<OrderDetail> findAllByOrderId(Long orderId);
 }
