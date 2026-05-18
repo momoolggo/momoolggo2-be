@@ -1,9 +1,11 @@
 package com.green.mmg.main.order;
 
+import com.green.mmg.main.internal.dto.InternalSettlementOrderRes;
 import com.green.mmg.main.order.model.*;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -22,4 +24,12 @@ public interface OrderMapper {
     List<OrderHistoryDto> findOrdersByUserId(OrderHistoryReq req);
     OrderHistoryDto orderHistoryDetail(long id);
     int calSumOrder(@Param("storeId") long storeId);
+
+    List<InternalSettlementOrderRes> findSettlementOrderDetails(@Param("storeId") long storeId,
+                                                                @Param("start")LocalDateTime start,
+                                                                @Param("end") LocalDateTime end);
+
+    Long sumSettlementSales(@Param("storeId") Long storeId,
+                            @Param("start") LocalDateTime start,
+                            @Param("end") LocalDateTime end);
 }
