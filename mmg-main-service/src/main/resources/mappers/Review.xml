@@ -29,6 +29,8 @@
         r.rating,
         r.contents,
         r.photo,
+        r.blinded,
+        r.blind_reason AS blindReason,
         DATE_FORMAT(r.written_at,
             CONCAT(YEAR(r.written_at), '.',
                    LPAD(MONTH(r.written_at), 2, '0'), '.',
@@ -98,12 +100,14 @@
             FROM review r
                      JOIN orders o ON o.order_id = r.order_id
             WHERE o.store_id = #{storeId}
+            AND r.blinded = false
         ),
             s.rating_count = (
                 SELECT COUNT(1)
                 FROM review r
                          JOIN orders o ON o.order_id = r.order_id
                 WHERE o.store_id = #{storeId}
+                AND r.blinded = false
             )
         WHERE s.store_id = #{storeId}
     </update>

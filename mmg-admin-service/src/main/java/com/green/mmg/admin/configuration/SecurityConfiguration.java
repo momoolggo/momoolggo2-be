@@ -20,8 +20,8 @@ public class SecurityConfiguration {
                         .requestMatchers(
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
-                                "/api/admin/**"
-
+                                "/api/admin/**",
+                                "/internal/**"
                         ).permitAll()
                         .anyRequest().hasRole("ADMIN")
                 )
