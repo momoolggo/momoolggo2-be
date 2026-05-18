@@ -52,4 +52,11 @@ public class CsService {
                 .orElseThrow(() -> new ResourceNotFoundException("문의를 찾을 수 없습니다."));
         inquiry.reply(req.getReply());
     }
+
+    @Transactional
+    public void createInquiry(Long userNo, String content) {
+        ChatbotInquiry inquiry = new ChatbotInquiry(
+                userNo, InquiryUserType.OWNER, content);
+        chatbotInquiryRepository.save(inquiry);
+    }
 }
