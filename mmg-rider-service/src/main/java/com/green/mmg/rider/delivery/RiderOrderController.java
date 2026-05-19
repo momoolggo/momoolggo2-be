@@ -75,6 +75,20 @@ public class RiderOrderController {
         return new ResultResponse<>("배달내역 조회 성공", data);
     }
 
+    /**
+     * 라이더 풀에서 본인 잡기 — WAITING_ASSIGN → ASSIGNED + rider_no 박기 (2026-05-19 신설).
+     * code-reviewer FAIL 진단 결함 1번 정정. ADR-001 (D) 박제 정합성 일관.
+     */
+    @PutMapping("/{deliveryNo}/claim")
+    public ResultResponse<Void> claim(
+            @PathVariable String deliveryNo,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        DeliveryTransitionResult result = deliveryService.claimDelivery(
+                deliveryNo, principal.getSignedUserNo());
+        notifyMain(result);
+        return new ResultResponse<>("배차 수락 성공", null);
+    }
+
     @PutMapping("/{deliveryNo}/accept")
     public ResultResponse<Void> accept(
             @PathVariable String deliveryNo,
@@ -82,7 +96,7 @@ public class RiderOrderController {
         DeliveryTransitionResult result = deliveryService.acceptDelivery(
                 deliveryNo, principal.getSignedUserNo());
         notifyMain(result);
-        return new ResultResponse<>("배차 수락 성공", null);
+        return new ResultResponse<>("가게 도착 처리 성공", null);
     }
 
     @PutMapping("/{deliveryNo}/reject")
