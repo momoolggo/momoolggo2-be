@@ -10,7 +10,28 @@
 
 ## 진행 중
 
-(현재 통보 중인 부채)
+### Q-DataIntegrity — `DataIntegrityViolationException` raw 메시지 노출 (2026-05-19 발견)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-common` ❌ 팀원 |
+| **위치** | `mmg-common/.../exception/GlobalExceptionHandler.java:71-76` (`handleRuntime`) |
+| **경위** | 라이더 가입 시 user_id 중복 시도 → DB Unique 위반 → 화면에 SQL raw 노출 `"could not execute statement [Duplicate entry 'rider2' for key 'uq_user_id']"` |
+| **현재 동작** | `DataIntegrityViolationException extends RuntimeException` → `handleRuntime` catch → `e.getMessage()` 그대로 500 응답 → FE httpRequester 인터셉터 모달로 raw 표시 |
+| **권장 처리** | `@ExceptionHandler(DataIntegrityViolationException.class)` 별 핸들러 추가 — Unique 제약 위반 시 `"이미 등록된 정보입니다."` 409 응답 (BusinessException 패턴 일관). raw 메시지는 log.warn만, 응답 body는 마스킹. |
+| **임시 대응** | FE rider 영역에서 `RiderSignupView.mapSignupError` 매퍼 함수로 raw 메시지 패턴 감지 + 친화 메시지 변환 (시연 보호). BE 정정 시 본 매퍼 단순화 가능. |
+| **참조 사례** | `docs/adr/rider/figma-analysis.md` 사례 #13 |
+
+### Q-SignupDupCheck — `UserService.signup` ID 중복 사전 검증 부재 (2026-05-19 발견)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-auth-service` ❌ 팀원 |
+| **위치** | `mmg-auth-service/.../user/UserService.java:49` (`signup` 진입부) |
+| **경위** | 위 Q-DataIntegrity와 짝. FE checkId 호출과 실제 INSERT 사이 race condition 가능. BE 사전 검증 없으면 항상 SQL Unique 위반 의존. |
+| **현재 동작** | `userRepository.save(user)` 직행 → DB Unique 제약 위반 시 DataIntegrityViolationException throw |
+| **권장 처리** | `signup` 진입부에 `existsByUserId(req.getUserId())` if-throw 패턴 추가 — `BusinessException("이미 사용 중인 아이디입니다.", HttpStatus.CONFLICT)`. Q-DataIntegrity 핸들러와 이중 안전망. |
+| **R1-A 패턴 인용** | `mmg-rider-service/.../rider/RiderService.java:54-56` (`existsByUserNo` 중복 가입 방지 패턴) |
 
 ---
 

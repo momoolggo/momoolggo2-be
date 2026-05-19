@@ -22,8 +22,12 @@
 | 8 | 라이더 진단 | mmg_rider DDL 또는 main에 rider/delivery 테이블 존재 | **거짓** — orders 테이블에 rider_request, delivery_state 컬럼만. rider/delivery 테이블 0 |
 | 9 | 라이더 진단 | Gateway rider 라우트는 Phase 5에서 추가 예정 | **거짓** — 이미 정의됨 (`mmg-gateway/application.yml:58-62` rider-route → 8082) |
 | 10 | 라이더 정리 (Step 3) | Figma 13장 | **거짓** — 실제 10장 (`docs/figma/`) |
+| 11 | R6-FE 사용 중 발견 (2026-05-19) | "BE 가입 endpoint 통합 + Feign 호출 누락이 정답, FE 정상" (작업 명세 4단계 + [정정] 박제 #30 정정) | **거꾸로** — ADR-001 line 23-71 박제 정답은 "(C) 채택: rider→auth Feign 호출 없음, 클라이언트(FE)가 두 endpoint 순차 호출". 사가 패턴 회피로 (A) 옵션 명시 거부됨. FE RiderSignupView.signup()이 `userService.signup()` 1회만 호출하고 `riderService.putProfile()` 호출 누락 = **FE 흐름 결함**이 박제 정답. [정정] 항목 자체가 박제 검증 없이 작성됨 → 6번 강제 절차 발동. F1 작업으로 정정. |
+| 12 | R6-FE 사용 중 발견 (2026-05-19) | Rider entity account_* nullable=true vs RiderService.validate requireNonBlank 검증 (박제 내부 모순) | 박제 모순 — entity (Rider.java:50-57 + rider-schema.sql:23-25) nullable=true가 박제 정답, validate가 entity 박제 위반. 사용자 결정 A1'(계좌 가입 시 X, 마이페이지에서) 정합성 위해 validate에서 account_* 검증 제거. |
+| 13 | 라이더 가입 중 발견 (2026-05-19) | "BE 예외 처리는 친화 메시지 변환됨" (FE catch 가정) | **거짓** — `mmg-common GlobalExceptionHandler.java:71-76` `handleRuntime`이 RuntimeException 전체 catch → `e.getMessage()` 그대로 응답. `DataIntegrityViolationException extends RuntimeException`라 Unique 제약 위반 시 SQL raw 메시지("could not execute statement [Duplicate entry 'rider2' for key 'uq_user_id']") 그대로 노출. 별도 핸들러 0건. FE rider 영역에서 `RiderSignupView.mapSignupError` 매퍼 임시 대응 + `team-handoff.md` Q-DataIntegrity + Q-SignupDupCheck 등재. |
+| 14 | 라이더 진입 화면 사용 중 발견 (2026-05-19) | "라이더 랜딩에 로그인 동선 존재" (UX 가정) | **거짓** — `RiderLandingView.vue` 박제는 "라이더 신청하기" 버튼 1건만. 로그인 버튼/링크 0건. 기존 라이더 재진입 동선 부재(가입 화면만). `/rider/signin` 라우트 + `RiderSigninView` 모두 박제되어 있어 동선만 누락. RiderLandingView에 "이미 라이더이신가요? 로그인" 링크 추가로 정정. |
 
-**원칙**: 진단 시 가정한 사실은 코드/실행/파일 검증 후 단언. 9건 누적 정착.
+**원칙**: 진단 시 가정한 사실은 코드/실행/파일 검증 후 단언. 14건 누적 정착.
 
 ---
 
