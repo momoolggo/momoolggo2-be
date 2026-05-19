@@ -185,4 +185,14 @@ public class RiderInternalController {
     public List<RiderProfileRes> list(@RequestParam(required = false) RiderStatus status) {
         return riderService.listRiders(status);
     }
+
+    /**
+     * user_no 매칭 rider 행 삭제 (admin cascade 보완, ADR-001 (D) 박제 일관, 2026-05-19 신설).
+     * MSA 박제: rider.rider는 별 schema라 DB 자동 cascade X. admin이 본 endpoint 호출 후 auth 삭제.
+     * 행 없으면 0 반환 (일반 회원이라 skip). 다른 endpoint 패턴 일관 — 직접 반환 (ResultResponse X).
+     */
+    @DeleteMapping("/by-user/{userNo}")
+    public Long deleteByUserNo(@PathVariable Long userNo) {
+        return riderService.deleteByUserNoIfExists(userNo);
+    }
 }

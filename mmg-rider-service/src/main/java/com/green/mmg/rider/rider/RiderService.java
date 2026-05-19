@@ -135,6 +135,15 @@ public class RiderService {
         return riders.stream().map(RiderProfileRes::from).toList();
     }
 
+    /**
+     * admin cascade 삭제 — user_no 매칭 rider 행 삭제 (없으면 skip).
+     * ADR-001 (D) 보완: MSA 박제로 DB 자동 cascade X, application 레벨 보장.
+     */
+    @Transactional
+    public long deleteByUserNoIfExists(Long userNo) {
+        return riderRepository.deleteByUserNo(userNo);
+    }
+
     private void validate(RiderProfileReq req) {
         requireNonBlank(req.licenseNo(), "licenseNo");
         requireNonBlank(req.licenseType(), "licenseType");

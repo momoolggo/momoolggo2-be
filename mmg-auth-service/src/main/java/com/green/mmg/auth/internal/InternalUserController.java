@@ -137,8 +137,9 @@ public class InternalUserController {
         User user = userRepository.findById(userNo)
                 .orElseThrow(() -> new ResourceNotFoundException("user not found: " + userNo));
 
-            if (!"ACTIVE".equals(req.getStatus()) && !"REJECTED".equals(req.getStatus())) {
-                throw new BusinessException("status는 ACTIVE 또는 REJECTED만 가능합니다.", HttpStatus.BAD_REQUEST);
+            // PENDING은 ADR-001 (D) 라이더 통합 승인 보상용 (admin-service RiderApprovalService 호출). 일반 회원 승인 흐름에서는 사용 X.
+            if (!"ACTIVE".equals(req.getStatus()) && !"REJECTED".equals(req.getStatus()) && !"PENDING".equals(req.getStatus())) {
+                throw new BusinessException("status는 ACTIVE/REJECTED/PENDING(보상용)만 가능합니다.", HttpStatus.BAD_REQUEST);
 
             }
 
@@ -146,6 +147,20 @@ public class InternalUserController {
             user.setProcessMemo(req.getReason());
 
             return new ResultResponse<>("승인상태 변경 완료", null);
+    }
+
+    /**
+     * 회원 삭제 — admin cascade 흐름 (admin-service AdminUserController.deleteUser 호출 체인).
+     * MSA 박제: rider.rider는 별 schema라 DB 자동 cascade X. admin이 rider 먼저 삭제 후 본 endpoint 호출.
+     */
+    @Transactional
+    @DeleteMapping("/user/{userNo}")
+    public ResultResponse<Void> deleteUser(@PathVariable long userNo) {
+        if (!userRepository.existsById(userNo)) {
+            throw new ResourceNotFoundException("user not found: " + userNo);
+        }
+        userRepository.deleteById(userNo);
+        return new ResultResponse<>("회원 삭제 완료", null);
     }
 
     /** 계정 정지 완료 */

@@ -92,4 +92,9 @@ public interface RiderFeignClient {
     @GetMapping("/internal/rider/locations/active")
     List<RiderLocationRes> getActiveRiderLocations();
 
+    // ─── ADR-001 (D) cascade 보완 — user 삭제 시 rider 동기 삭제 (2026-05-19 신설) ──
+    /** user_no 매칭 rider 행 삭제. 행 없으면 0 반환 (일반 회원이라 skip). */
+    @DeleteMapping("/internal/rider/by-user/{userNo}")
+    Long deleteRiderByUserNo(@PathVariable("userNo") Long userNo);
+
 }

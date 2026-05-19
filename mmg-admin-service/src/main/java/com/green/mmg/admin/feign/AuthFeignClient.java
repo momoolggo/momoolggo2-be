@@ -8,6 +8,7 @@ import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.data.domain.Page;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -63,4 +64,8 @@ public interface AuthFeignClient {
 
     @GetMapping("/internal/auth/user/{userNo}/detail")
     ResultResponse<InternalUserDetailRes> getUserDetail(@PathVariable("userNo") Long userNo);
+
+    // 회원 삭제 — ADR-001 (D) cascade 보완 (2026-05-19 신설). rider 먼저 삭제 후 본 호출.
+    @DeleteMapping("/internal/auth/user/{userNo}")
+    ResultResponse<Void> deleteUser(@PathVariable("userNo") Long userNo);
 }
