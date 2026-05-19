@@ -63,6 +63,10 @@ public class Settlement {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    // 토스페이먼츠 지급대행 ID (지급 요청 후 저장)
+    @Column(name = "toss_payout_id", length = 100)
+    private String tossPayoutId;
+
     // 정산 상태 변경 (pending → done)
     public void complete() {
         this.status = SettlementsStatus.DONE;
@@ -72,5 +76,10 @@ public class Settlement {
     // 정산 보류
     public void hold() {
         this.status = SettlementsStatus.HELD;
+    }
+
+    // 토스 지급 ID 저장
+    public void setTossPayoutId(String payoutId) {
+        this.tossPayoutId = payoutId;
     }
 }

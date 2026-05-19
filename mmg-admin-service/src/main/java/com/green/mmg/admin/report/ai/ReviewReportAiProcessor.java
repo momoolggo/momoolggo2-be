@@ -1,5 +1,8 @@
 package com.green.mmg.admin.report.ai;
 
+import com.green.mmg.admin.blind.entity.Blind;
+import com.green.mmg.admin.blind.repository.BlindRepository;
+import com.green.mmg.admin.common.enums.BlindReason;
 import com.green.mmg.admin.report.dto.AiReviewJudgement;
 import com.green.mmg.admin.report.entity.AiStatus;
 import com.green.mmg.admin.report.entity.Report;
@@ -15,8 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.util.stream.Collectors;
-
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -25,6 +26,7 @@ public class ReviewReportAiProcessor {
     private final ReportRepository reportRepository;
     private final GeminiReviewClassifier classifier;
     private final ReviewBlindClient reviewBlindClient;
+    private final BlindRepository blindRepository;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Async("aiTaskExecutor")
@@ -67,14 +69,29 @@ public class ReviewReportAiProcessor {
         boolean gate = judgement.shouldBlind() && !"LOW".equals(judgement.confidence());
         if (gate) {
             try {
+                // 1. main-service review 블라인드 처리
                 reviewBlindClient.blind(
                         report.getTargetNo(),
                         new ReviewBlindClient.BlindRequest("AUTO_AI", judgement.reason(), reportId)
                 );
                 report.markAutoBlinded();
+
+                // 2. blind 테이블 INSERT (AdminBlindView 탭에 표시)
+                BlindReason blindReason = parseBlindReason(report.getReason());
+                Blind blind = new Blind(
+                        report.getTargetNo(),  // reviewNo
+                        report.getReporterNo(), // userNo
+                        blindReason,
+                        null,  // storeName (추후 연동)
+                        report.getReviewContent(),
+                        null,  // rating
+                        null   // writer
+                );
+                blindRepository.save(blind);
+
                 log.info("자동 블라인드 완료 reportId={} reviewId={}", reportId, report.getTargetNo());
             } catch (Exception e) {
-                log.error("블라인드 Feign 실패 reportId={} error={}", reportId, e.getMessage());
+                log.error("블라인드 처리 실패 reportId={} error={}", reportId, e.getMessage());
                 report.markBlindFailed(safeMsg(e));
             }
         } else {
@@ -83,6 +100,15 @@ public class ReviewReportAiProcessor {
         }
 
         reportRepository.save(report);
+    }
+
+    // 신고 사유 → BlindReason 매핑
+    private BlindReason parseBlindReason(String reason) {
+        if (reason == null) return BlindReason.ETC;
+        if (reason.contains("욕설") || reason.contains("혐오")) return BlindReason.PROFANITY;
+        if (reason.contains("광고")) return BlindReason.ADVERTISEMENT;
+        if (reason.contains("허위")) return BlindReason.FALSE_FACT;
+        return BlindReason.ETC;
     }
 
     private String safeMsg(Exception e) {
