@@ -71,8 +71,10 @@ public class DeliveryService {
     static {
         EnumMap<DeliveryStatus, Set<DeliveryStatus>> map = new EnumMap<>(DeliveryStatus.class);
         map.put(DeliveryStatus.WAITING_ASSIGN, EnumSet.of(DeliveryStatus.ASSIGNED));
+        // ARRIVED_AT_STORE 단계 라이더 흐름 제거 (2026-05-19) — accept가 AWAITING_PICKUP 직행.
+        // ARRIVED_AT_STORE 상태 enum은 유지 (외부 호출/admin 경로 보존).
         map.put(DeliveryStatus.ASSIGNED,
-                EnumSet.of(DeliveryStatus.ARRIVED_AT_STORE, DeliveryStatus.WAITING_ASSIGN));
+                EnumSet.of(DeliveryStatus.ARRIVED_AT_STORE, DeliveryStatus.AWAITING_PICKUP, DeliveryStatus.WAITING_ASSIGN));
         // R6-cancel: ARRIVED/AWAITING/PICKED/DELIVERING → WAITING_ASSIGN 4 전이 추가 (cancel 사유 박제)
         map.put(DeliveryStatus.ARRIVED_AT_STORE,
                 EnumSet.of(DeliveryStatus.AWAITING_PICKUP, DeliveryStatus.WAITING_ASSIGN));
@@ -371,10 +373,67 @@ public class DeliveryService {
         return new DeliveryHistoryRes(fromDate, toDate, rowDtos.size(), totalFee, rowDtos);
     }
 
-    /** ASSIGNED → ARRIVED_AT_STORE. R6 §6.2 PUT /accept */
+    /**
+     * 라이더 풀에서 본인 잡기 — WAITING_ASSIGN → ASSIGNED + assignRider (2026-05-19 신설).
+     *
+     * <p>본 메서드는 {@link #performRiderTransition}과 별 흐름. 권한 검증이 정반대:
+     * performRiderTransition은 "delivery.riderNo == caller.riderNo" 검증(본인 배달만), 본 메서드는 "delivery.riderNo == null" 검증(풀의 미배차만).</p>
+     *
+     * <p>흐름: ACTIVE 라이더 검증(D8-a) → delivery.rider_no=NULL 검증 → WAITING_ASSIGN 화이트리스트 → assignRider(caller) → changeStatus(ASSIGNED) → log INSERT.
+     * code-reviewer FAIL 진단 결함 1번(claim endpoint 부재) 정정 (2026-05-19).</p>
+     */
+    @Transactional
+    public DeliveryTransitionResult claimDelivery(String deliveryNo, long callerUserNo) {
+        Delivery delivery = deliveryRepository.findById(deliveryNo)
+                .orElseThrow(() -> new BusinessException("배달을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        Rider caller = riderRepository.findByUserNo(callerUserNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        // D8-a 박제 일관 — ACTIVE 라이더만 풀 잡기 허용 (EATING/PENDING/SUSPENDED 차단)
+        if (caller.getStatus() != RiderStatus.ACTIVE) {
+            throw new BusinessException(
+                    "ACTIVE 상태에서만 배차를 잡을 수 있습니다 (현재: " + caller.getStatus() + ").",
+                    HttpStatus.BAD_REQUEST);
+        }
+        // 풀 상태 검증 — 이미 다른 라이더가 잡았으면 거부
+        if (delivery.getRiderNo() != null) {
+            throw new BusinessException(
+                    "이미 다른 라이더가 잡은 배차입니다.", HttpStatus.CONFLICT);
+        }
+        // 화이트리스트 검증 — WAITING_ASSIGN → ASSIGNED만 허용
+        DeliveryStatus from = delivery.getStatus();
+        if (!ALLOWED_TRANSITIONS.get(from).contains(DeliveryStatus.ASSIGNED)) {
+            throw new BusinessException(
+                    "invalid state transition: " + from + " -> ASSIGNED",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        delivery.assignRider(caller.getRiderNo());
+        LocalDateTime now = LocalDateTime.now();
+        delivery.changeStatus(DeliveryStatus.ASSIGNED, now);
+
+        try {
+            deliveryRepository.saveAndFlush(delivery);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            throw new BusinessException(
+                    "동시 변경 충돌이 발생했습니다. 새로고침 후 다시 시도하세요.",
+                    HttpStatus.CONFLICT);
+        }
+
+        deliveryLogRepository.save(new DeliveryLog(
+                deliveryNo, from, DeliveryStatus.ASSIGNED, ActorRole.RIDER, callerUserNo, null));
+
+        return new DeliveryTransitionResult(delivery.getOrderId(), DeliveryStatus.ASSIGNED, caller.getRiderNo(), now);
+    }
+
+    /**
+     * ASSIGNED → AWAITING_PICKUP (가게 도착, 픽업 대기 직행) — R6 §6.2 PUT /accept.
+     * 2026-05-19 정정: ARRIVED_AT_STORE 단계 라이더 흐름 제거 (사용자 결정). 가게 도착 = 즉시 픽업 대기 상태.
+     */
     @Transactional
     public DeliveryTransitionResult acceptDelivery(String deliveryNo, long callerUserNo) {
-        return performRiderTransition(deliveryNo, DeliveryStatus.ARRIVED_AT_STORE, callerUserNo, null);
+        return performRiderTransition(deliveryNo, DeliveryStatus.AWAITING_PICKUP, callerUserNo, null);
     }
 
     /**
