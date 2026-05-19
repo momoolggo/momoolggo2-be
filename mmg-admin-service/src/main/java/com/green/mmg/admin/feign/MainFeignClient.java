@@ -45,6 +45,9 @@ public interface MainFeignClient {
     @GetMapping("/internal/store/{storeId}")
     ResultResponse<?> getStoreDetail(@PathVariable("storeId") Long storeId);
 
+    @GetMapping("/internal/review/{reviewId}")
+    ResultResponse<InternalReviewRes> getReviewById(@PathVariable("reviewId") Long reviewId);
+
     @GetMapping("/internal/settlement/orders")
     ResultResponse<InternalSettlementOrderListRes> getSettlementOrders(
             @RequestParam("storeId") Long storeId,

@@ -3,6 +3,10 @@ package com.green.mmg.admin.report.ai;
 import com.green.mmg.admin.blind.entity.Blind;
 import com.green.mmg.admin.blind.repository.BlindRepository;
 import com.green.mmg.admin.common.enums.BlindReason;
+import com.green.mmg.admin.dto.feign.InternalReviewRes;
+import com.green.mmg.admin.dto.feign.InternalStoreListPageRes;
+import com.green.mmg.admin.dto.feign.InternalStoreListRes;
+import com.green.mmg.admin.feign.MainFeignClient;
 import com.green.mmg.admin.report.dto.AiReviewJudgement;
 import com.green.mmg.admin.report.entity.AiStatus;
 import com.green.mmg.admin.report.entity.Report;
@@ -18,6 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.Map;
+import java.util.stream.Collectors;
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -27,6 +34,18 @@ public class ReviewReportAiProcessor {
     private final GeminiReviewClassifier classifier;
     private final ReviewBlindClient reviewBlindClient;
     private final BlindRepository blindRepository;
+    private final MainFeignClient mainFeignClient;
+
+    private Map<Long, String> getStoreNameMap() {
+        try {
+            InternalStoreListPageRes res = mainFeignClient.getStoreList(0, 200, null).getResultData();
+            if (res == null || res.getContent() == null) return Map.of();
+            return res.getContent().stream()
+                    .collect(Collectors.toMap(InternalStoreListRes::getStoreId, InternalStoreListRes::getStoreName));
+        } catch (Exception e) {
+            return Map.of();
+        }
+    }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Async("aiTaskExecutor")
@@ -78,14 +97,34 @@ public class ReviewReportAiProcessor {
 
                 // 2. blind 테이블 INSERT (AdminBlindView 탭에 표시)
                 BlindReason blindReason = parseBlindReason(report.getReason());
+
+                // 리뷰 정보 조회 (storeName, writer, rating, 작성자 userNo)
+                String storeName = null;
+                String writer = null;
+                Double rating = null;
+                Long reviewUserNo = report.getReporterNo(); // 기본값: 신고자
+                try {
+                    InternalReviewRes reviewInfo = mainFeignClient.getReviewById(report.getTargetNo()).getResultData();
+                    if (reviewInfo != null) {
+                        storeName = reviewInfo.getStoreName();
+                        writer = reviewInfo.getWriter();
+                        rating = reviewInfo.getRating();
+                        if (reviewInfo.getUserNo() != null) {
+                            reviewUserNo = reviewInfo.getUserNo(); // 실제 리뷰 작성자
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("리뷰 정보 조회 실패: {}", e.getMessage());
+                }
+
                 Blind blind = new Blind(
-                        report.getTargetNo(),  // reviewNo
-                        report.getReporterNo(), // userNo
+                        report.getTargetNo(),      // reviewNo
+                        reviewUserNo,              // userNo (리뷰 작성자)
                         blindReason,
-                        null,  // storeName (추후 연동)
+                        storeName,
                         report.getReviewContent(),
-                        null,  // rating
-                        null   // writer
+                        rating,
+                        writer
                 );
                 blindRepository.save(blind);
 

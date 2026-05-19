@@ -28,6 +28,20 @@ public class InternalReviewController {
     }
 
     @Transactional(readOnly = true)
+    @GetMapping("/{reviewId}")
+    public ResultResponse<InternalReviewListRes> findInternalReviewById(@PathVariable Long reviewId) {
+        InternalReviewListRes review = reviewMapper.findInternalReviewById(reviewId);
+        if (review == null) return new ResultResponse<>("리뷰 없음", null);
+        try {
+            List<UserBriefDto> users = authFeignClient.getUsers(List.of(review.getUserNo())).getResultData();
+            if (users != null && !users.isEmpty()) {
+                review.setWriter(users.get(0).getName());
+            }
+        } catch (Exception ignored) {}
+        return new ResultResponse<>("리뷰 조회 완료", review);
+    }
+
+    @Transactional(readOnly = true)
     @GetMapping("/list")
     public ResultResponse<List<InternalReviewListRes>> findInternalReviewList(@RequestParam(defaultValue = "0") int page,
                                                                              @RequestParam(defaultValue = "10") int size){

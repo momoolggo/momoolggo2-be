@@ -45,5 +45,8 @@ public interface ReviewMapper {
             @Param("size") int size
     );
 
+    // 리뷰 단건 조회 (internal)
+    InternalReviewListRes findInternalReviewById(@Param("reviewId") Long reviewId);
+
 
 }

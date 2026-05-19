@@ -25,6 +25,8 @@ public interface AdminFeignClient {
 
     @PostMapping("/api/admin/cs/internal/inquiry")
     ResultResponse<Void> createInquiry(@RequestBody Map<String, Object> req);
+
+    @PostMapping("/internal/review/{reviewId}/reassess")
+    ResultResponse<Void> reassessReview(@PathVariable("reviewId") Long reviewId,
+                                        @RequestBody Map<String, String> req);
 }
-
-
