@@ -15,4 +15,7 @@ public interface RiderRepository extends JpaRepository<Rider, Long> {
 
     /** Group 8 §3.5 — admin 라이더 목록 조회 (status 필터). status null이면 전체 (findAll) — Service에서 분기. */
     List<Rider> findByStatusOrderByRiderNoDesc(RiderStatus status);
+
+    /** admin cascade 삭제 — user_no 매칭 rider 행 삭제. 행 없으면 0 반환 (skip). */
+    long deleteByUserNo(Long userNo);
 }

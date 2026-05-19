@@ -25,12 +25,17 @@ import java.util.List;
 public class RiderApprovalController {
 
     private final RiderFeignClient riderFeignClient;
+    private final RiderApprovalService riderApprovalService;
 
-    /** 라이더 승인 — PENDING → ACTIVE. BlindController PATCH 패턴 일관. */
+    /**
+     * 라이더 통합 승인 — ADR-001 (D) 2026-05-19.
+     * auth.user.status + rider.status 동시 PENDING → ACTIVE (admin 1회 클릭).
+     * 보상 패턴은 {@link RiderApprovalService#approveRider} 참조.
+     */
     @PatchMapping("/{riderNo}/approve")
     public ResultResponse<?> approve(@PathVariable Long riderNo,
                                      @RequestBody RiderApproveReq req) {
-        riderFeignClient.approveRider(riderNo, req);
+        riderApprovalService.approveRider(riderNo, req);
         return new ResultResponse<>("라이더 승인 완료", null);
     }
 
