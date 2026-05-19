@@ -2,6 +2,8 @@ package com.green.mmg.admin.settlement.service;
 
 import com.green.mmg.admin.common.enums.SettlementsStatus;
 import com.green.mmg.admin.common.enums.SettlementTargetType;
+import com.green.mmg.admin.dto.feign.InternalSettlementOrderListRes;
+import com.green.mmg.admin.dto.feign.InternalSettlementOrderRes;
 import com.green.mmg.admin.dto.feign.InternalStoreListPageRes;
 import com.green.mmg.admin.dto.feign.InternalStoreListRes;
 import com.green.mmg.admin.feign.MainFeignClient;
@@ -10,8 +12,10 @@ import com.green.mmg.admin.settlement.dto.SettlementRes;
 import com.green.mmg.admin.settlement.dto.SettlementSummaryRes;
 import com.green.mmg.admin.settlement.entity.Settlement;
 import com.green.mmg.admin.settlement.repository.SettlementRepository;
+import com.green.mmg.admin.settlement.payout.SettlementPayoutService;
 import com.green.mmg.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -22,10 +26,12 @@ import java.util.Map;
 import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SettlementService {
 
     private final SettlementRepository settlementRepository;
     private final MainFeignClient mainFeignClient;
+    private final SettlementPayoutService settlementPayoutService;
 
     // storeId → storeName 맵 생성
     private Map<Long, String> getStoreNameMap() {
@@ -115,12 +121,18 @@ public class SettlementService {
         return toRes(s, storeNameMap);
     }
 
-    // 정산 완료 처리
+    // 정산 완료 처리 + 토스페이먼츠 지급 요청
     @Transactional
     public void completeSettlement(Long settlementId) {
         Settlement settlement = settlementRepository.findById(settlementId)
                 .orElseThrow(() -> new ResourceNotFoundException("정산 정보를 찾을 수 없습니다."));
         settlement.complete();
+        // 토스페이먼츠 지급대행 API 호출 (설계 완료, 실운영 시 secret-key 설정 필요)
+        try {
+            settlementPayoutService.executePayout(settlementId);
+        } catch (Exception e) {
+            log.warn("지급 요청 실패 (정산 완료는 유지) settlementId={} error={}", settlementId, e.getMessage());
+        }
     }
 
     // 정산 보류 처리
@@ -135,5 +147,63 @@ public class SettlementService {
         Map<Long, String> storeNameMap = getStoreNameMap();
         return settlementRepository.findByTargetTypeAndTargetNo(SettlementTargetType.STORE, storeId)
                 .stream().map(s -> toRes(s, storeNameMap)).toList();
+    }
+
+    // 정산 상세 주문내역 - 날짜별 그룹핑
+    public Map<String, Object> getSettlementOrders(Long settlementId) {
+        Settlement settlement = settlementRepository.findById(settlementId)
+                .orElseThrow(() -> new ResourceNotFoundException("정산 정보를 찾을 수 없습니다."));
+
+        try {
+            InternalSettlementOrderListRes res = mainFeignClient.getSettlementOrders(
+                    settlement.getTargetNo(),
+                    settlement.getPeriodStart().toString(),
+                    settlement.getPeriodEnd().toString()
+            ).getResultData();
+
+            if (res == null || res.getOrders() == null) {
+                return Map.of("dailySales", List.of(), "totalSales", 0L);
+            }
+
+            // 날짜별 그룹핑
+            Map<String, Long> dailySalesMap = new java.util.LinkedHashMap<>();
+            Map<String, Integer> dailyCountMap = new java.util.LinkedHashMap<>();
+
+            // 기간 내 모든 날짜 초기화 (0원으로)
+            java.time.LocalDate cur = settlement.getPeriodStart();
+            while (!cur.isAfter(settlement.getPeriodEnd())) {
+                dailySalesMap.put(cur.toString(), 0L);
+                dailyCountMap.put(cur.toString(), 0);
+                cur = cur.plusDays(1);
+            }
+
+            // 주문 데이터 날짜별 집계
+            for (InternalSettlementOrderRes order : res.getOrders()) {
+                if (order.getOrderTime() == null) continue;
+                String date = order.getOrderTime().toLocalDate().toString();
+                dailySalesMap.merge(date, order.getOrderAmount() != null ? order.getOrderAmount() : 0L, Long::sum);
+                dailyCountMap.merge(date, 1, Integer::sum);
+            }
+
+            // 날짜별 리스트로 변환
+            List<Map<String, Object>> dailySales = dailySalesMap.entrySet().stream()
+                    .map(e -> {
+                        Map<String, Object> row = new java.util.LinkedHashMap<>();
+                        row.put("date", e.getKey());
+                        row.put("amount", e.getValue());
+                        row.put("count", dailyCountMap.getOrDefault(e.getKey(), 0));
+                        return row;
+                    }).toList();
+
+            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            result.put("dailySales", dailySales);
+            result.put("totalSales", res.getTotalSales() != null ? res.getTotalSales() : 0L);
+            result.put("periodStart", settlement.getPeriodStart().toString());
+            result.put("periodEnd", settlement.getPeriodEnd().toString());
+            return result;
+
+        } catch (Exception e) {
+            return Map.of("dailySales", List.of(), "totalSales", 0L);
+        }
     }
 }

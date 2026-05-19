@@ -48,6 +48,11 @@ app:
     default-model: gemini-2.5-flash
     lite-model: gemini-2.0-flash
 
+toss:
+  payout:
+    secret-key: ${TOSS_SECRET_KEY:test_sk_placeholder}
+    base-url: https://api.tosspayments.com
+
 feign:
   auth-service:
     url: http://localhost:8081

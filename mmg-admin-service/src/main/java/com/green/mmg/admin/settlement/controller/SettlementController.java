@@ -76,5 +76,9 @@ public class SettlementController {
         return new ResultResponse<>("조회 성공", settlementService.getSettlementsByStoreId(storeId));
     }
 
-
+    // 정산 상세 주문내역 조회 (기간별 날짜별 매출)
+    @GetMapping("/{settlementId}/orders")
+    public ResultResponse<?> getSettlementOrders(@PathVariable Long settlementId) {
+        return new ResultResponse<>("조회 성공", settlementService.getSettlementOrders(settlementId));
+    }
 }
