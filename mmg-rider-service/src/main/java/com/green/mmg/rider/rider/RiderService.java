@@ -139,9 +139,7 @@ public class RiderService {
         requireNonBlank(req.licenseNo(), "licenseNo");
         requireNonBlank(req.licenseType(), "licenseType");
         requireNonBlank(req.vehicleType(), "vehicleType");
-        requireNonBlank(req.accountBank(), "accountBank");
-        requireNonBlank(req.accountNo(), "accountNo");
-        requireNonBlank(req.accountHolder(), "accountHolder");
+        // account_* nullable=true (Rider.java:50-57 + rider-schema.sql:23-25 일관). 가입 시 미입력 허용, 마이페이지에서 등록 (사용자 결정 A1' 정합성).
     }
 
     /** Figma 정정 1 — 배달수단 enum 변환 (R3-a 마이그레이션, valueOf IllegalArgumentException → BusinessException) */
