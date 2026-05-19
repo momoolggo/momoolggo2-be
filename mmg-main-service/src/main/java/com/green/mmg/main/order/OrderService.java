@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -73,6 +74,7 @@ public class OrderService {
     private final UserAddressRepository userAddressRepository;  // Phase 3-D-B: findDefaultAddress 위임
     private final OrderStatusLogRepository orderStatusLogRepository;
     private final AuthFeignClient authFeignClient;
+    private final OrderDeliverySseService orderDeliverySseService;
 
     private static final int ORDER_STATE_WAITING = 1;
     private static final int ORDER_STATE_CANCELED = 2;
@@ -145,6 +147,7 @@ public class OrderService {
         order.setAmount(totalAmount);
         order.setPayState(dto.getPayState());
         order.setOrderState(ORDER_STATE_WAITING);
+        order.setDeliveryState(1);
         orderRepository.saveAndFlush(order);
 
         for (CartItemRes item : items) {
@@ -333,6 +336,16 @@ public class OrderService {
         Integer previousState = order.getDeliveryState();
         order.setDeliveryState(newState);
 
+        OrderDeliveryStatusRes status = new OrderDeliveryStatusRes(
+                order.getOrderId(),
+                order.getOrderState(),
+                getOrderStatusText(order.getOrderState()),
+                newState,
+                deliveryStateText(newState)
+        );
+
+        orderDeliverySseService.sendDeliveryStatus(orderId, status);
+
         return new DeliveryStatusUpdateRes(orderId, previousState, newState);
     }
 
@@ -353,6 +366,70 @@ public class OrderService {
         order.setDeliveryState(3);
         order.setOrderState(6);
 
+        OrderDeliveryStatusRes status = new OrderDeliveryStatusRes(
+                order.getOrderId(),
+                order.getOrderState(),
+                getOrderStatusText(order.getOrderState()),
+                3,
+                deliveryStateText(3)
+        );
+
+        orderDeliverySseService.sendDeliveryStatus(orderId, status);
+
+
+
         return new DeliveryCompleteRes(orderId, 3);
+    }
+
+    //배달 현황 SSE 알림
+    @Transactional(readOnly = true)
+    public OrderDeliveryStatusRes getDeliveryStatus(long callUserNo, Long orderId) {
+        Orders order = orderRepository.findById(orderId)
+                .orElseThrow(()-> new BusinessException("주문을 찾을 수 없습니다", HttpStatus.NOT_FOUND));
+
+        if(!Objects.equals(order.getUserNo(), callUserNo)) {
+            throw new BusinessException("본인 주문만 조회 가능합니다", HttpStatus.FORBIDDEN);
+        }
+
+        Integer orderState = order.getOrderState();
+        Integer deliveryState = order.getDeliveryState() == null ? 1 : order.getDeliveryState();
+
+        return new OrderDeliveryStatusRes(
+                order.getOrderId(),
+                orderState,
+                getOrderStatusText(orderState),
+                deliveryState,
+                deliveryStateText(deliveryState)
+        );
+    }
+
+    private String getOrderStatusText(Integer orderState) {
+        if(orderState == null) return "상태 없음";
+
+        return switch (orderState) {
+            case 1 -> "주문 대기";
+            case 2 -> "주문 취소";
+            case 3 -> "조리 중";
+            case 4 -> "배차 완료";
+            case 5 -> "배달 중";
+            case 6 -> "배달 완료";
+            default -> "상태 없음";
+        };
+    }
+
+    private String deliveryStateText(Integer deliveryState){
+        if(deliveryState == null) return "배달 준비 중";
+
+        return switch (deliveryState) {
+            case 1 -> "배달 준비 중";
+            case 2-> "배달 중";
+            case 3-> "배달 완료";
+            default -> "배달 준비 중";
+        };
+    }
+
+    public SseEmitter subscribeDeliveryStatus(long callUserNo, Long orderId) {
+        getDeliveryStatus(callUserNo, orderId);
+        return orderDeliverySseService.subscribe(orderId);
     }
 }

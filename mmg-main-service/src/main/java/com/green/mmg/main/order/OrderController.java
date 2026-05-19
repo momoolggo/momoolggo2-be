@@ -4,9 +4,11 @@ import com.green.mmg.main.order.model.*;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.model.UserPrincipal;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.util.Map;
@@ -79,4 +81,17 @@ public class OrderController {
         return new ResultResponse<>("재주문: 장바구니 담기 완료", null);
     }
 
+    //배달 현황 SSE 알림
+    @GetMapping("/{orderId}/status")
+    public ResultResponse<OrderDeliveryStatusRes> getDeliveryStatus(@AuthenticationPrincipal UserPrincipal principal,
+                                          @PathVariable Long orderId) {
+        return new ResultResponse<>("배달 현황 조회 성공", orderService.getDeliveryStatus(principal.getSignedUserNo(),orderId));
+    }
+
+    @GetMapping(value = "/{orderId}/status/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter subscribeDeliveryStatus(@AuthenticationPrincipal UserPrincipal principal,
+                                              @PathVariable Long orderId) {
+        return orderService.subscribeDeliveryStatus(principal.getSignedUserNo(), orderId);
+    }
 }
+
