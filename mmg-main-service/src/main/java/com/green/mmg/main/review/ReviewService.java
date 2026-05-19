@@ -37,24 +37,29 @@ public class ReviewService {
     @Transactional
     public void postReview(long user, ReviewReq req) {
         try {
-            long userId = reviewMapper.checkReviewWriter(req);  // orders 도메인 SQL — 영구 잔존
+            long userId = reviewMapper.checkReviewWriter(req);
             if (userId == user) {
                 Review review = new Review();
                 review.setOrderId(req.getOrderId());
                 review.setRating(req.getRating());
                 review.setContents(req.getText());
                 review.setPhoto(req.getImage());
-                // saveAndFlush: 후속 MyBatis findStoreIdByOrderId/updateStoreRating 가시화
-                // BaseEntity Auditing — write_at/amended_at 자동 채움 검증 포인트
                 reviewRepository.saveAndFlush(review);
 
                 long storeId = reviewMapper.findStoreIdByOrderId(req.getOrderId());
                 reviewMapper.updateStoreRating(storeId);
+
+                // 리뷰 작성 시 AI 자동 감지 요청
+                try {
+                    adminFeignClient.autoDetect(review.getReviewId(),
+                            Map.of("content", req.getText() != null ? req.getText() : ""));
+                } catch (Exception e) {
+                    log.warn("AI 자동 감지 요청 실패 reviewId={} error={}", review.getReviewId(), e.getMessage());
+                }
             } else {
                 throw new BusinessException("주문한 사용자가 아닙니다.", HttpStatus.FORBIDDEN);
             }
         } catch (DataIntegrityViolationException e) {
-            // DataIntegrityViolationException은 DuplicateKeyException의 부모 — JPA UNIQUE 위반 모두 포착
             throw new BusinessException("이미 리뷰가 등록되었습니다.", HttpStatus.CONFLICT);
         }
     }
