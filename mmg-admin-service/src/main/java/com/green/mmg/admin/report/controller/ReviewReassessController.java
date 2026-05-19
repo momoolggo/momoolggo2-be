@@ -20,5 +20,14 @@ public class ReviewReassessController {
         return new ResultResponse<>("재판정 완료", null);
     }
 
+    @PostMapping("/{reviewId}/auto-detect")
+    public ResultResponse<?> autoDetect(
+            @PathVariable Long reviewId,
+            @RequestBody AutoDetectReq req) {
+        reassessService.autoDetect(reviewId, req.content());
+        return new ResultResponse<>("자동 감지 완료", null);
+    }
+
     public record ReassessReq(String updatedContent) {}
+    public record AutoDetectReq(String content) {}
 }

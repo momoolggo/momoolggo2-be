@@ -29,4 +29,8 @@ public interface AdminFeignClient {
     @PostMapping("/internal/review/{reviewId}/reassess")
     ResultResponse<Void> reassessReview(@PathVariable("reviewId") Long reviewId,
                                         @RequestBody Map<String, String> req);
+
+    @PostMapping("/internal/review/{reviewId}/auto-detect")
+    ResultResponse<Void> autoDetect(@PathVariable("reviewId") Long reviewId,
+                                    @RequestBody Map<String, String> req);
 }
