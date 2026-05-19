@@ -1,6 +1,7 @@
 package com.green.mmg.main.review;
 
 import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.review.model.GetReviewReq;
 import com.green.mmg.main.review.model.Review;
 import com.green.mmg.main.review.model.ReviewReq;
@@ -30,7 +31,8 @@ import java.util.Map;
 public class ReviewService {
 
     private final ReviewMapper reviewMapper;
-    private final ReviewRepository reviewRepository;  // postReview만
+    private final ReviewRepository reviewRepository;
+    private final AdminFeignClient adminFeignClient;
 
     @Transactional
     public void postReview(long user, ReviewReq req) {
@@ -90,5 +92,16 @@ public class ReviewService {
         if (result == 0) throw new BusinessException("수정 권한이 없거나 리뷰를 찾을 수 없습니다.", HttpStatus.FORBIDDEN);
         long storeId = reviewMapper.findStoreIdByReviewId(reviewId);
         reviewMapper.updateStoreRating(storeId);
+
+        // 블라인드 상태인 리뷰 수정 시 AI 소명 재판정 요청
+        try {
+            Review review = reviewRepository.findById(reviewId).orElse(null);
+            if (review != null && review.isBlinded()) {
+                log.info("블라인드 리뷰 소명 감지 - AI 재판정 요청 reviewId={}", reviewId);
+                adminFeignClient.reassessReview(reviewId, Map.of("updatedContent", contents));
+            }
+        } catch (Exception e) {
+            log.warn("AI 재판정 요청 실패 reviewId={} error={}", reviewId, e.getMessage());
+        }
     }
 }
