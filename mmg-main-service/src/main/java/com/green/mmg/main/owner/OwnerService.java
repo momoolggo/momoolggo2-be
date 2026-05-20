@@ -19,9 +19,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.awt.*;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -38,6 +40,11 @@ public class OwnerService {
     private final MenuOptionCategoryRepository menuOptionCategoryRepository;
     private final AdminFeignClient adminFeignClient;
     private final OwnerOrderSseService ownerOrderSseService;
+
+    private static final int IMAGE_MAX_WIDTH = 1200;
+    private static final int IMAGE_MAX_HEIGHT = 1200;
+    private static final double IMAGE_QUALITY = 0.82;
+    private static final String OPTIMIZED_IMAGE_EXTENSION = ".jpg";
 
     // ORDER_STATE 매핑 (CLAUDE.md §7) — 본 작업 A Group 4에서 3(조리중) 진입 시점만 인용.
     // Q-A9.d (ii) 일관: order_state=4/5 변경 책임 추가 X (admin 시연 수동 변경 가능, ADR-004 박제 범위 좁힘).
@@ -57,15 +64,22 @@ public class OwnerService {
             }
 
             File dir = new File(uploadPath);
-            if (!dir.exists()) dir.mkdirs();
+            if (!dir.exists() && !dir.mkdirs()) {
+                throw new UncheckedIOException(new IOException("upload directory creation failed"));
+            }
 
-            String originalName = file.getOriginalFilename();
-            String fileName = UUID.randomUUID() + "_" + originalName;
-            File savedFile = new File(uploadPath + fileName);
+            BufferedImage image = ImageIO.read(file.getInputStream());
+            if (image == null) {
+                throw new IllegalArgumentException("이미지 파일만 업로드 가능합니다.");
+            }
 
-            Thumbnails.of(file.getInputStream())
-                    .size(800, 600)
-                    .outputQuality(0.8)
+            String fileName = UUID.randomUUID() + OPTIMIZED_IMAGE_EXTENSION;
+            File savedFile = new File(dir, fileName);
+
+            Thumbnails.of(image)
+                    .size(IMAGE_MAX_WIDTH, IMAGE_MAX_HEIGHT)
+                    .outputFormat("jpg")
+                    .outputQuality(IMAGE_QUALITY)
                     .toFile(savedFile);
 
             log.info("이미지 저장 완료: {}", savedFile.getAbsolutePath());
