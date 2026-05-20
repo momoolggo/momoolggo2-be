@@ -42,12 +42,15 @@ public interface StoreMapper {
                                                      @Param("storeName") String storeName,
                                                      @Param("businessNo") String businessNo,
                                                      @Param("date") String date,
-                                                     @Param("ownerIds") List<Long> ownerIds);
+                                                     @Param("ownerIds") List<Long> ownerIds,
+                                                     @Param("category") String category);
 
     long countInternalStoreList(@Param("storeName") String storeName,
                                 @Param("businessNo") String businessNo,
                                 @Param("date") String date,
-                                @Param("ownerIds") List<Long> ownerIds);
+                                @Param("ownerIds") List<Long> ownerIds,
+                                @Param("category") String category);
+
     //관리자 회원관리 가게 주소
     String findStoreLocationByOwnerNo(@Param("ownerNo") long ownerNo);
 

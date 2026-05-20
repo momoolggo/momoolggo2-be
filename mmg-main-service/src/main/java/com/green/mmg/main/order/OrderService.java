@@ -13,6 +13,8 @@ import com.green.mmg.main.internal.dto.DeliveryCompleteRes;
 import com.green.mmg.main.internal.dto.DeliveryStatusUpdateRes;
 import com.green.mmg.main.internal.dto.InternalSettlementOrderListRes;
 import com.green.mmg.main.internal.dto.InternalSettlementOrderRes;
+import com.green.mmg.main.notification.NotificationService;
+import com.green.mmg.main.notification.model.NotificationCreateReq;
 import com.green.mmg.main.order.model.*;
 import com.green.mmg.main.owner.OwnerOrderSseService;
 import lombok.RequiredArgsConstructor;
@@ -75,6 +77,7 @@ public class OrderService {
     private final OrderStatusLogRepository orderStatusLogRepository;
     private final AuthFeignClient authFeignClient;
     private final OrderDeliverySseService orderDeliverySseService;
+    private final NotificationService notificationService;
 
     private static final int ORDER_STATE_WAITING = 1;
     private static final int ORDER_STATE_CANCELED = 2;
@@ -346,6 +349,11 @@ public class OrderService {
 
         orderDeliverySseService.sendDeliveryStatus(orderId, status);
 
+        if(!Objects.equals(previousState, newState)) {
+            sendOrderStatusNotification(order, status);
+        }
+
+
         return new DeliveryStatusUpdateRes(orderId, previousState, newState);
     }
 
@@ -375,10 +383,19 @@ public class OrderService {
         );
 
         orderDeliverySseService.sendDeliveryStatus(orderId, status);
-
-
+        sendOrderStatusNotification(order, status);
 
         return new DeliveryCompleteRes(orderId, 3);
+    }
+
+    private void sendOrderStatusNotification(Orders order, OrderDeliveryStatusRes status) {
+        notificationService.createNotification(new NotificationCreateReq(
+                order.getUserNo(),
+                "DELIVERY_STATUS",
+                "배달 상태 변경",
+                "주문이 " + status.getDeliveryStateText() + " 상태로 변경되었습니다.",
+                "/mypage/orders/" + order.getOrderId()
+        ));
     }
 
     //배달 현황 SSE 알림

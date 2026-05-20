@@ -36,6 +36,7 @@ public class MainSecurityConfig {
                         .requestMatchers("/api/cart/**").hasRole("CUSTOMER")
                         .requestMatchers("/api/order/**").hasRole("CUSTOMER")
                         .requestMatchers("/api/payment/**").hasRole("CUSTOMER")
+                        .requestMatchers("/api/notification/**").hasRole("CUSTOMER")
 
                         // 리뷰 작성/수정/삭제는 인증 (Phase 2-E에서 활성화 예정)
                         .requestMatchers(HttpMethod.POST, "/api/user/review/**").authenticated()

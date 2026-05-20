@@ -40,6 +40,12 @@ spring:
               uri: http://localhost:8080
               predicates:
                 - Path=/api/payment/**
+            - id: main-notification-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/notification/**
+              filters:
+                - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin, RETAIN_FIRST
             - id: main-address-route
               uri: http://localhost:8080
               predicates:

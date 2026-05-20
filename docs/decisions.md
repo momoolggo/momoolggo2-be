@@ -52,19 +52,19 @@
 | **다른 서비스가 이미지 받을 때** | rider/admin이 받아서 Feign으로 main에 전달 | 단일 책임 유지 |
 | **운영 시 전환 계획** | AWS S3 (Phase 6 또는 운영 직전) | 코드 영향 main만 받음 |
 
-### ERD 추가 테이블 (3개)
+### ERD 추가 테이블 (4개)
 
 | 테이블 | 위치 | 결정 이유 |
 |---|---|---|
 | `order_status_log` | my_mmg_main | MSA에서 여러 서비스가 주문 상태 변경 → 이력 추적 필수, 분쟁 처리, 평균 처리시간 통계 |
 | `search_history` | my_mmg_main | 사용자별 최근 검색어, 인기 검색어 통계 |
 | `store_notices` | my_mmg_main | 가게 사장 자율 게시 (휴무, 한정 메뉴), 마케팅 이벤트 기능 일부 흡수 |
+| `notification` | my_mmg_main |  `user_no`는 auth-service 기준 회원번호만 보관하고 사용자 정보 조회는 Feign 사용.고객 사이트 내부 알림 저장. SSE는 실시간 전달, DB는 알림 이력/읽음 처리 보관 |
 
 ### ERD 추가 검토 후 제외한 테이블
 
 | 테이블 | 제외 이유 |
 |---|---|
-| `notifications` | 알림 페이지 미기획, SSE만으로 충분 |
 | `user_devices` | 웹 기반 프로젝트라 FCM 토큰 관리 불필요 |
 | `events` | 마케팅 이벤트 미사용, store_notices가 일부 대체 |
 | `outbox` | Phase 6 고도화 단계로 미룸 |
