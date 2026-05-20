@@ -213,8 +213,11 @@
         s.location AS location,
         s.store_tel AS storeTel,
         s.created_at AS createdAt,
-        s.state AS state
+        s.state AS state,
+        GROUP_CONCAT(DISTINCT c.category_name ORDER BY c.category_name SEPARATOR ', ') AS categoryName
         FROM store s
+        LEFT JOIN store_category sc ON sc.store_id = s.store_id
+        LEFT JOIN category c ON c.category_id = sc.category_id
         <where>
             <if test="storeName != null and storeName != ''">
                 AND s.store_name LIKE CONCAT('%', #{storeName}, '%')
@@ -231,31 +234,20 @@
                     #{ownerId}
                 </foreach>
             </if>
+            <if test="category != null and category != ''">
+                AND c.category_name LIKE CONCAT('%', #{category}, '%')
+            </if>
         </where>
+        GROUP BY
+        s.store_id,
+        s.store_name,
+        s.owner_id,
+        s.location,
+        s.store_tel,
+        s.created_at,
+        s.state
         ORDER BY s.created_at DESC
         LIMIT #{startIdx}, #{size}
-    </select>
-
-    <select id="countInternalStoreList" resultType="long">
-        SELECT COUNT(1)
-        FROM store s
-        <where>
-            <if test="storeName != null and storeName != ''">
-                AND s.store_name LIKE CONCAT('%', #{storeName}, '%')
-            </if>
-            <if test="businessNo != null and businessNo != ''">
-                AND s.business_number LIKE CONCAT('%', #{businessNo}, '%')
-            </if>
-            <if test="date != null and date != ''">
-                AND DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
-            </if>
-            <if test="ownerIds != null and ownerIds.size() > 0">
-                AND s.owner_id IN
-                <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
-                    #{ownerId}
-                </foreach>
-            </if>
-        </where>
     </select>
 
 
@@ -267,10 +259,31 @@
         LIMIT 1
     </select>
 
-    <select id="countStoresByCreatedAtBetween" resultType="long">
-        SELECT COUNT(1)
+    <select id="countInternalStoreList" resultType="long">
+        SELECT COUNT(DISTINCT s.store_id)
         FROM store s
-        WHERE s.created_at >= #{start}
-            AND s.created_at &lt; #{end}
+        LEFT JOIN store_category sc ON sc.store_id = s.store_id
+        LEFT JOIN category c ON c.category_id = sc.category_id
+        <where>
+            <if test="storeName != null and storeName != ''">
+                AND s.store_name LIKE CONCAT('%', #{storeName}, '%')
+            </if>
+            <if test="businessNo != null and businessNo != ''">
+                AND s.business_number LIKE CONCAT('%', #{businessNo}, '%')
+            </if>
+            <if test="date != null and date != ''">
+                AND DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+            </if>
+            <if test="ownerIds != null and ownerIds.size() > 0">
+                AND s.owner_id IN
+                <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                    #{ownerId}
+                </foreach>
+            </if>
+            <if test="category != null and category != ''">
+                AND c.category_name LIKE CONCAT('%', #{category}, '%')
+            </if>
+        </where>
     </select>
+
 </mapper>

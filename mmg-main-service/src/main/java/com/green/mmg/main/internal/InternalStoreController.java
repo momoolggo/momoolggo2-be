@@ -22,9 +22,10 @@ public class InternalStoreController {
             @RequestParam(required = false) String businessNo,
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String date,
-            @RequestParam(required = false) String name) {
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String category) {
         return new ResultResponse<>("가게 목록 조회 완료",
-                storeService.getInternalStoreList(page, size, storeName, businessNo, userId, date, name));
+                storeService.getInternalStoreList(page, size, storeName, businessNo, userId, date, name, category));
     }
 
 

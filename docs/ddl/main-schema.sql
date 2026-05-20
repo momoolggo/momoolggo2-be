@@ -1,6 +1,7 @@
 -- =============================================================
 -- my_mmg_main schema DDL (Phase 2-A)
 -- 원본: my_testmomoolggo (utf8mb4_bin) — 13개 테이블
+-- 추가: notification 테이블 (고객 사이트 내부 알림)
 -- 변경:
 --   1) collation utf8mb4_bin → utf8mb4_unicode_ci (1-B-1과 일관)
 --   2) 외부 FK 5개 DROP (사용자 결정 Q1):
@@ -138,6 +139,8 @@ CREATE TABLE `menu_category` (
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
+
+
 CREATE TABLE `order_detail` (
   `detail_id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '주문상세번호 PK',
   `order_id` bigint(100) NOT NULL COMMENT '주문번호 FK',
@@ -178,6 +181,29 @@ CREATE TABLE `orders` (
   CONSTRAINT `orders_ibfk_2` FOREIGN KEY (`store_id`) REFERENCES `store` (`store_id`) ON DELETE NO ACTION ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=391775460588724 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `notification`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `notification` (
+    `notification_id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '알림 PK',
+    `user_no` bigint(20) NOT NULL COMMENT '고객 회원번호 (my_mmg_auth.user.user_no 논리 FK)',
+    `notification_type` varchar(50) NOT NULL COMMENT '알림 유형',
+    `title` varchar(100) NOT NULL COMMENT '알림 제목',
+    `content` varchar(500) NOT NULL COMMENT '알림 내용',
+    `target_url` varchar(255) DEFAULT NULL COMMENT '클릭 시 이동 경로',
+    `is_read` tinyint(1) NOT NULL DEFAULT 0 COMMENT '읽음 여부',
+    `created_at` datetime NOT NULL DEFAULT current_timestamp() COMMENT '생성일시',
+    `read_at` datetime DEFAULT NULL COMMENT '읽은 일시',
+    PRIMARY KEY (`notification_id`),
+    KEY `idx_notification_user_read_created` (`user_no`,`is_read`,`created_at`),
+    KEY `idx_notification_user_created` (`user_no`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
 
 --
 -- Table structure for table `payment`

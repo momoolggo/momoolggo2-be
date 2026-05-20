@@ -164,7 +164,7 @@ public class StoreService {
                                                          String businessNo,
                                                          String userId,
                                                          String date,
-                                                         String name) {
+                                                         String name, String category) {
         int startIdx = page * size;
 
         List<Long> ownerIds = null;
@@ -178,11 +178,10 @@ public class StoreService {
         }
 
         List<InternalStoreListRes> stores =
-                storeMapper.findInternalStoreList(startIdx, size, storeName, businessNo, date, ownerIds);
+                storeMapper.findInternalStoreList(startIdx, size, storeName, businessNo, date, ownerIds, category);
 
         long totalCount =
-                storeMapper.countInternalStoreList(storeName, businessNo, date, ownerIds);
-
+                storeMapper.countInternalStoreList(storeName, businessNo, date, ownerIds, category);
         if (!stores.isEmpty()) {
             List<Long> storeOwnerIds = stores.stream()
                     .map(InternalStoreListRes::getOwnerId)
