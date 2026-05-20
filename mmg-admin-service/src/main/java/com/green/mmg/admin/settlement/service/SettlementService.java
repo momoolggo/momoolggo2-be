@@ -36,10 +36,17 @@ public class SettlementService {
     // storeId → storeName 맵 생성
     private Map<Long, String> getStoreNameMap() {
         try {
-            InternalStoreListPageRes res = mainFeignClient.getStoreList(0, 200, null).getResultData();
+            InternalStoreListPageRes res = mainFeignClient
+                    .getStoreList(0, 200, null, null, null, null, null)
+                    .getResultData();
+
             if (res == null || res.getContent() == null) return Map.of();
+
             return res.getContent().stream()
-                    .collect(Collectors.toMap(InternalStoreListRes::getStoreId, InternalStoreListRes::getStoreName));
+                    .collect(Collectors.toMap(
+                            InternalStoreListRes::getStoreId,
+                            InternalStoreListRes::getStoreName
+                    ));
         } catch (Exception e) {
             return Map.of();
         }

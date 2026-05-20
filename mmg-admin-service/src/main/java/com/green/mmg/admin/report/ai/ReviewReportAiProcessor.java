@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -38,7 +39,9 @@ public class ReviewReportAiProcessor {
 
     private Map<Long, String> getStoreNameMap() {
         try {
-            InternalStoreListPageRes res = mainFeignClient.getStoreList(0, 200, null).getResultData();
+            InternalStoreListPageRes res = mainFeignClient
+                    .getStoreList(0, 200, null, null, null, null, null)
+                    .getResultData();
             if (res == null || res.getContent() == null) return Map.of();
             return res.getContent().stream()
                     .collect(Collectors.toMap(InternalStoreListRes::getStoreId, InternalStoreListRes::getStoreName));

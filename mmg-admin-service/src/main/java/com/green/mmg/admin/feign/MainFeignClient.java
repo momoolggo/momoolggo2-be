@@ -6,8 +6,6 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 
 import com.green.mmg.admin.dto.feign.InternalStoreListPageRes;
 
@@ -35,8 +33,13 @@ public interface MainFeignClient {
     ResultResponse<InternalStoreListPageRes> getStoreList(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size,
-            @RequestParam(required = false) String date
+            @RequestParam(required = false) String storeName,
+            @RequestParam(required = false) String businessNo,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String name
     );
+
 
     @GetMapping("/internal/stats/chart")
     ResultResponse<List<InternalChartStatsRes>> getChartStats(
@@ -57,10 +60,5 @@ public interface MainFeignClient {
             @RequestParam("endDate") String endDate
     );
 
-    @PostMapping("/internal/notification/customers")
-    void createCustomerNotification(@RequestBody CustomerNotificationReq req);
-
-    @PostMapping("/internal/notification")
-    void createNotification(@RequestBody CustomerNotificationReq req);
 
 }
