@@ -25,9 +25,11 @@ public class AdminStoreController {
             @RequestParam(required = false) String businessNo,
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String date,
-            @RequestParam(required = false) String name
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String category
     ) {
-        return mainFeignClient.getStoreList(page, size, storeName, businessNo, userId, date, name);
+        return mainFeignClient
+                .getStoreList(page, size, storeName, businessNo, userId, date, name, category);
     }
     @GetMapping("/{storeId}")
     public ResultResponse<?> getStoreDetail(@PathVariable Long storeId) {

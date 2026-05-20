@@ -41,7 +41,7 @@ public class ReviewReportAiProcessor {
     private Map<Long, String> getStoreNameMap() {
         try {
             InternalStoreListPageRes res = mainFeignClient
-                    .getStoreList(0, 200, null, null, null, null, null)
+                    .getStoreList(0, 200, null, null, null, null, null, null)
                     .getResultData();
             if (res == null || res.getContent() == null) return Map.of();
             return res.getContent().stream()

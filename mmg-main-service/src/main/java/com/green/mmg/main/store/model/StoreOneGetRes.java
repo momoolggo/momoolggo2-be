@@ -26,4 +26,5 @@ public class StoreOneGetRes {
     private int ratingAvg;
     private int ratingCount;
     private int orderCount;
+    private String category;
 }

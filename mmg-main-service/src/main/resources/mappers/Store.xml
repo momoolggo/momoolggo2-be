@@ -29,9 +29,17 @@
             s.holiday, s.state, s.location, s.detail_location, s.created_at, s.notice,
             s.business_number AS businessNumber, s.bank_name AS bankName,
             s.account_number AS accountNumber, s.account_holder AS accountHolder,
-            s.store_tel, s.rating_avg, s.rating_count, s.order_count
+            s.store_tel, s.rating_avg, s.rating_count, s.order_count,
+            GROUP_CONCAT(DISTINCT c.category_name ORDER BY c.category_name SEPARATOR ', ') AS category
         FROM store s
+        LEFT JOIN store_category sc ON sc.store_id = s.store_id
+        LEFT JOIN category c ON c.category_id = sc.category_id
         WHERE s.store_id = #{id}
+        GROUP BY
+            s.store_id, s.store_name, s.owner_id, s.business_hours, s.min_price, s.store_pic,
+            s.holiday, s.state, s.location, s.detail_location, s.created_at, s.notice,
+            s.business_number, s.bank_name, s.account_number, s.account_holder,
+            s.store_tel, s.rating_avg, s.rating_count, s.order_count
     </select>
 
     <select id="findOwnerApprovalDetail"

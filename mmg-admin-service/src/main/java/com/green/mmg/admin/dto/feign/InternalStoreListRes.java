@@ -16,6 +16,7 @@ public class InternalStoreListRes {
     private String location;
     private String storeTel;
     private Integer state;
+    private String category;
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
