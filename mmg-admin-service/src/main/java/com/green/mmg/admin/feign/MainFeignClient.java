@@ -6,6 +6,8 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import com.green.mmg.admin.dto.feign.InternalStoreListPageRes;
 
@@ -54,5 +56,11 @@ public interface MainFeignClient {
             @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate
     );
+
+    @PostMapping("/internal/notification/customers")
+    void createCustomerNotification(@RequestBody CustomerNotificationReq req);
+
+    @PostMapping("/internal/notification")
+    void createNotification(@RequestBody CustomerNotificationReq req);
 
 }
