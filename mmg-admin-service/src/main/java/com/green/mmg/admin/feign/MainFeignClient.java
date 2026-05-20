@@ -39,7 +39,8 @@ public interface MainFeignClient {
             @RequestParam(required = false) String businessNo,
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String date,
-            @RequestParam(required = false) String name
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String category
     );
 
 
