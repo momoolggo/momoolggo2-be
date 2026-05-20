@@ -7,7 +7,6 @@ import com.green.mmg.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.green.mmg.admin.notification.service.CustomerNotificationService;
 
 import java.util.List;
 
@@ -16,7 +15,6 @@ import java.util.List;
 public class NoticeService {
 
     private final NoticeRepository noticeRepository;
-    private final CustomerNotificationService customerNotificationService;
 
     // 공지 목록 조회
     public List<Notice> getNoticeList() {
@@ -25,9 +23,7 @@ public class NoticeService {
 
     @Transactional
     public void createNotice(NoticeReq req) {
-        Notice notice = noticeRepository.save(new Notice(req));
-
-        customerNotificationService.sendNoticeCreated(notice.getTitle());
+        noticeRepository.save(new Notice(req));
     }
 
     // 공지 수정

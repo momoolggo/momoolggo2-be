@@ -7,7 +7,6 @@ import com.green.mmg.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.green.mmg.admin.notification.service.CustomerNotificationService;
 
 import java.util.List;
 
@@ -16,7 +15,7 @@ import java.util.List;
 public class PolicyService {
 
     private final PolicyRepository policyRepository;
-    private final CustomerNotificationService customerNotificationService;
+
 
     // 정책 목록 조회
     public List<Policy> getPolicyList(String type, Boolean isActive) {
@@ -36,8 +35,6 @@ public class PolicyService {
     @Transactional
     public void createPolicy(PolicyReq req) {
         Policy policy = policyRepository.save(new Policy(req));
-
-        customerNotificationService.sendPolicyChanged(policy.getTitle());
     }
 
     // 정책 수정
@@ -46,8 +43,6 @@ public class PolicyService {
         Policy policy = policyRepository.findById(policyId)
                 .orElseThrow(() -> new ResourceNotFoundException("정책을 찾을 수 없습니다."));
         policy.update(req);
-
-        customerNotificationService.sendPolicyChanged(policy.getTitle());
     }
 
     // 정책 비활성화
@@ -57,6 +52,5 @@ public class PolicyService {
                 .orElseThrow(() -> new ResourceNotFoundException("정책을 찾을 수 없습니다."));
         policy.deactivate();
 
-        customerNotificationService.sendPolicyChanged(policy.getTitle());
     }
 }
