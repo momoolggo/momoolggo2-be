@@ -6,6 +6,7 @@ import com.green.mmg.admin.common.enums.BlindReason;
 import com.green.mmg.admin.dto.feign.InternalReviewRes;
 import com.green.mmg.admin.dto.feign.InternalStoreListPageRes;
 import com.green.mmg.admin.dto.feign.InternalStoreListRes;
+import com.green.mmg.admin.dto.feign.NotificationCreateReq;
 import com.green.mmg.admin.feign.MainFeignClient;
 import com.green.mmg.admin.report.dto.AiReviewJudgement;
 import com.green.mmg.admin.report.entity.AiStatus;
@@ -105,7 +106,8 @@ public class ReviewReportAiProcessor {
                 String storeName = null;
                 String writer = null;
                 Double rating = null;
-                Long reviewUserNo = report.getReporterNo(); // 기본값: 신고자
+                Long reviewUserNo = report.getReporterNo(); // blind 엔티티 non-null용 기본값
+                boolean authorResolved = false;
                 try {
                     InternalReviewRes reviewInfo = mainFeignClient.getReviewById(report.getTargetNo()).getResultData();
                     if (reviewInfo != null) {
@@ -114,6 +116,7 @@ public class ReviewReportAiProcessor {
                         rating = reviewInfo.getRating();
                         if (reviewInfo.getUserNo() != null) {
                             reviewUserNo = reviewInfo.getUserNo(); // 실제 리뷰 작성자
+                            authorResolved = true;
                         }
                     }
                 } catch (Exception e) {
@@ -132,6 +135,21 @@ public class ReviewReportAiProcessor {
                 blindRepository.save(blind);
 
                 log.info("자동 블라인드 완료 reportId={} reviewId={}", reportId, report.getTargetNo());
+
+                // 3. 리뷰 작성자에게 소명 안내 알림 발송 (작성자 확인된 경우만)
+                if (authorResolved) {
+                    try {
+                        NotificationCreateReq notiReq = NotificationCreateReq.reviewBlind(
+                                reviewUserNo, blind.getBlindId(), judgement.reason()
+                        );
+                        mainFeignClient.createNotification(notiReq);
+                        log.info("소명 안내 알림 발송 완료 userNo={} blindId={}", reviewUserNo, blind.getBlindId());
+                    } catch (Exception e) {
+                        log.warn("소명 안내 알림 발송 실패 userNo={}: {}", reviewUserNo, e.getMessage());
+                    }
+                } else {
+                    log.warn("리뷰 작성자 미확인으로 알림 미발송 reviewId={}", report.getTargetNo());
+                }
             } catch (Exception e) {
                 log.error("블라인드 처리 실패 reportId={} error={}", reportId, e.getMessage());
                 report.markBlindFailed(safeMsg(e));

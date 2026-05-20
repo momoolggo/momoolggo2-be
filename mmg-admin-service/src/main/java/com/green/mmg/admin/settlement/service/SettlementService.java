@@ -61,6 +61,7 @@ public class SettlementService {
             targetName = "라이더 #" + s.getTargetNo();
         }
         return new SettlementRes(
+
                 s.getSettlementId(), s.getTargetType(), s.getTargetNo(), targetName,
                 s.getPeriodStart(), s.getPeriodEnd(), s.getItemCount(),
                 s.getGrossAmount(), s.getFeeAmount(), s.getTaxAmount(),
