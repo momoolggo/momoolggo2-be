@@ -20,7 +20,6 @@ import com.green.mmg.rider.rider.RiderService;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
 import com.green.mmg.rider.rider.model.RiderStatus;
 import com.green.mmg.rider.settlement.SettlementService;
-import com.green.mmg.rider.settlement.dto.CalculateReq;
 import com.green.mmg.rider.settlement.dto.ConfirmReq;
 import com.green.mmg.rider.settlement.dto.SettlementRowRes;
 import lombok.RequiredArgsConstructor;
@@ -132,12 +131,8 @@ public class RiderInternalController {
     }
 
     // ─── R7 정산 (admin Feign 호출용) ──────────────────────────
-
-    /** Admin 주간 정산 집계 트리거 (D10-b). 멱등 처리. */
-    @PostMapping("/settlement/calculate")
-    public List<SettlementRowRes> calculateSettlement(@RequestBody CalculateReq req) {
-        return settlementService.calculate(req.periodStart(), req.periodEnd());
-    }
+    // SSE 자동화 트랙(2026-05-21) — admin 수동 calculate 트리거 폐기.
+    // DeliveryService.completeDelivery에서 SettlementService.recalculateThisWeek 자동 호출.
 
     /** Admin PENDING → CONFIRMED. */
     @PostMapping("/settlement/{settlementNo}/confirm")

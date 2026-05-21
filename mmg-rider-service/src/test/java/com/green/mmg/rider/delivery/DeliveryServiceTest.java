@@ -64,6 +64,7 @@ class DeliveryServiceTest {
     @Mock private DeliveryRepository deliveryRepository;
     @Mock private DeliveryLogRepository deliveryLogRepository;
     @Mock private RiderRepository riderRepository;
+    @Mock private com.green.mmg.rider.settlement.SettlementService settlementService;
 
     @InjectMocks private DeliveryService deliveryService;
 
@@ -985,6 +986,8 @@ class DeliveryServiceTest {
             assertThat(delivery.getDeliveredMethod()).isEqualTo("DIRECT");
             assertThat(delivery.getDeliveredPhotoUrl()).isEqualTo("/uploads/delivery/x.jpg");
             assertThat(result.newStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+            // SSE 자동화 트랙 (2026-05-21) — DELIVERED 직후 이번 주 settlement 자동 UPSERT 호출 검증
+            verify(settlementService).recalculateThisWeek(CALLER_RIDER_NO);
         }
 
         @Test

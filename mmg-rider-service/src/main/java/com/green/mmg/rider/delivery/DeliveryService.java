@@ -19,6 +19,7 @@ import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
 import com.green.mmg.rider.rider.RiderRepository;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderStatus;
+import com.green.mmg.rider.settlement.SettlementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -98,6 +99,7 @@ public class DeliveryService {
     private final DeliveryRepository deliveryRepository;
     private final DeliveryLogRepository deliveryLogRepository;
     private final RiderRepository riderRepository;
+    private final SettlementService settlementService;
 
     /**
      * 배달 상태 전환 (화이트리스트 + 권한 + 낙관적 락 + delivery_log INSERT).
@@ -493,13 +495,20 @@ public class DeliveryService {
         return performRiderTransition(deliveryNo, DeliveryStatus.DELIVERING, callerUserNo, null);
     }
 
-    /** DELIVERING → DELIVERED + markDelivered(method, photoUrl). R6 §6.2 PUT /complete */
+    /**
+     * DELIVERING → DELIVERED + markDelivered(method, photoUrl). R6 §6.2 PUT /complete.
+     *
+     * <p>SSE 자동화 트랙(2026-05-21) — DELIVERED transition 직후 이번 주 settlement 자동 UPSERT.
+     * 같은 트랜잭션 안에서 호출 (실패 시 transition도 롤백 = 데이터 정합 유지).</p>
+     */
     @Transactional
     public DeliveryTransitionResult completeDelivery(
             String deliveryNo, long callerUserNo, DeliveryCompleteReq req) {
         validateDeliveredMethod(req.deliveredMethod()); // reviewer W-4 정정 — 화이트리스트 검증
-        return performRiderTransition(deliveryNo, DeliveryStatus.DELIVERED, callerUserNo,
+        DeliveryTransitionResult result = performRiderTransition(deliveryNo, DeliveryStatus.DELIVERED, callerUserNo,
                 d -> d.markDelivered(req.deliveredMethod(), req.deliveredPhotoUrl()));
+        settlementService.recalculateThisWeek(result.riderNo());
+        return result;
     }
 
     /**

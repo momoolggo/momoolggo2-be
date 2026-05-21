@@ -33,12 +33,11 @@ spring.cloud.openfeign.client.config.default:
   connectTimeout: 3000
   readTimeout: 5000
 
-# === D11 (Q-A17 (iii) 정정 2026-05-17): admin approve endpoint 도입 완료 ===
-# auto-approve: 운영 false 기본 (admin 측 PATCH /api/admin/rider/{riderNo}/approve 흐름).
-# - dev 환경 시연 backup: RIDER_AUTO_APPROVE=true override 가능.
-# 관련 ADR: docs/adr/rider/ADR-001-service-boundary.md "임시 운영" 섹션 + Q-A1 (라+) 박제.
+# === D11 정정 (SSE 자동화 트랙, 2026-05-21): admin 신원 승인 흐름 폐기 ===
+# auto-approve: 가입 직후 자동 ACTIVE 전환. dev/prod 동일하게 true.
+# BE dead code 정리는 별 트랙(학원 발표 후).
 rider:
-  auto-approve: ${RIDER_AUTO_APPROVE:false}
+  auto-approve: ${RIDER_AUTO_APPROVE:true}
 
 # mmg-common ConstJwt 바인딩용 — 시크릿/만료는 .env에서 주입 (auth-service와 공유)
 constants:

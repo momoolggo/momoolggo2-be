@@ -7,7 +7,6 @@ import com.green.mmg.admin.dto.feign.RiderInternalNoticeRes;
 import com.green.mmg.admin.dto.feign.RiderLocationRes;
 import com.green.mmg.admin.dto.feign.RiderNoticeRes;
 import com.green.mmg.admin.dto.feign.RiderProfileRes;
-import com.green.mmg.admin.dto.feign.RiderSettlementCalculateReq;
 import com.green.mmg.admin.dto.feign.RiderSettlementConfirmReq;
 import com.green.mmg.admin.dto.feign.RiderSettlementRowRes;
 import com.green.mmg.admin.dto.feign.RiderSuspendReq;
@@ -52,13 +51,8 @@ public interface RiderFeignClient {
     RiderInternalNoticeRes deleteNotice(@PathVariable("noticeId") Long noticeId);
 
     // ─── R7 정산 (Group 5 신설, team-handoff §9 부채 해소) ──────────────────────
-    // Q-A2 (다) path 일관: rider Provider /internal/rider/settlement/* 박제 따름.
-    // Q-A10.c (a) 기존 client 재사용 (dead config 회피 + Group 1.5 패턴 일관).
-    // case-#34 강제: rider Provider 시그니처 1:1 일관 (List<RiderSettlementRowRes> / RiderSettlementRowRes 반환).
-
-    /** 주간 정산 집계 트리거 (D10-b 멱등). rider Provider {@code List<SettlementRowRes>} 반환 일관. */
-    @PostMapping("/internal/rider/settlement/calculate")
-    List<RiderSettlementRowRes> calculateRiderSettlement(@RequestBody RiderSettlementCalculateReq req);
+    // SSE 자동화 트랙(2026-05-21) — calculate 트리거 폐기. rider DeliveryService.completeDelivery에서
+    // SettlementService.recalculateThisWeek 자동 호출 (single source of truth).
 
     /** PENDING → CONFIRMED. rider Provider {@code SettlementRowRes} 반환 일관 (분류 B 자율 정정 — void X). */
     @PostMapping("/internal/rider/settlement/{settlementNo}/confirm")
