@@ -1,6 +1,5 @@
 package com.green.mmg.admin.feign;
 
-import com.green.mmg.admin.dto.feign.RiderApproveReq;
 import com.green.mmg.admin.dto.feign.RiderInternalMonitorRes;
 import com.green.mmg.admin.dto.feign.RiderInternalNoticeReq;
 import com.green.mmg.admin.dto.feign.RiderInternalNoticeRes;
@@ -9,7 +8,6 @@ import com.green.mmg.admin.dto.feign.RiderNoticeRes;
 import com.green.mmg.admin.dto.feign.RiderProfileRes;
 import com.green.mmg.admin.dto.feign.RiderSettlementConfirmReq;
 import com.green.mmg.admin.dto.feign.RiderSettlementRowRes;
-import com.green.mmg.admin.dto.feign.RiderSuspendReq;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -64,17 +62,10 @@ public interface RiderFeignClient {
     List<RiderSettlementRowRes> getRiderSettlementPending();
 
     // ─── §3.1/§3.2 라이더 관리 (Group 8.5 신설, Q-A1 (라+)) ──────
-    // Q-A19 (다) 분리 패턴: admin 외부 endpoint PATCH + rider Internal Feign POST (본 인터페이스).
+    // SSE 자동화 트랙(2026-05-21) — approveRider/suspendRider 폐기 (auto-approve true 박제로 신원 승인 흐름 단일화).
+    // getRiderList는 AdminDeliveryController.getRiderCount에서 사용 중 (라이더 공지 모달).
 
-    /** 라이더 승인 — interfaces.md §3.1. PENDING → ACTIVE 전이 (Q-A20 (가) entity 검증). */
-    @PostMapping("/internal/rider/{riderNo}/approve")
-    void approveRider(@PathVariable("riderNo") Long riderNo, @RequestBody RiderApproveReq req);
-
-    /** 라이더 제재 — interfaces.md §3.2. ?→SUSPENDED 전이 (Q-A20 (가) entity 검증). */
-    @PostMapping("/internal/rider/{riderNo}/suspend")
-    void suspendRider(@PathVariable("riderNo") Long riderNo, @RequestBody RiderSuspendReq req);
-
-    /** 라이더 목록 조회 — interfaces.md §3.5 (Q-A1 (라++) Group 8 신설). status null=전체. List 반환 (case-#36 자가 정정). */
+    /** 라이더 목록 조회 — interfaces.md §3.5. status null=전체. AdminDeliveryController.getRiderCount 잔존 사용처. */
     @GetMapping("/internal/rider/list")
     List<RiderProfileRes> getRiderList(@RequestParam(value = "status", required = false) String status);
 

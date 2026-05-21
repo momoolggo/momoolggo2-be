@@ -43,20 +43,14 @@ public class AdminUserController {
         return authFeignClient.getPendingUsers();
     }
 
-    // 승인/반려 처리 — ADR-001 (D) 라이더/일반 회원 통합 승인 (2026-05-19 정정).
-    // admin 1회 클릭(/admin/user 화면)으로 auth.user.status 변경 + 라이더면 rider.status도 동시 변경.
+    // 승인/반려 처리 — SSE 자동화 트랙(2026-05-21) 정정: auth.user.status 단독 처리.
+    // 라이더 가입 시 rider.status는 auto-approve true로 즉시 ACTIVE 박제 (D11 정정, ADR-001 D 폐기).
     @PatchMapping("/{userNo}/approval")
     public ResultResponse<Void> updateApproval(
             @PathVariable Long userNo,
             @RequestBody UserApprovalReq req
     ) {
-        ResultResponse<Void> authRes = authFeignClient.updateApproval(userNo, req);
-
-        // status=ACTIVE 승인 시점에만 라이더 통합 처리. REJECTED/PENDING은 auth 단독.
-        if ("ACTIVE".equals(req.getStatus())) {
-            riderApprovalService.approveByUserNoIfRider(userNo);
-        }
-        return authRes;
+        return authFeignClient.updateApproval(userNo, req);
     }
 
     // 계정 정지
