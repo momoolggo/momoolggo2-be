@@ -1,7 +1,6 @@
 package com.green.mmg.rider.rider;
 
 import com.green.mmg.common.exception.BusinessException;
-import com.green.mmg.rider.config.RiderProperties;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderProfileReq;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
@@ -27,8 +26,8 @@ import static org.mockito.Mockito.*;
 /**
  * RiderService 단위 테스트 — 가짜 테스트 0건 원칙 (NAJACKS 재발 방지, CLAUDE.md §6.5).
  *
- * <p>커버리지: joinProfile (auto-approve true/false, 중복, vehicle 화이트리스트, blank 검증) +
- * findProfile (happy + NOT_FOUND).</p>
+ * <p>SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 흐름 영구 폐기.
+ * 가입 즉시 ACTIVE 박제 (Rider 생성자), autoApprove toggle / approveRider / suspendRider 테스트 삭제.</p>
  */
 @ExtendWith(MockitoExtension.class)
 class RiderServiceTest {
@@ -36,7 +35,6 @@ class RiderServiceTest {
     private static final long CALLER_USER_NO = 42L;
 
     @Mock private RiderRepository riderRepository;
-    @Mock private RiderProperties riderProperties;
 
     @InjectMocks private RiderService riderService;
 
@@ -57,48 +55,23 @@ class RiderServiceTest {
     class JoinProfile {
 
         @Test
-        @DisplayName("auto-approve true: 신규 Rider INSERT 후 ACTIVE 전환 + save 2회 호출 (D11 임시 블록)")
-        void autoApproveTrue_savesAsActive() {
+        @DisplayName("happy: 신규 Rider INSERT — Rider 생성자에서 status=ACTIVE 직접 박제 (SSE 자동화 트랙)")
+        void happy_savesAsActive() {
             when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
-            when(riderProperties.autoApprove()).thenReturn(true);
-
-            // save가 호출되면 들어온 Rider를 그대로 반환 — riderNo는 미설정 (mock entity)
-            // 그러나 JPA 흐름 상 첫 save는 PENDING 상태, approve() 호출 후 두번째 save는 ACTIVE
             ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
             when(riderRepository.save(riderCaptor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
 
             RiderProfileRes res = riderService.joinProfile(CALLER_USER_NO, validReq());
 
-            // save 호출은 1회 (rider = repo.save(rider) — approve()는 dirty checking)
-            // 다만 본 코드는 명시적으로 두 번째 save를 호출하지 않음 (approve로 상태만 변경)
             verify(riderRepository, times(1)).save(any(Rider.class));
 
             Rider captured = riderCaptor.getValue();
             assertThat(captured.getUserNo()).isEqualTo(CALLER_USER_NO);
             assertThat(captured.getLicenseNo()).isEqualTo("11-22-333333-44");
             assertThat(captured.getVehicleType()).isEqualTo(VehicleType.MOTORBIKE);
-
-            // approve() 적용 후 status ACTIVE
             assertThat(captured.getStatus()).isEqualTo(RiderStatus.ACTIVE);
-
-            // 응답 dto status도 ACTIVE
             assertThat(res.status()).isEqualTo("ACTIVE");
             assertThat(res.userNo()).isEqualTo(CALLER_USER_NO);
-        }
-
-        @Test
-        @DisplayName("auto-approve false: PENDING 유지 — D11 임시 블록 미적용 (admin approve 흐름 정상 운영)")
-        void autoApproveFalse_savesAsPending() {
-            when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
-            when(riderProperties.autoApprove()).thenReturn(false);
-
-            ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
-            when(riderRepository.save(riderCaptor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
-
-            RiderProfileRes res = riderService.joinProfile(CALLER_USER_NO, validReq());
-
-            assertThat(riderCaptor.getValue().getStatus()).isEqualTo(RiderStatus.PENDING);
-            assertThat(res.status()).isEqualTo("PENDING");
         }
 
         @Test
@@ -139,7 +112,6 @@ class RiderServiceTest {
         @DisplayName("vehicleType 4종(WALK/BICYCLE/MOTORBIKE/CAR) 모두 valueOf 변환 성공 + Rider 필드 enum 박제 (R3-a 마이그레이션)")
         void allVehicleTypes_valueOfSuccess() {
             when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
-            when(riderProperties.autoApprove()).thenReturn(false);
 
             ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
             when(riderRepository.save(riderCaptor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -179,18 +151,15 @@ class RiderServiceTest {
         }
     }
 
-    // R5 진입(2026-05-11)으로 GetInternalLocation Nested 제거 — LocationServiceTest로 이전.
-
     @Nested
     @DisplayName("FindProfile")
     class FindProfile {
 
         @Test
-        @DisplayName("happy: 본인 rider 조회 → RiderProfileRes 반환")
+        @DisplayName("happy: 본인 rider 조회 → RiderProfileRes 반환 (가입 즉시 ACTIVE)")
         void happy_returnsDto() {
             Rider rider = new Rider(CALLER_USER_NO, "11-22-333333-44", "2종보통", VehicleType.MOTORBIKE,
                     "신한은행", "110-123-456789", "홍길동");
-            rider.approve();  // ACTIVE
 
             when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
 
@@ -211,69 +180,6 @@ class RiderServiceTest {
             assertThatThrownBy(() -> riderService.findProfile(CALLER_USER_NO))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage("라이더 프로필이 등록되지 않았습니다.")
-                    .extracting(e -> ((BusinessException) e).getStatus())
-                    .isEqualTo(HttpStatus.NOT_FOUND);
-        }
-    }
-
-    @Nested
-    @DisplayName("ApproveRider (Group 8.5 §3.1, Q-A20 (가))")
-    class ApproveRider {
-
-        private static final long RIDER_NO = 5L;
-
-        @Test
-        @DisplayName("happy: PENDING → ACTIVE 전이 + 응답 status ACTIVE")
-        void happy_pendingToActive() {
-            Rider rider = new Rider(CALLER_USER_NO, "lic", "2종보통", VehicleType.MOTORBIKE, "신한", "110-1", "홍길동");
-            when(riderRepository.findById(RIDER_NO)).thenReturn(Optional.of(rider));
-
-            RiderProfileRes res = riderService.approveRider(RIDER_NO);
-
-            assertThat(res.status()).isEqualTo(RiderStatus.ACTIVE.name());
-            assertThat(rider.getStatus()).isEqualTo(RiderStatus.ACTIVE);
-        }
-
-        @Test
-        @DisplayName("부재: findById empty → BusinessException NOT_FOUND")
-        void notFound_throwsNotFound() {
-            when(riderRepository.findById(RIDER_NO)).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> riderService.approveRider(RIDER_NO))
-                    .isInstanceOf(BusinessException.class)
-                    .hasMessage("라이더를 찾을 수 없습니다.")
-                    .extracting(e -> ((BusinessException) e).getStatus())
-                    .isEqualTo(HttpStatus.NOT_FOUND);
-        }
-    }
-
-    @Nested
-    @DisplayName("SuspendRider (Group 8.5 §3.2, Q-A20 (가))")
-    class SuspendRider {
-
-        private static final long RIDER_NO = 5L;
-
-        @Test
-        @DisplayName("happy: ACTIVE → SUSPENDED 전이 + 응답 status SUSPENDED")
-        void happy_activeToSuspended() {
-            Rider rider = new Rider(CALLER_USER_NO, "lic", "2종보통", VehicleType.MOTORBIKE, "신한", "110-1", "홍길동");
-            rider.approve();  // PENDING → ACTIVE 시드
-            when(riderRepository.findById(RIDER_NO)).thenReturn(Optional.of(rider));
-
-            RiderProfileRes res = riderService.suspendRider(RIDER_NO, "위반 사유");
-
-            assertThat(res.status()).isEqualTo(RiderStatus.SUSPENDED.name());
-            assertThat(rider.getStatus()).isEqualTo(RiderStatus.SUSPENDED);
-        }
-
-        @Test
-        @DisplayName("부재: findById empty → BusinessException NOT_FOUND")
-        void notFound_throwsNotFound() {
-            when(riderRepository.findById(RIDER_NO)).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> riderService.suspendRider(RIDER_NO, "사유"))
-                    .isInstanceOf(BusinessException.class)
-                    .hasMessage("라이더를 찾을 수 없습니다.")
                     .extracting(e -> ((BusinessException) e).getStatus())
                     .isEqualTo(HttpStatus.NOT_FOUND);
         }

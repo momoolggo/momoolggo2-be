@@ -80,13 +80,13 @@ class LocationIntegrationTest {
         return Math.abs(System.nanoTime() + ThreadLocalRandom.current().nextLong(1, 10_000));
     }
 
+    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제. PENDING 시드 분기 폐기.
     private Rider seedRider(boolean active) {
         Rider rider = new Rider(
                 uniqueUserNo(),
                 "11-22-" + UUID.randomUUID().toString().substring(0, 6) + "-44",
                 "2종보통", VehicleType.MOTORBIKE,
                 "신한은행", "110-123-456789", "홍길동");
-        if (active) rider.approve();
         Rider saved = riderRepository.saveAndFlush(rider);
         testUserNo = saved.getUserNo();
         testRiderNo = saved.getRiderNo();
@@ -129,20 +129,8 @@ class LocationIntegrationTest {
                 .andExpect(jsonPath("$.updatedAt").exists());
     }
 
-    @Test
-    @DisplayName("PUT /api/rider/location PENDING: 400 BAD_REQUEST + Redis 미저장")
-    void put_pending_returns400() throws Exception {
-        Rider rider = seedRider(false);
-        authenticateAs(rider.getUserNo());
-
-        String body = """
-                {"lat": 35.0, "lng": 128.0}
-                """;
-        mockMvc.perform(put("/api/rider/location").contentType(APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest());
-
-        assertThat(riderLocationStore.get(rider.getRiderNo())).isEmpty();
-    }
+    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제로 PENDING 라이더 시드 불가.
+    // PENDING 거부 검증은 단위 테스트(LocationServiceTest)에서 mock으로 충분. 본 통합 케이스 폐기.
 
     @Test
     @DisplayName("PUT /api/rider/location lat 범위 위반: 400 BAD_REQUEST")

@@ -68,7 +68,6 @@ class DeliveryServiceIntegrationTest {
                 "신한은행",
                 "110-123-456789",
                 "홍길동");
-        rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 

@@ -84,13 +84,13 @@ class RiderInternalControllerIntegrationTest {
         return Math.abs(System.nanoTime() + ThreadLocalRandom.current().nextLong(1, 10_000));
     }
 
+    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제. PENDING 시드 분기 폐기.
     private Rider seedRider(boolean active) {
         Rider rider = new Rider(
                 uniqueUserNo(),
                 "11-22-" + UUID.randomUUID().toString().substring(0, 6) + "-44",
                 "2종보통", VehicleType.MOTORBIKE,
                 "신한은행", "110-123-456789", "홍길동");
-        if (active) rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 
@@ -173,18 +173,8 @@ class RiderInternalControllerIntegrationTest {
         verify(mainInternalClient).updateDeliveryStatus(eq(orderId), any(DeliveryStatusUpdateReq.class));
     }
 
-    @Test
-    @DisplayName("POST /assign rider PENDING: 400 BAD_REQUEST + Main 동기화 미호출")
-    void assign_pendingRider_returns400() throws Exception {
-        Rider rider = seedRider(false);
-        String reqJson = sampleReqJson(2L, rider.getRiderNo());
-
-        mockMvc.perform(post("/internal/rider/assign")
-                        .contentType(APPLICATION_JSON).content(reqJson))
-                .andExpect(status().isBadRequest());
-
-        verify(mainInternalClient, never()).updateDeliveryStatus(any(), any());
-    }
+    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제로 PENDING 라이더 시드 불가.
+    // PENDING 거부 검증은 단위 테스트(DeliveryServiceTest)에서 mock으로 충분. 본 통합 케이스 폐기.
 
     @Test
     @DisplayName("GET /status without progress: 200 + currentDeliveryNo null + status ACTIVE")
