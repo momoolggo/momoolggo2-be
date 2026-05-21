@@ -17,6 +17,7 @@ import com.green.mmg.main.notification.NotificationService;
 import com.green.mmg.main.notification.model.NotificationCreateReq;
 import com.green.mmg.main.order.model.*;
 import com.green.mmg.main.owner.OwnerOrderSseService;
+import com.green.mmg.main.payment.PaymentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -78,9 +79,14 @@ public class OrderService {
     private final AuthFeignClient authFeignClient;
     private final OrderDeliverySseService orderDeliverySseService;
     private final NotificationService notificationService;
+    private final PaymentService paymentService;
 
     private static final int ORDER_STATE_WAITING = 1;
     private static final int ORDER_STATE_CANCELED = 2;
+
+    private static final int PAY_STATE_UNPAID = 1;
+    private static final int PAY_STATE_PAID = 2;
+    private static final int PAY_STATE_REFUNDED = 3;
 
     private static final int DELIVERY_FEE = 1500;
     private final OwnerOrderSseService ownerOrderSseService;
@@ -179,22 +185,45 @@ public class OrderService {
     // 주문 취소
 
     @Transactional
-    public void cancelOrder(long callUserNo,long orderId, OrderCancelReq req) {
+    public void cancelOrder(long callUserNo, long orderId, OrderCancelReq req) {
         Orders order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
-        if(!Objects.equals(order.getUserNo(), callUserNo)) {
-            throw new BusinessException("본인 주문만 취소할 수 있습니다", HttpStatus.FORBIDDEN);
+        if (!Objects.equals(order.getUserNo(), callUserNo)) {
+            throw new BusinessException("본인 주문만 취소할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
 
-        if(!Objects.equals(order.getOrderState(), ORDER_STATE_WAITING)) {
-            throw new BusinessException("가게가 주문을 수락한 이후에는 취소할 수 없습니다", HttpStatus.BAD_REQUEST);
+        if (!Objects.equals(order.getOrderState(), ORDER_STATE_WAITING)) {
+            throw new BusinessException("가게가 주문을 수락한 이후에는 취소할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
 
-        if(req == null || req.getReason() == null || req.getReason().isBlank()) {
-            throw new BusinessException("취소 사유를 선택해 주세요", HttpStatus.BAD_REQUEST);
+        if (req == null || req.getReason() == null || req.getReason().isBlank()) {
+            throw new BusinessException("취소 사유를 선택해 주세요.", HttpStatus.BAD_REQUEST);
         }
+
+        Integer payState = order.getPayState();
+
+        if (Objects.equals(payState, PAY_STATE_REFUNDED)) {
+            throw new BusinessException("이미 환불된 주문입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        boolean refunded = false;
+        if (Objects.equals(payState, PAY_STATE_PAID)) {
+            paymentService.refundPaidOrder(order, req.getReason());
+            refunded = true;
+        } else if (payState == null || Objects.equals(payState, PAY_STATE_UNPAID)) {
+            // 결제 전 주문은 환불 없이 주문 상태만 취소 처리
+        } else {
+            throw new BusinessException("취소할 수 없는 결제 상태입니다.", HttpStatus.BAD_REQUEST);
+        }
+
         order.setOrderState(ORDER_STATE_CANCELED);
+
+        if(refunded) {
+            sendOrderCancelRefundedNotification(order, "주문이 취소되었습니다. 결제 취소는 결제수단에 따라 추가적으로 시일이 소요될 수 있습니다.");
+        } else {
+            sendOrderCancelledNotification(order, "주문이 취소되었습니다.");
+        }
 
         OrderStatusLog log = new OrderStatusLog();
         log.setOrderId(orderId);
@@ -395,6 +424,27 @@ public class OrderService {
                 "배달 상태 변경",
                 "주문이 " + status.getDeliveryStateText() + " 상태로 변경되었습니다.",
                 "/mypage/orders/" + order.getOrderId()
+        ));
+    }
+
+    //주문 취소 및 환불 알림
+    private void sendOrderCancelRefundedNotification(Orders order, String message) {
+        notificationService.createNotification(new NotificationCreateReq(
+                order.getUserNo(),
+                "ORDER_CANCEL_REFUNDED",
+                "주문 취소 및 환불 접수 완료",
+                message,
+                "/order/history/" + order.getOrderId()
+        ));
+    }
+
+    private void sendOrderCancelledNotification(Orders order, String message){
+        notificationService.createNotification(new NotificationCreateReq(
+                order.getUserNo(),
+                "ORDER_CANCELLED",
+                "주문 취소 완료",
+                message,
+                "/order/history/" + order.getOrderId()
         ));
     }
 
