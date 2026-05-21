@@ -91,7 +91,7 @@ class WorkSessionServiceIntegrationTest {
                 "010-1111-1111", "010-2222-2222",
                 "가게 주소", 37.5665, 126.978,
                 "손님 주소", 37.5670, 126.979,
-                3000);
+                3000, 0);
         delivery.assignRider(riderNo);
         delivery.changeStatus(status, LocalDateTime.now());
         return deliveryRepository.saveAndFlush(delivery);

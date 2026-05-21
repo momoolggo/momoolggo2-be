@@ -192,6 +192,19 @@
 
 ---
 
+## 13. main `Owner.xml` 배달료 필드 무의미화 (figma-analysis #21, 2026-05-21 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-main-service` ❌ 팀원 |
+| **위치** | `mmg-main-service/src/main/resources/mappers/Owner.xml:407-408` (배차 요청 SELECT 절 `o.delivery_fee AS baseFee, 0 AS extraFee`) + `RiderAssignReq.java:29-30` 전달 필드 |
+| **경위** | 사용자 보고 "배달비 1500원 고정 표시" 진단 → figma-analysis #21 박제. rider-service에서 좌표 기반 Haversine 동적 산출 도입 (base=1500 고정 + extra=ceil(km)*1000). |
+| **현재 동작** | main이 `o.delivery_fee` (점주가 가게마다 설정한 배달비)를 baseFee로 보내고 있으나 **rider 측에서 silently 무시**. extraFee는 이미 0 고정 박제라 추가 영향 없음. |
+| **권장 처리 (선택사항)** | 1. main 측 `Owner.xml:407-408`을 `0 AS baseFee, 0 AS extraFee`로 단순화 — 불필요한 컬럼 SELECT 제거. 2. 또는 그대로 둬도 작동상 무해 (rider가 무시할 뿐). 3. `o.delivery_fee` 컬럼 자체 용도가 main의 다른 화면(점주 가격 설정 등)에 남아있는지 확인 후 결정. |
+| **참조 (rider 측)** | `DeliveryService.java:171-174` (override 위치) / `DeliveryService.computeExtraFee:524-541` / `RiderInternalAssignReq.java:10-15` javadoc / `docs/adr/rider/figma-analysis.md` 사례 #21 |
+
+---
+
 ## 처리 완료
 
 (팀원 처리 완료 시 이력 박제 — 항목 / 처리 커밋 / 처리일)

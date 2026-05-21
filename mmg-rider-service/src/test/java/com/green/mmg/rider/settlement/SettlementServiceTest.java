@@ -224,10 +224,33 @@ class SettlementServiceTest {
     }
 
     @Test
-    @DisplayName("calculate 멱등: 동일 주 이미 INSERT시 save 미호출 + 기존 행 반환")
-    void calculate_idempotent_skipsSave() {
+    @DisplayName("calculate: existing PENDING → recalculate UPDATE (진행 중 배달 반영) + save 미호출 (dirty checking)")
+    void calculate_existingPending_recalculates() {
         when(riderRepository.findAll()).thenReturn(List.of(rider));
         Settlement existing = mock(Settlement.class);
+        when(existing.getStatus()).thenReturn(SettlementStatus.PENDING);
+        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(any(), any(), any()))
+                .thenReturn(Optional.of(existing));
+        Delivery d = mockDelivery(50000, 0, null, null, null, null);
+        when(deliveryRepository.findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
+                eq(CALLER_RIDER_NO), eq(DeliveryStatus.DELIVERED), any(), any()))
+                .thenReturn(List.of(d, d, d));  // 3건 × 50000 = gross 150000
+
+        settlementService.calculate(LocalDate.of(2026, 5, 4), LocalDate.of(2026, 5, 10));
+
+        verify(settlementRepository, never()).save(any());
+        // 3 × 50000 = 150000 / commission=15000 / tax=(150000-15000)*0.033=4455 /
+        // insurance=5000 / payout=150000-15000-4455-5000=125545
+        verify(existing).recalculate(eq(3), eq(0), eq(150000), eq(0),
+                eq(15000), eq(4455), eq(5000), eq(125545));
+    }
+
+    @Test
+    @DisplayName("calculate: existing CONFIRMED → 그대로 반환 (admin 확정 보호, deliveryRepo 호출 X)")
+    void calculate_existingConfirmed_skipsAggregation() {
+        when(riderRepository.findAll()).thenReturn(List.of(rider));
+        Settlement existing = mock(Settlement.class);
+        when(existing.getStatus()).thenReturn(SettlementStatus.CONFIRMED);
         when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(any(), any(), any()))
                 .thenReturn(Optional.of(existing));
 
@@ -236,6 +259,7 @@ class SettlementServiceTest {
         verify(settlementRepository, never()).save(any());
         verify(deliveryRepository, never()).findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
                 any(), any(), any(), any());
+        verify(existing, never()).recalculate(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     private Delivery mockDelivery(int baseFee, int extraFee,

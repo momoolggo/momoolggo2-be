@@ -34,12 +34,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 배달 도메인 서비스 — Phase 5-R3-b 범위 (상태 머신 + 낙관적 락 + delivery_log INSERT).
@@ -64,6 +66,11 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class DeliveryService {
+
+    /** 배달비 — 2026-05-19 거리 기반 동적 산출 박제 (사용자 결정). */
+    private static final int DELIVERY_BASE_FEE = 1500;        // 모든 배달 고정 기본
+    private static final int FEE_PER_KM = 1000;               // 1km당 추가 (ceil 단위)
+    private static final double EARTH_RADIUS_M = 6_371_000.0; // Haversine 표준
 
     /** ADR-004 line 76-82 화이트리스트 — 7 합법 전이 (사례 #20 정정 일관) */
     private static final Map<DeliveryStatus, Set<DeliveryStatus>> ALLOWED_TRANSITIONS;
@@ -163,13 +170,19 @@ public class DeliveryService {
             }
         }
 
+        // 배달비 거리 기반 동적 산출 (2026-05-19 정정) — main의 req.baseFee/extraFee 무시.
+        // base = 1500 고정, extra = ceil(거리_km) * 1000 (Haversine 직선).
+        int baseFee = DELIVERY_BASE_FEE;
+        int extraFee = computeExtraFee(req.orderId(),
+                req.storeLat(), req.storeLng(), req.deliveryLat(), req.deliveryLng());
+
         String deliveryNo = generateDeliveryNo();
         Delivery delivery = new Delivery(
                 deliveryNo, req.orderId(),
-                req.storePhone(), req.customerPhone(),
+                req.storePhone(), req.customerPhone(), req.storeName(),
                 req.storeAddress(), req.storeLat(), req.storeLng(),
                 req.deliveryAddress(), req.deliveryLat(), req.deliveryLng(),
-                req.baseFee());
+                baseFee, extraFee);
         LocalDateTime now = LocalDateTime.now();
         DeliveryStatus initialStatus;
         if (!isPool) {
@@ -269,6 +282,17 @@ public class DeliveryService {
                 ? deliveryRepository.findAll(pageable)
                 : deliveryRepository.findByStatusIn(group, pageable);
 
+        // 정산 시연 UX 트랙 #9 (2026-05-21) — rider phone 일괄 조회 (N+1 회피)
+        Set<Long> riderNos = result.getContent().stream()
+                .map(Delivery::getRiderNo)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> riderPhones = new HashMap<>();
+        if (!riderNos.isEmpty()) {
+            riderRepository.findAllById(riderNos)
+                    .forEach(r -> riderPhones.put(r.getRiderNo(), r.getPhone()));
+        }
+
         List<RiderInternalMonitorRes.DeliveryRow> rows = result.getContent().stream()
                 .map(d -> {
                     Integer elapsedMinutes = null;
@@ -287,15 +311,18 @@ public class DeliveryService {
                             d.getExtraFee(),
                             d.getAssignedAt(),
                             d.getDeliveredAt(),
-                            null,            // storeName — 추후 메인연동후에  연동
+                            d.getStoreName(),
                             elapsedMinutes,
-                            null);           // distanceKm — 추후 메인 연동후에 연동
+                            computeDistanceKm(d),
+                            d.getRiderNo() != null ? riderPhones.get(d.getRiderNo()) : null);
                 })
                 .toList();
 
         return new RiderInternalMonitorRes(
                 new RiderInternalMonitorRes.Summary(waiting, assigned, delivering, completed),
-                rows);
+                rows,
+                result.getTotalPages(),
+                result.getTotalElements());
     }
 
     // ========================================================================
@@ -504,6 +531,48 @@ public class DeliveryService {
                     "deliveredMethod는 DIRECT/CUSTOMER_REQUEST/CUSTOMER_ABSENT 중 하나입니다.",
                     HttpStatus.BAD_REQUEST);
         }
+    }
+
+    /**
+     * 좌표 기반 추가 배달료 산출 (2026-05-19 박제).
+     * extra_fee = ceil(거리_km) * FEE_PER_KM. Haversine 직선 거리, SettlementService.distanceM 패턴 일관.
+     * 좌표 NULL시 0 fallback + log.warn (운영 무음 손실 추적, W-3).
+     */
+    private int computeExtraFee(Long orderId, Double pickupLat, Double pickupLng, Double deliveryLat, Double deliveryLng) {
+        if (pickupLat == null || pickupLng == null || deliveryLat == null || deliveryLng == null) {
+            log.warn("extraFee=0 fallback: orderId={} 좌표 누락 (pickup=({},{}), delivery=({},{}))",
+                    orderId, pickupLat, pickupLng, deliveryLat, deliveryLng);
+            return 0;
+        }
+        double phi1 = Math.toRadians(pickupLat);
+        double phi2 = Math.toRadians(deliveryLat);
+        double dPhi = Math.toRadians(deliveryLat - pickupLat);
+        double dLambda = Math.toRadians(deliveryLng - pickupLng);
+        double a = Math.sin(dPhi / 2) * Math.sin(dPhi / 2)
+                + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        double distanceM = EARTH_RADIUS_M * c;
+        if (distanceM <= 0) return 0;
+        int km = (int) Math.ceil(distanceM / 1000.0);
+        return km * FEE_PER_KM;
+    }
+
+    /**
+     * Admin 모니터용 표시 거리 (km, 소수 1자리). Haversine 직선, computeExtraFee 공식 인용.
+     * 좌표 NULL시 null 반환 (FE "-" 표시 — log 없음, 화면 정보성 박제).
+     */
+    private Double computeDistanceKm(Delivery d) {
+        Double lat1 = d.getPickupLat(), lng1 = d.getPickupLng();
+        Double lat2 = d.getDeliveryLat(), lng2 = d.getDeliveryLng();
+        if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return null;
+        double phi1 = Math.toRadians(lat1);
+        double phi2 = Math.toRadians(lat2);
+        double dPhi = Math.toRadians(lat2 - lat1);
+        double dLambda = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dPhi / 2) * Math.sin(dPhi / 2)
+                + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return Math.round(EARTH_RADIUS_M * c / 100.0) / 10.0;  // 100m 단위 반올림 → km 소수 1자리
     }
 
     /**

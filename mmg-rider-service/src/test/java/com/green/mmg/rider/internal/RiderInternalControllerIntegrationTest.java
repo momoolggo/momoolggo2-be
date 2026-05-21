@@ -150,7 +150,12 @@ class RiderInternalControllerIntegrationTest {
         assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
         assertThat(saved.getRiderNo()).isEqualTo(rider.getRiderNo());
         assertThat(saved.getAssignedAt()).isNotNull();
-        assertThat(saved.getBaseFee()).isEqualTo(4000);
+        // 사례 #21 (2026-05-19): main이 baseFee=4000/extraFee=1500 보냈으나 rider가 좌표 기반 override.
+        // base = DELIVERY_BASE_FEE(1500) 고정, extra = ceil(0.86km)*1000 = 1000.
+        assertThat(saved.getBaseFee()).isEqualTo(1500);
+        assertThat(saved.getExtraFee()).isEqualTo(1000);
+        // 정산 시연 UX 트랙 #6 (2026-05-21) — req.storeName 스냅샷 박제 검증
+        assertThat(saved.getStoreName()).isEqualTo("맛있는집");
 
         // log 검증
         List<DeliveryLog> logs = deliveryLogRepository.findAll().stream()

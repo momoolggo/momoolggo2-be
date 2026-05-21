@@ -32,8 +32,9 @@
 | 18 | code-reviewer FAIL 검증 (2026-05-19) | "FE WaitingTab의 '배차 수락' 버튼 → BE `accept` endpoint 호출이 풀 잡기 흐름 처리" (FE-BE 명세 정렬 가정) | **거꾸로** — code-reviewer 검증 결과 Critical 2건. `DeliveryService.acceptDelivery:374-378` 박제는 ASSIGNED → ARRIVED_AT_STORE (본인 ASSIGNED 가정), `performRiderTransition:473-474` 권한 검증이 `Objects.equals(NULL, riderNo)` → 403. ADR-004 line 53-56 박제 "Main이 라이더에게 assign"이지만 라이더 풀 모델에서는 라이더 self-claim 필요. claim endpoint 박제 **0건** = HIGH 결함. 본 작업으로 신설: `DeliveryService.claimDelivery` 별 메서드 (performRiderTransition X) + `PUT /api/rider/order/{deliveryNo}/claim` + FE `deliveryService.claim` + WaitingTab "배차 수락" 호출 변경. ACTIVE 라이더만 D8-a 박제 일관. Warning #3~#6 (FE 버튼 의미 / ADMIN cancel reason / Feign timeout / 순서 의존성) 별 트랙. |
 | 19 | claim 신설 후 InProgressTab 다음 단계 버튼 미노출 (2026-05-19) | "InProgressTab은 ASSIGNED 상태 처리" (R6-FE 박제 가정) | **거꾸로** — `InProgressTab.vue:14-26` 박제(reviewer C-1 정정): "ASSIGNED는 accept(R6-FE-3)가 처리하므로 InProgressTab 진입 시점은 ARRIVED부터". 그러나 (D) 작업 claim 흐름은 WAITING_ASSIGN → ASSIGNED만 변경 (ARRIVED 아님). 결과: InProgressTab의 nextAction map에 ASSIGNED 항목 0건 → 버튼 미노출 → 라이더가 가게 도착/픽업/배달 진행 불가. 본 작업으로 ASSIGNED 항목 1줄 추가 + accept 분기 + 박제 주석 정정. R6-FE 박제(C-1 정정) 의도가 (D) 작업으로 무효 — 박제 간 의존성 추적 필요 패턴. |
 | 20 | ARRIVED_AT_STORE 단계 UX 중복 발견 (2026-05-19) | "ADR-004 7-state는 모두 라이더 UX 필요" (ADR-004 박제 가정) | **부분 정정** — Figma 정정 2(7-state 신설)는 박제 정답이나 실제 라이더 UX에서 "가게 도착"(ASSIGNED→ARRIVED_AT_STORE) + "가게 도착 확인"(ARRIVED_AT_STORE→AWAITING_PICKUP) 두 단계 중복. 라이더 관점 "가게 도착 = 픽업 대기 진입"이 자연. 본 작업으로 ARRIVED_AT_STORE 단계 라이더 흐름에서 제외: BE `acceptDelivery` to=AWAITING_PICKUP 직행 + ALLOWED_TRANSITIONS에 `ASSIGNED → AWAITING_PICKUP` 추가 (기존 ARRIVED_AT_STORE 경로 보존). FE InProgressTab map에서 ARRIVED_AT_STORE 항목 + arrive fn 제거. ARRIVED_AT_STORE 상태 enum은 유지 (외부 호출/admin 경로 보존). 정정된 라이더 흐름: ASSIGNED → AWAITING_PICKUP → PICKED_UP → DELIVERING → DELIVERED (5-step). 사용자 보고 "완료 안 됨"의 근본 원인 = ARRIVED_AT_STORE 단계 막힘. |
+| 21 | 배달비 1500 고정 추정 발견 (2026-05-19) | "Figma 정정 4(4000+1500) 박제대로 main이 보내는 baseFee/extraFee가 정산 기준" | **부분 정정** — Figma 정정 4는 박제 정답이나 `Delivery.java:114, 132-133` 박제에서 R6 시점 `extra_fee=0 고정` (main이 보낸 extraFee 무시). 사용자 보고 "배달비 1500원"은 base_fee만 표시 또는 main이 1500 보낸 결과. **사용자 결정 (가) 2026-05-21 확정**: rider-service가 좌표 기반 동적 산출 (base=1500 고정 + extra=ceil(km)*1000). 점주가 가게마다 설정한 `o.delivery_fee`(Owner.xml:407)는 라이더 정산 시 무시 — base 통일이 의도. 변경: Delivery 생성자에 extraFee 추가, DeliveryService.assignDelivery에서 Haversine 거리 → extra_fee 동적 산출. main이 보낸 baseFee/extraFee는 rider 측에서 override. **NULL fallback 결정 (a) 2026-05-21**: 좌표 누락 시 extra=0 + log.warn(orderId, 좌표) — 운영 무음 손실 추적 (W-3). 박제 #Delivery.java:114 정정. 정산 산출은 SettlementService 박제 그대로 (Σ(base+extra) 합산). code-reviewer FAIL 검증 (2026-05-21 agentId `ae9cd242542357d2e`): test 11곳 + 통합 검증 + computeExtraFee 단위 4 case (정상 ceil / NULL / 동일좌표 / 500m 미만) + DeliveryTest 가짜 검증 정정 + RiderInternalAssignReq javadoc + team-handoff §13 등재 일괄 처리. |
 
-**원칙**: 진단 시 가정한 사실은 코드/실행/파일 검증 후 단언. 20건 누적 정착.
+**원칙**: 진단 시 가정한 사실은 코드/실행/파일 검증 후 단언. 21건 누적 정착.
 
 ---
 
@@ -183,7 +184,7 @@ DELIVERED                                → 3 (배달완료)
 - 점주: 배차 요청 → main → Feign rider POST /internal/rider/{n}/assign
   - 라이더 EATING 시 거절 (D8 검증 — 시연 시 일시 EATING 토글)
   - 라이더 ACTIVE 시 ASSIGNED → orders.order_state=5
-- 라이더: PUT /api/rider/order/{id}/accept → ARRIVED_AT_STORE → AWAITING_PICKUP → PICKED_UP → DELIVERING
+- 라이더: PUT /api/rider/order/{id}/claim (풀 모델: WAITING_ASSIGN → ASSIGNED, 사례 #18) → PUT .../accept (ASSIGNED → AWAITING_PICKUP, 사례 #20) → .../pickup → .../depart → DELIVERING
 - 라이더 위치: 5초 간격 PUT /api/rider/location → Redis KV 업데이트
 - Main: 1~2초 tick에서 Redis 조회 → STOMP `/topic/order/{orderId}/location` send
 - 손님 화면: 지도 위 라이더 마커 실시간 이동 확인

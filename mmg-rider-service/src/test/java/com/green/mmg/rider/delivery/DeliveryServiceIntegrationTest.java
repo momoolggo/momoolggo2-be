@@ -113,7 +113,7 @@ class DeliveryServiceIntegrationTest {
                 "010-1111-1111", "010-2222-2222",
                 "가게 주소", 35.1234567890123, 128.4567890123456,
                 "손님 주소", 35.1300000000001, 128.4600000000001,
-                3000);
+                3000, 0);
         if (initialStatus != DeliveryStatus.WAITING_ASSIGN) {
             delivery.changeStatus(initialStatus, LocalDateTime.now());
         }

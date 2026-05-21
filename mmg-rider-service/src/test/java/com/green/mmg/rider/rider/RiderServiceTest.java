@@ -47,7 +47,8 @@ class RiderServiceTest {
                 "MOTORBIKE",
                 "신한은행",
                 "110-123-456789",
-                "홍길동"
+                "홍길동",
+                "010-1234-5678"
         );
     }
 
@@ -121,7 +122,8 @@ class RiderServiceTest {
 
             RiderProfileReq req = new RiderProfileReq(
                     "11-22-333333-44", "1종보통", "HELICOPTER",
-                    "신한은행", "110-123-456789", "홍길동"
+                    "신한은행", "110-123-456789", "홍길동",
+                    "010-1234-5678"
             );
 
             assertThatThrownBy(() -> riderService.joinProfile(CALLER_USER_NO, req))
@@ -145,7 +147,8 @@ class RiderServiceTest {
             for (VehicleType type : VehicleType.values()) {
                 RiderProfileReq req = new RiderProfileReq(
                         "11-22-333333-44", "1종보통", type.name(),
-                        "신한은행", "110-123-456789", "홍길동");
+                        "신한은행", "110-123-456789", "홍길동",
+                        "010-1234-5678");
                 riderService.joinProfile(CALLER_USER_NO, req);
             }
 
@@ -162,7 +165,8 @@ class RiderServiceTest {
 
             RiderProfileReq req = new RiderProfileReq(
                     "  ", "1종보통", "CAR",
-                    "신한은행", "110-123-456789", "홍길동"
+                    "신한은행", "110-123-456789", "홍길동",
+                    "010-1234-5678"
             );
 
             assertThatThrownBy(() -> riderService.joinProfile(CALLER_USER_NO, req))

@@ -14,6 +14,7 @@ public record RiderProfileReq(
         String vehicleType,
         String accountBank,
         String accountNo,
-        String accountHolder
+        String accountHolder,
+        String phone
 ) {
 }

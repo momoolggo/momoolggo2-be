@@ -58,9 +58,14 @@ public class AdminDeliveryController {
         return riderFeignClient.deleteNotice(noticeId);
     }
 
+    /**
+     * 라이더 공지 모달용 총 수신 라이더 수 — ACTIVE 라이더만 카운트.
+     * RiderFeignClient.getRiderList(ACTIVE) 활용 (Q-A1 (라++) §3.5 박제).
+     */
     @GetMapping("/rider-count")
     public ResponseEntity<?> getRiderCount() {
-        return ResponseEntity.ok(Map.of("count", 0));
+        int count = riderFeignClient.getRiderList("ACTIVE").size();
+        return ResponseEntity.ok(Map.of("count", count));
     }
 
     /** Admin 배달 관제 지도용 — TTL 살아있는 라이더 위치 다건 (Group 10, 2026-05-17). */

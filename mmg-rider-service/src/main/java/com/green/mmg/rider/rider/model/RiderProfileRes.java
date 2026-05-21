@@ -16,7 +16,8 @@ public record RiderProfileRes(
         String vehicleType,
         String accountBank,
         String accountNo,
-        String accountHolder
+        String accountHolder,
+        String phone           // 정산 시연 UX 트랙 #9 (2026-05-21, 옵션 A) — admin 배달관리 연결 박제
 ) {
     public static RiderProfileRes from(Rider rider) {
         return new RiderProfileRes(
@@ -28,7 +29,8 @@ public record RiderProfileRes(
                 rider.getVehicleType().name(),
                 rider.getAccountBank(),
                 rider.getAccountNo(),
-                rider.getAccountHolder()
+                rider.getAccountHolder(),
+                rider.getPhone()
         );
     }
 }

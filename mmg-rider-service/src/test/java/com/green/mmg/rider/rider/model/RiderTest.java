@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RiderTest {
 
     @Test
-    @DisplayName("생성자: 필수 필드 + status PENDING 고정")
+    @DisplayName("생성자(7): 필수 필드 + status PENDING 고정 + phone NULL (위임 생성자)")
     void constructor_setsRequiredFields_andStatusPending() {
         Rider rider = new Rider(1L, "12-34-567890-12", "1종보통",
                 VehicleType.MOTORBIKE, "국민", "123456-78-901234", "홍길동");
@@ -28,6 +28,19 @@ class RiderTest {
         assertThat(rider.getAccountNo()).isEqualTo("123456-78-901234");
         assertThat(rider.getAccountHolder()).isEqualTo("홍길동");
         assertThat(rider.getStatus()).isEqualTo(RiderStatus.PENDING);
+        assertThat(rider.getPhone()).isNull();
+    }
+
+    @Test
+    @DisplayName("생성자(8): phone 박제 (정산 시연 UX 트랙 #9, 2026-05-21 옵션 A)")
+    void constructor_8params_setsPhone() {
+        Rider rider = new Rider(1L, "12-34-567890-12", "1종보통",
+                VehicleType.MOTORBIKE, "국민", "123456-78-901234", "홍길동",
+                "010-9999-8888");
+
+        assertThat(rider.getPhone()).isEqualTo("010-9999-8888");
+        assertThat(rider.getStatus()).isEqualTo(RiderStatus.PENDING);
+        assertThat(rider.getUserNo()).isEqualTo(1L);
     }
 
     @Test
