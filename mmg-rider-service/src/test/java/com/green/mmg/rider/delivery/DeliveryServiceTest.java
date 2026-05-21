@@ -718,6 +718,46 @@ class DeliveryServiceTest {
             assertThat(captured.getSort().getOrderFor("assignedAt").getDirection())
                     .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
         }
+
+        @Test
+        @DisplayName("riderPhone 매핑 (W-1 fix): riderNo 있는 행 → riderRepository.findAllById 호출 + phone 반환")
+        void monitor_assignedDeliveries_mapsRiderPhone() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+            Delivery d1 = deliveryWith(DeliveryStatus.ASSIGNED, 5L);
+            Delivery d2 = deliveryWith(DeliveryStatus.DELIVERING, 6L);
+            when(deliveryRepository.findAll(any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(d1, d2)));
+            Rider r5 = mock(Rider.class);
+            Rider r6 = mock(Rider.class);
+            when(r5.getRiderNo()).thenReturn(5L);
+            when(r5.getPhone()).thenReturn("010-1111-2222");
+            when(r6.getRiderNo()).thenReturn(6L);
+            when(r6.getPhone()).thenReturn("010-3333-4444");
+            ArgumentCaptor<Iterable<Long>> idsCaptor = ArgumentCaptor.forClass(Iterable.class);
+            when(riderRepository.findAllById(idsCaptor.capture())).thenReturn(List.of(r5, r6));
+
+            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0);
+
+            assertThat(idsCaptor.getValue()).containsExactlyInAnyOrder(5L, 6L);
+            assertThat(res.deliveries().get(0).riderPhone()).isEqualTo("010-1111-2222");
+            assertThat(res.deliveries().get(1).riderPhone()).isEqualTo("010-3333-4444");
+        }
+
+        @Test
+        @DisplayName("riderPhone 빈 Set (W-1 fix): 모든 행 riderNo=null → findAllById 미호출")
+        void monitor_allRiderNull_skipsRiderLookup() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+            Delivery d1 = deliveryWith(DeliveryStatus.WAITING_ASSIGN, null);
+            Delivery d2 = deliveryWith(DeliveryStatus.WAITING_ASSIGN, null);
+            when(deliveryRepository.findAll(any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(d1, d2)));
+
+            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0);
+
+            verify(riderRepository, never()).findAllById(any());
+            assertThat(res.deliveries().get(0).riderPhone()).isNull();
+            assertThat(res.deliveries().get(1).riderPhone()).isNull();
+        }
     }
 
     // ========================================================================

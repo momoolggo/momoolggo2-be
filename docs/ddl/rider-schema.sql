@@ -171,3 +171,19 @@ ALTER TABLE `notice`
 -- =============================================================
 ALTER TABLE `delivery_log`
   ADD COLUMN IF NOT EXISTS `reason` VARCHAR(20) DEFAULT NULL AFTER `actor_user_no`;
+
+-- =============================================================
+-- Migration: delivery.store_name 컬럼 추가 (정산 시연 UX 트랙 #6, 2026-05-21)
+-- admin 배달관리 화면 가게명 NULL 정정 (RiderInternalAssignReq.storeName 박제 활용).
+-- assignDelivery 시점 스냅샷 박제, 학원 DB 기존 데이터 0건 안전.
+-- =============================================================
+ALTER TABLE `delivery`
+  ADD COLUMN IF NOT EXISTS `store_name` VARCHAR(200) DEFAULT NULL AFTER `customer_phone`;
+
+-- =============================================================
+-- Migration: rider.phone 컬럼 추가 (정산 시연 UX 트랙 #9, 2026-05-21, 옵션 A)
+-- admin 배달관리 화면 라이더 연결(전화) NULL 정정. 가입 시점 snapshot (auth user.tel 별).
+-- joinProfile에서 INSERT, 학원 DB 기존 데이터 마이그레이션은 별 트랙 (NULL 허용).
+-- =============================================================
+ALTER TABLE `rider`
+  ADD COLUMN IF NOT EXISTS `phone` VARCHAR(20) DEFAULT NULL AFTER `account_holder`;

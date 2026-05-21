@@ -55,6 +55,9 @@ public class Delivery extends BaseEntity {
     @Column(name = "customer_phone", length = 20)
     private String customerPhone;
 
+    @Column(name = "store_name", length = 200)
+    private String storeName;
+
     @Column(name = "pickup_address", length = 200)
     private String pickupAddress;
 
@@ -118,11 +121,27 @@ public class Delivery extends BaseEntity {
                     String pickupAddress, Double pickupLat, Double pickupLng,
                     String deliveryAddress, Double deliveryLat, Double deliveryLng,
                     Integer baseFee, Integer extraFee) {
+        this(deliveryNo, orderId, pickupPhone, customerPhone, null,
+                pickupAddress, pickupLat, pickupLng,
+                deliveryAddress, deliveryLat, deliveryLng,
+                baseFee, extraFee);
+    }
+
+    /**
+     * 정산 시연 UX 트랙 #6 (2026-05-21) — storeName 스냅샷 박제용 13 파라미터.
+     * assignDelivery에서 RiderInternalAssignReq.storeName 박제 후 admin 배달관리 화면 표시.
+     */
+    public Delivery(String deliveryNo, Long orderId,
+                    String pickupPhone, String customerPhone, String storeName,
+                    String pickupAddress, Double pickupLat, Double pickupLng,
+                    String deliveryAddress, Double deliveryLat, Double deliveryLng,
+                    Integer baseFee, Integer extraFee) {
         this.deliveryNo = deliveryNo;
         this.orderId = orderId;
         this.status = DeliveryStatus.WAITING_ASSIGN;
         this.pickupPhone = pickupPhone;
         this.customerPhone = customerPhone;
+        this.storeName = storeName;
         this.pickupAddress = pickupAddress;
         this.pickupLat = pickupLat;
         this.pickupLng = pickupLng;

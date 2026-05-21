@@ -16,6 +16,7 @@ public record RiderProfileRes(
         String vehicleType,
         String accountBank,
         String accountNo,
-        String accountHolder
+        String accountHolder,
+        String phone           // 정산 시연 UX 트랙 #9 (2026-05-21) rider Provider 10 필드 동기
 ) {
 }

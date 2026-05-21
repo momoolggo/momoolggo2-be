@@ -59,7 +59,7 @@ public class RiderService {
         validate(req);
         VehicleType vehicleType = parseVehicleType(req.vehicleType());
 
-        // 3. Rider INSERT (status=PENDING)
+        // 3. Rider INSERT (status=PENDING) — 정산 시연 UX 트랙 #9 (2026-05-21) phone 스냅샷 박제
         Rider rider = new Rider(
                 callerUserNo,
                 req.licenseNo(),
@@ -67,7 +67,8 @@ public class RiderService {
                 vehicleType,
                 req.accountBank(),
                 req.accountNo(),
-                req.accountHolder()
+                req.accountHolder(),
+                req.phone()
         );
         rider = riderRepository.save(rider);
 

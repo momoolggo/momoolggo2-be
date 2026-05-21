@@ -56,11 +56,25 @@ public class Rider extends BaseEntity {
     @Column(name = "account_holder", length = 50)
     private String accountHolder;
 
+    @Column(name = "phone", length = 20)
+    private String phone;
+
     /**
-     * 생성자 — 가입 시점 PENDING 고정 (D11 auto-approve로 ACTIVE 전환은 Service에서).
+     * 7 파라미터 생성자 — phone 미입력(NULL) 허용. 기존 테스트 호환 박제.
+     * 신규 가입 흐름은 8 파라미터 생성자 사용 (joinProfile 박제 일관).
      */
     public Rider(Long userNo, String licenseNo, String licenseType, VehicleType vehicleType,
                  String accountBank, String accountNo, String accountHolder) {
+        this(userNo, licenseNo, licenseType, vehicleType,
+                accountBank, accountNo, accountHolder, null);
+    }
+
+    /**
+     * 정산 시연 UX 트랙 #9 (2026-05-21, 옵션 A) — phone 스냅샷 박제용 8 파라미터.
+     * 가입 시점 PENDING 고정 (D11 auto-approve로 ACTIVE 전환은 Service에서).
+     */
+    public Rider(Long userNo, String licenseNo, String licenseType, VehicleType vehicleType,
+                 String accountBank, String accountNo, String accountHolder, String phone) {
         this.userNo = userNo;
         this.licenseNo = licenseNo;
         this.licenseType = licenseType;
@@ -68,6 +82,7 @@ public class Rider extends BaseEntity {
         this.accountBank = accountBank;
         this.accountNo = accountNo;
         this.accountHolder = accountHolder;
+        this.phone = phone;
         this.status = RiderStatus.PENDING;
     }
 
