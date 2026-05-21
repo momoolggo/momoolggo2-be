@@ -32,8 +32,8 @@ public class RiderSettlementController {
         return riderFeignClient.calculateRiderSettlement(req);
     }
 
-    /** PENDING → CONFIRMED. */
-    @PostMapping("/{settlementNo}/confirm")
+    /** PENDING → CONFIRMED. 외부 endpoint PATCH 박제 (Q-A19 (다)) — BlindController/SettlementController/AdminUserController 패턴 일관. Internal Feign(RiderFeignClient)은 interfaces.md §3.3 POST 박제 분리 유지. */
+    @PatchMapping("/{settlementNo}/confirm")
     public RiderSettlementRowRes confirm(@PathVariable Long settlementNo,
                                          @RequestBody RiderSettlementConfirmReq req) {
         return riderFeignClient.confirmRiderSettlement(settlementNo, req);

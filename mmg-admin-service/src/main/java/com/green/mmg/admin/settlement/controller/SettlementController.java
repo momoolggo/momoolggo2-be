@@ -1,16 +1,10 @@
 package com.green.mmg.admin.settlement.controller;
 
-import com.green.mmg.admin.common.enums.SettlementTargetType;
-import com.green.mmg.admin.dto.feign.RiderSettlementConfirmReq;
-import com.green.mmg.admin.feign.RiderFeignClient;
 import com.green.mmg.admin.settlement.dto.SettlementReq;
-import com.green.mmg.admin.settlement.dto.SettlementRes;
 import com.green.mmg.admin.settlement.service.SettlementService;
 import com.green.mmg.common.dto.ResultResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/settlement")
@@ -18,7 +12,6 @@ import java.util.List;
 public class SettlementController {
 
     private final SettlementService settlementService;
-    private final RiderFeignClient riderFeignClient;
 
     // 정산 요약
     @GetMapping("/summary")
@@ -56,18 +49,6 @@ public class SettlementController {
             @PathVariable Long settlementId) {
         settlementService.holdSettlement(settlementId);
         return new ResultResponse<>("정산 보류 처리", null);
-    }
-
-    // 라이더 정산 PENDING 목록
-    @GetMapping("/rider")
-    public ResultResponse<?> getRiderSettlements() {
-        return new ResultResponse<>("라이더 정산 목록", riderFeignClient.getRiderSettlementPending());
-    }
-
-    // 라이더 정산 확정
-    @PostMapping("/rider/{settlementNo}/confirm")
-    public ResultResponse<?> confirmRiderSettlement(@PathVariable Long settlementNo) {
-        return new ResultResponse<>("정산 확정", riderFeignClient.confirmRiderSettlement(settlementNo, new RiderSettlementConfirmReq(1L)));
     }
 
     // 가게별 정산 내역 조회 (internal)
