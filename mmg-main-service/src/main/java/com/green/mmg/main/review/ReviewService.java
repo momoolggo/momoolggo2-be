@@ -95,16 +95,26 @@ public class ReviewService {
     public void updateReview(long userNo, long reviewId, int rating, String contents) {
         int result = reviewMapper.updateReview(reviewId, userNo, rating, contents);
         if (result == 0) throw new BusinessException("수정 권한이 없거나 리뷰를 찾을 수 없습니다.", HttpStatus.FORBIDDEN);
+
         long storeId = reviewMapper.findStoreIdByReviewId(reviewId);
         reviewMapper.updateStoreRating(storeId);
 
         // 블라인드 상태인 리뷰 수정 시 AI 소명 재판정 요청
+        requestReassessmentIfBlinded(reviewId, contents);
+    }
+
+    private void requestReassessmentIfBlinded(long reviewId, String contents) {
         try {
             Review review = reviewRepository.findById(reviewId).orElse(null);
-            if (review != null && review.isBlinded()) {
-                log.info("블라인드 리뷰 소명 감지 - AI 재판정 요청 reviewId={}", reviewId);
-                adminFeignClient.reassessReview(reviewId, Map.of("updatedContent", contents));
+            if (review == null || !review.isBlinded()) {
+                return;
             }
+
+            log.info("블라인드 리뷰 소명 감지 - AI 재판정 요청 reviewId={}", reviewId);
+            adminFeignClient.reassessReview(
+                    reviewId,
+                    Map.of("updatedContent", contents != null ? contents : "")
+            );
         } catch (Exception e) {
             log.warn("AI 재판정 요청 실패 reviewId={} error={}", reviewId, e.getMessage());
         }

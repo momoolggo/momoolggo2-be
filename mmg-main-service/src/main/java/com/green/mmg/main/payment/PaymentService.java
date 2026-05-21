@@ -1,5 +1,6 @@
 package com.green.mmg.main.payment;
 
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.cart.CartDetailRepository;
 import com.green.mmg.main.cart.CartRepository;
 import com.green.mmg.main.order.OrderRepository;
@@ -11,12 +12,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
@@ -49,6 +52,8 @@ public class PaymentService {
     private final CartRepository cartRepository;
     private final CartDetailRepository cartDetailRepository;
 
+    private static final int PAY_STATE_REFUNDED = 3;
+
     @Value("${toss.secret-key}")
     private String secretKey;
 
@@ -76,7 +81,7 @@ public class PaymentService {
         payment.setOrderId(orderId);
         payment.setPaymentKey(req.getPaymentKey());
         payment.setAmount(req.getAmount());
-        payment.setPayState(req.getPayState());
+        payment.setPayState(2);
         paymentRepository.save(payment);
 
         // 4) 주문 상태 = 결제완료 (dirty checking)
@@ -134,6 +139,68 @@ public class PaymentService {
         if (code != 200) {
             throw new RuntimeException((String) response.get("message"));
         }
+        return response;
+    }
+
+    @Transactional
+    public void refundPaidOrder(Orders order, String cancelReason) {
+        if (order.getPayState() != null && order.getPayState() == PAY_STATE_REFUNDED) {
+            throw new BusinessException("이미 환불된 주문입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        PaymentEntity payment = paymentRepository.findFirstByOrderIdOrderByPaymentIdDesc(order.getOrderId())
+                .orElseThrow(() -> new BusinessException("결제 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        if (payment.getPayState() == PAY_STATE_REFUNDED) {
+            throw new BusinessException("이미 환불된 결제입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        try {
+            callTossCancel(payment.getPaymentKey(), cancelReason);
+        } catch (Exception e) {
+            throw new BusinessException("토스 결제 환불에 실패했습니다. " + e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
+
+        order.setPayState(PAY_STATE_REFUNDED);
+        payment.setPayState(PAY_STATE_REFUNDED);
+    }
+
+    protected JSONObject callTossCancel(String paymentKey, String cancelReason) throws Exception {
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("cancelReason", cancelReason);
+
+        String encoded = Base64.getEncoder()
+                .encodeToString((secretKey + ":").getBytes(StandardCharsets.UTF_8));
+
+        String encodedPaymentKey = URLEncoder.encode(paymentKey, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+
+        URL url = new URL("https://api.tosspayments.com/v1/payments/" + encodedPaymentKey + "/cancel");
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestProperty("Authorization", "Basic " + encoded);
+        connection.setRequestProperty("Content-Type", "application/json");
+        connection.setRequestMethod("POST");
+        connection.setDoOutput(true);
+
+        try (OutputStream os = connection.getOutputStream()) {
+            os.write(requestBody.toJSONString().getBytes(StandardCharsets.UTF_8));
+        }
+
+        int code = connection.getResponseCode();
+
+        InputStream responseStream = code == 200
+                ? connection.getInputStream()
+                : connection.getErrorStream();
+
+        JSONObject response;
+        try (Reader reader = new InputStreamReader(responseStream, StandardCharsets.UTF_8)) {
+            response = (JSONObject) new JSONParser().parse(reader);
+        }
+
+        if (code != 200) {
+            throw new RuntimeException((String) response.get("message"));
+        }
+
         return response;
     }
 }
