@@ -188,45 +188,15 @@ Response 4xx:
 
 ## 3. AdminRiderClient (Admin → Rider)
 
-### 3.1 라이더 승인 (Admin → Rider)
+### 3.1 / 3.2 라이더 승인/제재 — ❌ 영구 폐기 (SSE 자동화 트랙, 2026-05-21)
 
-```
-POST /internal/rider/{riderNo}/approve
-Headers: X-Internal: true
-Body:
-  {
-    "approvedByAdminNo": 1
-  }
-Response 200:
-  {
-    "riderNo": 5,
-    "status": "ACTIVE",
-    "approvedAt": "2026-05-05T10:00:00"
-  }
-Response 4xx:
-  - 400 — rider 이미 ACTIVE
-  - 404 — rider not found
-```
+**상태**: 폐기. 사용자 결정 — "두 번 인증 흐름 불필요. 가입 즉시 ACTIVE 단일화".
 
-내부 흐름: rider.status PENDING → ACTIVE (Q2-B, ADR-001)
+- 라이더 가입 시 `Rider` 생성자에서 `status=ACTIVE` 직접 박제 (rider-service)
+- admin `RiderApprovalController` + `RiderFeignClient.approveRider/suspendRider` + rider `RiderInternalController` `/approve`,`/suspend` endpoint + `Rider.approve/suspend` 메서드 + 관련 DTO 모두 삭제
+- 회원 정지/제재는 user 도메인(`AdminUserController.suspendUser` → `user.status SUSPENDED`)으로 단일화
 
-### 3.2 라이더 제재 (Admin → Rider)
-
-```
-POST /internal/rider/{riderNo}/suspend
-Headers: X-Internal: true
-Body:
-  {
-    "suspendedByAdminNo": 1,
-    "reason": "string",
-    "untilAt": "2026-06-05T00:00:00"  // null = 영구
-  }
-Response 200:
-  {
-    "riderNo": 5,
-    "status": "SUSPENDED"
-  }
-```
+자세한 폐기 박제: `docs/adr/rider/ADR-001-service-boundary.md` "임시 운영 (영구 폐기 2026-05-21)" 섹션.
 
 ### 3.3 정산 confirm (Admin → Rider)
 
@@ -287,19 +257,20 @@ Response 200:
 
 ---
 
-### 3.4 정산 집계 (Admin → Rider)
+### 3.4 정산 집계 — ❌ 영구 폐기 (SSE 자동화 트랙, 2026-05-21)
 
-```
-GET /internal/settlement/calculate?periodStart=2026-05-04&periodEnd=2026-05-10
-Headers: X-Internal: true
-Response 200:
-  {
-    "createdSettlements": 5,
-    "settlementIds": [42, 43, 44, 45, 46]
-  }
-```
+**상태**: 폐기. 사용자 결정 — admin 수동 트리거 폐기, 배달 완료 시 자동 UPSERT + SSE push.
 
-내부 흐름: 해당 기간 DELIVERED 배달 집계 → settlement INSERT (status=PENDING). admin이 검토 후 별도 confirm.
+- `DeliveryService.completeDelivery` 끝에 `SettlementService.recalculateThisWeek(riderNo)` 자동 호출 (rider-service 내부)
+- 트랜잭션 commit 후 `SettlementSseRegistry`로 라이더 화면에 SSE push (`GET /api/rider/settlement/stream`)
+- admin은 PENDING 목록 조회(`GET /api/admin/rider-settlement/pending`) + confirm(`PATCH /{settlementNo}/confirm`)만 사용
+
+폐기된 endpoint:
+- rider `POST /internal/rider/settlement/calculate`
+- admin `POST /api/admin/rider-settlement/calculate`
+- admin `RiderFeignClient.calculateRiderSettlement`
+
+자세한 자동화 박제: `docs/adr/rider/ADR-007-settlement.md` "흐름 (SSE 자동화 트랙, 2026-05-21)" 섹션.
 
 ---
 

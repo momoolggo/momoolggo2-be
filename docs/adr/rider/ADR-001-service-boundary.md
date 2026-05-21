@@ -100,58 +100,38 @@
 
 ---
 
-## 임시 운영 (admin-service 도입 전) — D11
+## 임시 운영 (admin-service 도입 전) — D11 (영구 폐기 2026-05-21)
 
-Q2-B 결정 (PENDING → admin 승인 → ACTIVE)은 admin-service의 승인 endpoint
-(`POST /internal/rider/{riderNo}/approve`, interfaces.md §3.1)에 의존한다.
+**상태**: ✅ 영구 폐기 (SSE 자동화 트랙, 2026-05-21).
 
-**제약**: admin-service는 다른 팀원 작업 영역으로 현재 상태 미상. 충돌 회피 위해
-rider-service에서는 admin-service에 어떤 endpoint도 추가/수정/삭제하지 않는다.
+**경위**: Q2-B 결정(PENDING → admin 승인 → ACTIVE)을 위해 admin-service의 승인 endpoint
+(`POST /internal/rider/{riderNo}/approve`, interfaces.md §3.1)에 의존하는 흐름을 임시 우회용 `rider.auto-approve` toggle로 박제했음. 그러나 사용자 결정(2026-05-21) — "두 번 인증 흐름 자체 불필요. 가입 즉시 ACTIVE 단일화".
 
-### 임시 처리 (D11 옵션 A-1: profile toggle)
+### 폐기 내용
 
-`rider-service` `application.yml`에 `rider.auto-approve` toggle 추가:
-- 개발 / 학원 발표: `true` → 가입 직후 자동 ACTIVE 전환
-- 운영 (admin 도입 후): `false` → PENDING 정상 흐름, admin approve 대기
+| 항목 | 이전 박제 | 이후 |
+|---|---|---|
+| `rider.auto-approve` toggle | dev true / prod false | **제거** (Rider 생성자에서 status=ACTIVE 직접 박제) |
+| `RiderService.joinProfile` autoApprove 분기 | toggle 검사 + approve 호출 | **제거** |
+| `Rider.approve()` 메서드 | PENDING → ACTIVE 전이 검증 | **제거** |
+| `Rider.suspend()` 메서드 | ?→SUSPENDED 전이 검증 | **제거** |
+| `RiderService.approveRider/suspendRider` | admin 승인/제재 처리 | **제거** |
+| `RiderInternalController` `/approve/suspend` endpoint | admin Feign 호출 wrapper | **제거** |
+| `RiderApproveReq/RiderSuspendReq` DTO | endpoint Body | **삭제** |
+| admin `RiderApprovalController` + `RiderFeignClient.approveRider/suspendRider` | admin 외부 PATCH + Feign | **삭제** (SSE 트랙 admin 정리 커밋 a781c2b) |
+| `RiderProperties` 클래스 | autoApprove toggle 박제 | **삭제** (사용처 0) |
+| `RiderStatus.PENDING/SUSPENDED` enum 값 | 신원 승인/제재 상태 | **보존** (DB 정합 + DeliveryService/WorkSessionService/LocationService의 거부 검증 의도) |
 
-`RiderService.join()` 내 명시적 블록 + TODO 주석 (Phase 5-R1에서 구현):
+### 보존 의도
 
-```java
-public void join(RiderProfileRequest req, long callerUserNo) {
-    Rider rider = new Rider(callerUserNo, req);
-    rider.setStatus(RiderStatus.PENDING);
-    rider = riderRepository.save(rider);
+- Rider 생성자: `status = RiderStatus.ACTIVE` 직접 박제 (가입 즉시 활성).
+- enum PENDING/SUSPENDED: 학원 DB 기존 데이터 정합 + 단위 테스트에서 거부 검증 mock으로 사용. 미래 회원 정지 흐름(user.status SUSPENDED) 동기화 도입 시 SUSPENDED 재활용 가능.
 
-    // === 임시: admin-service 미도입 시 자동 ACTIVE (D11 옵션 A-1) ===
-    // TODO: admin-service approve endpoint 도입 후 이 블록 제거
-    //       + application.yml `rider.auto-approve: false`
-    if (riderProperties.isAutoApprove()) {
-        rider.setStatus(RiderStatus.ACTIVE);
-        riderRepository.save(rider);
-    }
-}
-```
+### 관련 커밋
 
-```yaml
-# rider-service application.yml
-rider:
-  auto-approve: ${RIDER_AUTO_APPROVE:true}   # 개발/발표 기본 true, 운영 false
-```
-
-### admin 통합 시점 (해소 절차)
-
-admin-service의 승인 endpoint 도입 시:
-1. `application.yml`: `rider.auto-approve: false`
-2. `RiderService.join()` 내 임시 블록 제거 (TODO 주석 trigger)
-3. PENDING 상태 라이더는 admin approve 후 ACTIVE 전환 — interfaces.md §3.1 그대로 활용
-4. tech-debt 해소 표시 — 본 D11 임시 처리 완료
-
-**중요**: 이 임시 처리는 **Q2-C(자동 승인) 결정 변경이 아닌 Q2-B 흐름의 임시 우회**.
-PENDING 상태 자체는 정상 저장되어 admin endpoint 도입 시 즉시 통합 가능.
-
-### tech-debt 등재
-
-- D11 임시 처리 — admin-service approve endpoint 도입 후 `rider.auto-approve: false` 전환 + 임시 블록 제거 (Phase 5 admin-service 진행 동기화 시점)
+- BE rider: SSE 자동화 트랙 Phase 1-A `5ce412e` (auto-approve true), 본 트랙 (Rider entity + RiderService + Controller + Properties + 테스트 정리)
+- BE admin: `a781c2b` (RiderApprovalController/Service approve 흐름 + Feign + DTO 폐기)
+- FE: `01a816c` (AdminRiderView 삭제 + adminService.js 4 API)
 
 ---
 
