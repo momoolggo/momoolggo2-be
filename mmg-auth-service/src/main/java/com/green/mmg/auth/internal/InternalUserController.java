@@ -109,14 +109,35 @@ public class InternalUserController {
                 user.getStatus()
         ));
     }
-    /** 회원 목록 조회 */
+    /** 회원 목록 조회 (검색 조건 포함) */
     @Transactional(readOnly = true)
     @GetMapping("/users/list")
     public ResultResponse<Page<InternalAdminUserRes>> getUserList(
             @RequestParam(required = false) String role,
-            @RequestParam(defaultValue =  "0") int page) {
-        Page<User> users = userRepository.findAllByRole(role, PageRequest.of(page,10));
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        boolean hasSearch = notBlank(userId) || notBlank(name) || notBlank(startDate) || notBlank(endDate);
+        Page<User> users = hasSearch
+                ? userRepository.findAllByFilters(
+                        role, blank2null(userId), blank2null(name),
+                        parseDateStart(startDate), parseDateEnd(endDate),
+                        PageRequest.of(page, 10))
+                : userRepository.findAllByRole(role, PageRequest.of(page, 10));
         return new ResultResponse<>("회원 목록 조회완료", users.map(InternalAdminUserRes::from));
+    }
+
+    private boolean notBlank(String s) { return s != null && !s.isBlank(); }
+    private String blank2null(String s) { return notBlank(s) ? s : null; }
+    private Date parseDateStart(String dateStr) {
+        if (!notBlank(dateStr)) return null;
+        return Date.from(LocalDate.parse(dateStr).atStartOfDay(ZoneId.systemDefault()).toInstant());
+    }
+    private Date parseDateEnd(String dateStr) {
+        if (!notBlank(dateStr)) return null;
+        return Date.from(LocalDate.parse(dateStr).plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant());
     }
 
     /** 승인대기 회원 조회 */

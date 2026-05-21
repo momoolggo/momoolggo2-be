@@ -49,6 +49,25 @@ public interface UserRepository extends JpaRepository<User, Long> {
 """)
     Page<User> findAllByRole(@Param("role") String role, Pageable pageable);
 
+    // 관리자 회원 검색 (userId, name, 날짜 범위 포함)
+    @Query("""
+        SELECT u FROM User u
+        WHERE (:role IS NULL OR u.role = :role)
+        AND (:userId IS NULL OR u.userId LIKE CONCAT('%', :userId, '%'))
+        AND (:name IS NULL OR u.name LIKE CONCAT('%', :name, '%'))
+        AND (:startDate IS NULL OR u.createdAt >= :startDate)
+        AND (:endDate IS NULL OR u.createdAt < :endDate)
+        ORDER BY u.createdAt DESC
+        """)
+    Page<User> findAllByFilters(
+        @Param("role") String role,
+        @Param("userId") String userId,
+        @Param("name") String name,
+        @Param("startDate") Date startDate,
+        @Param("endDate") Date endDate,
+        Pageable pageable
+    );
+
     @Query("""
         SELECT u
         FROM User u
