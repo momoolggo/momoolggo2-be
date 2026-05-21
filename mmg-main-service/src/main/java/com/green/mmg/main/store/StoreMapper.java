@@ -1,6 +1,7 @@
 package com.green.mmg.main.store;
 
 
+import com.green.mmg.main.internal.dto.InternalCategoryOrderStatsRes;
 import com.green.mmg.main.internal.dto.InternalOwnerApprovalDetailRes;
 import com.green.mmg.main.internal.dto.InternalStoreListRes;
 import com.green.mmg.main.store.model.*;
@@ -57,5 +58,8 @@ public interface StoreMapper {
     //기간별 가게 수
     long countStoresByCreatedAtBetween(@Param("start") LocalDateTime start,
                                       @Param("end") LocalDateTime end);
+
+    //카테고리별 주문 수 통계
+    List<InternalCategoryOrderStatsRes> countCategoryOrders();
 
 }

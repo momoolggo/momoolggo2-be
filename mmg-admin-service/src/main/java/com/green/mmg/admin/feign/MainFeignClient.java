@@ -54,6 +54,14 @@ public interface MainFeignClient {
             @RequestParam(defaultValue = "storeCount") String metric
     );
 
+    @GetMapping("/internal/stats/category-orders")
+    ResultResponse<List<InternalCategoryOrderStatsRes>> getCategoryOrderStats();
+
+    @GetMapping("/internal/stats/order-trend")
+    ResultResponse<List<InternalChartStatsRes>> getOrderTrend(
+            @RequestParam(defaultValue = "daily") String period
+    );
+
     @GetMapping("/internal/store/{storeId}")
     ResultResponse<?> getStoreDetail(@PathVariable("storeId") Long storeId);
 

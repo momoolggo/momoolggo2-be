@@ -3,6 +3,7 @@ package com.green.mmg.main.internal;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.feign.AuthFeignClient;
+import com.green.mmg.main.internal.dto.InternalCategoryOrderStatsRes;
 import com.green.mmg.main.internal.dto.InternalChartStatsRes;
 import com.green.mmg.main.internal.dto.InternalDailyStatsRes;
 import com.green.mmg.main.internal.dto.InternalTodayStatsRes;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -104,6 +106,37 @@ public class InternalStatsController {
             default -> throw new BusinessException("metric은 memberCount, storeCount, reviewCount만 가능합니다", HttpStatus.BAD_REQUEST);
         };
     }
+    @Transactional(readOnly = true)
+    @GetMapping("/order-trend")
+    public ResultResponse<List<InternalChartStatsRes>> getOrderTrend(
+            @RequestParam(defaultValue = "daily") String period) {
+        LocalDate today = LocalDate.now();
+        List<InternalChartStatsRes> result = new ArrayList<>();
+
+        if ("daily".equals(period)) {
+            for (int i = 6; i >= 0; i--) {
+                LocalDate day = today.minusDays(i);
+                long count = orderRepository.countTodayOrders(day.atStartOfDay(), day.plusDays(1).atStartOfDay());
+                result.add(new InternalChartStatsRes(formatDateLabel(day), count));
+            }
+        } else if ("weekly".equals(period)) {
+            for (int i = 7; i >= 0; i--) {
+                LocalDate weekStart = today.minusWeeks(i).with(DayOfWeek.MONDAY);
+                LocalDate weekEnd = weekStart.plusWeeks(1);
+                long count = orderRepository.countTodayOrders(weekStart.atStartOfDay(), weekEnd.atStartOfDay());
+                result.add(new InternalChartStatsRes(
+                        weekStart.getMonthValue() + "/" + weekStart.getDayOfMonth(), count));
+            }
+        }
+        return new ResultResponse<>("주문 추이 조회 완료", result);
+    }
+
+    @Transactional(readOnly = true)
+    @GetMapping("/category-orders")
+    public ResultResponse<List<InternalCategoryOrderStatsRes>> getCategoryOrderStats() {
+        return new ResultResponse<>("카테고리별 주문 통계 조회 완료", storeMapper.countCategoryOrders());
+    }
+
     private String formatDateLabel(LocalDate date) {
         String[] days = {"월", "화", "수", "목", "금", "토", "일"};
         return date.getMonthValue() + "/" + date.getDayOfMonth() + "("

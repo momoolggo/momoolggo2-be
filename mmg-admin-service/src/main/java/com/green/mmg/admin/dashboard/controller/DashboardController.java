@@ -28,4 +28,15 @@ public class DashboardController {
             @RequestParam(defaultValue = "storeCount") String metric) {
         return mainFeignClient.getChartStats(period, metric);
     }
+
+    @GetMapping("/category-orders")
+    public ResultResponse<?> getCategoryOrderStats() {
+        return mainFeignClient.getCategoryOrderStats();
+    }
+
+    @GetMapping("/order-trend")
+    public ResultResponse<?> getOrderTrend(
+            @RequestParam(defaultValue = "daily") String period) {
+        return mainFeignClient.getOrderTrend(period);
+    }
 }
