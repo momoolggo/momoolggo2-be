@@ -275,4 +275,5 @@ public class OwnerController {
         return new ResultResponse<>("문의 접수 완료", null);
     }
 
+
 }
