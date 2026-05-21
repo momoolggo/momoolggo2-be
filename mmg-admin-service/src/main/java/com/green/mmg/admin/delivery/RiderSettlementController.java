@@ -1,6 +1,5 @@
 package com.green.mmg.admin.delivery;
 
-import com.green.mmg.admin.dto.feign.RiderSettlementCalculateReq;
 import com.green.mmg.admin.dto.feign.RiderSettlementConfirmReq;
 import com.green.mmg.admin.dto.feign.RiderSettlementRowRes;
 import com.green.mmg.admin.feign.RiderFeignClient;
@@ -26,11 +25,8 @@ public class RiderSettlementController {
 
     private final RiderFeignClient riderFeignClient;
 
-    /** 주간 정산 집계 트리거 (D10-b 멱등). rider Provider /internal/rider/settlement/calculate. */
-    @PostMapping("/calculate")
-    public List<RiderSettlementRowRes> calculate(@RequestBody RiderSettlementCalculateReq req) {
-        return riderFeignClient.calculateRiderSettlement(req);
-    }
+    // SSE 자동화 트랙(2026-05-21) — 수동 calculate 트리거 폐기.
+    // rider DeliveryService.completeDelivery → SettlementService.recalculateThisWeek 자동 호출.
 
     /** PENDING → CONFIRMED. 외부 endpoint PATCH 박제 (Q-A19 (다)) — BlindController/SettlementController/AdminUserController 패턴 일관. Internal Feign(RiderFeignClient)은 interfaces.md §3.3 POST 박제 분리 유지. */
     @PatchMapping("/{settlementNo}/confirm")

@@ -11,12 +11,15 @@ import com.green.mmg.rider.settlement.dto.AccountRes;
 import com.green.mmg.rider.settlement.dto.SettlementRowRes;
 import com.green.mmg.rider.settlement.model.Settlement;
 import com.green.mmg.rider.settlement.model.SettlementStatus;
+import com.green.mmg.rider.settlement.sse.SettlementUpdatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,7 +31,7 @@ import java.util.Objects;
  * <ul>
  *   <li>{@link #findByRiderAndPeriod} — 라이더 본인 정산 내역 (기간 옵션)</li>
  *   <li>{@link #getAccount} / {@link #updateAccount} — 정산 계좌 (Rider entity)</li>
- *   <li>{@link #calculate} — admin 트리거 (Internal) 주간 집계</li>
+ *   <li>{@link #recalculateThisWeek} — 배달 완료 시 자동 UPSERT (SSE 자동화 트랙, 2026-05-21)</li>
  *   <li>{@link #confirm} — admin 트리거 (Internal) PENDING → CONFIRMED</li>
  *   <li>{@link #findPending} — admin 모니터</li>
  * </ul>
@@ -58,6 +61,7 @@ public class SettlementService {
     private final SettlementRepository settlementRepository;
     private final DeliveryRepository deliveryRepository;
     private final RiderRepository riderRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** GET /api/rider/settlement — 라이더 본인 정산 내역 (기간 옵션, 기본 12주). */
     @Transactional(readOnly = true)
@@ -95,50 +99,6 @@ public class SettlementService {
         return new AccountRes(rider.getAccountBank(), rider.getAccountNo(), rider.getAccountHolder());
     }
 
-    /**
-     * Internal — 주간 정산 집계 (D10-b admin 트리거).
-     *
-     * <p>전체 라이더 순회 → 각 라이더의 해당 기간 DELIVERED 배달 집계.
-     * <ul>
-     *   <li>row 없음 → 신규 INSERT (status=PENDING)</li>
-     *   <li>row PENDING → {@link Settlement#recalculate}로 UPDATE (진행 중 배달 즉시 반영)</li>
-     *   <li>row CONFIRMED → 기존 그대로 반환 (admin 확정 보호)</li>
-     * </ul>
-     */
-    public List<SettlementRowRes> calculate(LocalDate periodStart, LocalDate periodEnd) {
-        if (periodStart == null || periodEnd == null) {
-            throw new BusinessException(
-                    "periodStart/periodEnd는 필수입니다.", HttpStatus.BAD_REQUEST);
-        }
-        if (periodEnd.isBefore(periodStart)) {
-            throw new BusinessException(
-                    "periodEnd는 periodStart 이후여야 합니다.", HttpStatus.BAD_REQUEST);
-        }
-        LocalDateTime fromTs = periodStart.atStartOfDay();
-        LocalDateTime toTs = periodEnd.plusDays(1).atStartOfDay();
-
-        List<Rider> riders = riderRepository.findAll();
-        List<SettlementRowRes> result = new java.util.ArrayList<>();
-        for (Rider rider : riders) {
-            Settlement upserted = settlementRepository
-                    .findByRiderNoAndPeriodStartAndPeriodEnd(rider.getRiderNo(), periodStart, periodEnd)
-                    .map(existing -> {
-                        if (existing.getStatus() == SettlementStatus.CONFIRMED) {
-                            return existing;
-                        }
-                        Aggregated agg = aggregate(rider.getRiderNo(), fromTs, toTs);
-                        existing.recalculate(
-                                agg.deliveryCount, agg.totalDistanceM,
-                                agg.totalBaseFee, agg.totalExtraFee,
-                                agg.commission, agg.tax, agg.insurance, agg.payout);
-                        return existing;
-                    })
-                    .orElseGet(() -> calculateAndSave(rider.getRiderNo(), periodStart, periodEnd, fromTs, toTs));
-            result.add(SettlementRowRes.from(upserted));
-        }
-        return result;
-    }
-
     private Settlement calculateAndSave(Long riderNo, LocalDate periodStart, LocalDate periodEnd,
                                          LocalDateTime fromTs, LocalDateTime toTs) {
         Aggregated agg = aggregate(riderNo, fromTs, toTs);
@@ -172,6 +132,59 @@ public class SettlementService {
     private record Aggregated(int deliveryCount, int totalDistanceM,
                               int totalBaseFee, int totalExtraFee,
                               int commission, int tax, int insurance, int payout) {}
+
+    /**
+     * 배달 완료 시점 자동 호출 — 해당 라이더의 이번 주(ISO 월~일) settlement UPSERT.
+     *
+     * <p>SSE 자동화 트랙(2026-05-21) 박제 — admin 수동 트리거 폐기 후 자동 흐름:
+     * <ul>
+     *   <li>row 없음 → 신규 INSERT (PENDING)</li>
+     *   <li>row PENDING → recalculate UPDATE (이번 주 누적 즉시 반영)</li>
+     *   <li>row CONFIRMED → skip (admin 확정 보호)</li>
+     * </ul>
+     * 같은 트랜잭션 안에서 호출 (DeliveryService.completeDelivery REQUIRED 일관).
+     */
+    public Settlement recalculateThisWeek(Long riderNo) {
+        if (riderNo == null) {
+            throw new BusinessException("riderNo는 필수입니다.", HttpStatus.BAD_REQUEST);
+        }
+        LocalDate periodStart = LocalDate.now().with(DayOfWeek.MONDAY);
+        LocalDate periodEnd = periodStart.plusDays(6);
+        LocalDateTime fromTs = periodStart.atStartOfDay();
+        LocalDateTime toTs = periodEnd.plusDays(1).atStartOfDay();
+
+        boolean[] changed = {false};
+        Settlement upserted = settlementRepository
+                .findByRiderNoAndPeriodStartAndPeriodEnd(riderNo, periodStart, periodEnd)
+                .map(existing -> {
+                    if (existing.getStatus() == SettlementStatus.CONFIRMED) {
+                        return existing;  // changed=false, SSE 푸시 skip (admin 확정 보호)
+                    }
+                    Aggregated agg = aggregate(riderNo, fromTs, toTs);
+                    existing.recalculate(
+                            agg.deliveryCount, agg.totalDistanceM,
+                            agg.totalBaseFee, agg.totalExtraFee,
+                            agg.commission, agg.tax, agg.insurance, agg.payout);
+                    changed[0] = true;
+                    return existing;
+                })
+                .orElseGet(() -> {
+                    changed[0] = true;
+                    return calculateAndSave(riderNo, periodStart, periodEnd, fromTs, toTs);
+                });
+
+        // SSE 자동화 트랙(2026-05-21) — 데이터 변경 시에만 푸시 (CONFIRMED skip, reviewer W-1 정정).
+        if (changed[0]) {
+            eventPublisher.publishEvent(new SettlementUpdatedEvent(riderNo, SettlementRowRes.from(upserted)));
+        }
+        return upserted;
+    }
+
+    /** SSE stream endpoint용 — userNo → riderNo 매핑 (라이더 본인 검증). */
+    @Transactional(readOnly = true)
+    public Long findRiderNoByUserNo(Long callerUserNo) {
+        return riderByUserNo(callerUserNo).getRiderNo();
+    }
 
     /** Internal — PENDING → CONFIRMED. admin 검토 후 호출. */
     public SettlementRowRes confirm(Long settlementNo, Long adminNo) {

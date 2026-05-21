@@ -11,6 +11,7 @@ import com.green.mmg.rider.settlement.dto.AccountRes;
 import com.green.mmg.rider.settlement.dto.SettlementRowRes;
 import com.green.mmg.rider.settlement.model.Settlement;
 import com.green.mmg.rider.settlement.model.SettlementStatus;
+import com.green.mmg.rider.settlement.sse.SettlementUpdatedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDate;
@@ -46,6 +48,7 @@ class SettlementServiceTest {
     @Mock private SettlementRepository settlementRepository;
     @Mock private DeliveryRepository deliveryRepository;
     @Mock private RiderRepository riderRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private SettlementService settlementService;
 
@@ -63,10 +66,9 @@ class SettlementServiceTest {
     // ─── 산출 공식 (ADR-007 line 88-93) ────────────────────
 
     @Test
-    @DisplayName("calculate: gross=100000 → commission=10000 / tax=2970 / insurance=5000 / payout=82030")
-    void calculate_formula_baseCase() {
-        when(riderRepository.findAll()).thenReturn(List.of(rider));
-        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(any(), any(), any()))
+    @DisplayName("recalculateThisWeek formula: gross=100000 → commission=10000 / tax=2970 / insurance=5000 / payout=82030")
+    void recalculateThisWeek_formula_gross100000() {
+        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(eq(CALLER_RIDER_NO), any(), any()))
                 .thenReturn(Optional.empty());
 
         Delivery d = mockDelivery(50000, 0, null, null, null, null);
@@ -77,7 +79,7 @@ class SettlementServiceTest {
         ArgumentCaptor<Settlement> captor = ArgumentCaptor.forClass(Settlement.class);
         when(settlementRepository.save(captor.capture())).thenAnswer(i -> i.getArgument(0));
 
-        settlementService.calculate(LocalDate.of(2026, 5, 4), LocalDate.of(2026, 5, 10));
+        settlementService.recalculateThisWeek(CALLER_RIDER_NO);
 
         Settlement saved = captor.getValue();
         assertThat(saved.getTotalBaseFee()).isEqualTo(100000);
@@ -91,10 +93,9 @@ class SettlementServiceTest {
     }
 
     @Test
-    @DisplayName("calculate: 미운행 주(0건) → insurance=0 / payout=0")
-    void calculate_noDeliveries_insuranceZero() {
-        when(riderRepository.findAll()).thenReturn(List.of(rider));
-        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(any(), any(), any()))
+    @DisplayName("recalculateThisWeek: 미운행 주(0건) → insurance=0 / payout=0")
+    void recalculateThisWeek_noDeliveries_insuranceZero() {
+        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(eq(CALLER_RIDER_NO), any(), any()))
                 .thenReturn(Optional.empty());
         when(deliveryRepository.findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
                 eq(CALLER_RIDER_NO), eq(DeliveryStatus.DELIVERED), any(), any()))
@@ -103,7 +104,7 @@ class SettlementServiceTest {
         ArgumentCaptor<Settlement> captor = ArgumentCaptor.forClass(Settlement.class);
         when(settlementRepository.save(captor.capture())).thenAnswer(i -> i.getArgument(0));
 
-        settlementService.calculate(LocalDate.of(2026, 5, 4), LocalDate.of(2026, 5, 10));
+        settlementService.recalculateThisWeek(CALLER_RIDER_NO);
 
         Settlement saved = captor.getValue();
         assertThat(saved.getDeliveryCount()).isEqualTo(0);
@@ -223,43 +224,97 @@ class SettlementServiceTest {
         verify(s, never()).confirm(any(), any());
     }
 
+    // ─── recalculateThisWeek (SSE 자동화 트랙, 2026-05-21) ──────────────
+
     @Test
-    @DisplayName("calculate: existing PENDING → recalculate UPDATE (진행 중 배달 반영) + save 미호출 (dirty checking)")
-    void calculate_existingPending_recalculates() {
-        when(riderRepository.findAll()).thenReturn(List.of(rider));
+    @DisplayName("recalculateThisWeek: row 없음 → 신규 INSERT (PENDING) + 이번 주 ISO 월~일 자동 산출")
+    void recalculateThisWeek_noRow_insertsPending() {
+        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(eq(CALLER_RIDER_NO), any(), any()))
+                .thenReturn(Optional.empty());
+        Delivery d = mockDelivery(50000, 0, null, null, null, null);
+        when(deliveryRepository.findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
+                eq(CALLER_RIDER_NO), eq(DeliveryStatus.DELIVERED), any(), any()))
+                .thenReturn(List.of(d));
+        ArgumentCaptor<Settlement> captor = ArgumentCaptor.forClass(Settlement.class);
+        when(settlementRepository.save(captor.capture())).thenAnswer(i -> i.getArgument(0));
+
+        settlementService.recalculateThisWeek(CALLER_RIDER_NO);
+
+        Settlement saved = captor.getValue();
+        LocalDate expectedMon = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
+        assertThat(saved.getPeriodStart()).isEqualTo(expectedMon);
+        assertThat(saved.getPeriodEnd()).isEqualTo(expectedMon.plusDays(6));
+        assertThat(saved.getStatus()).isEqualTo(SettlementStatus.PENDING);
+        assertThat(saved.getTotalBaseFee()).isEqualTo(50000);
+        assertThat(saved.getDeliveryCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("recalculateThisWeek: PENDING → recalculate UPDATE (save 미호출, dirty checking)")
+    void recalculateThisWeek_pending_recalculates() {
         Settlement existing = mock(Settlement.class);
         when(existing.getStatus()).thenReturn(SettlementStatus.PENDING);
-        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(any(), any(), any()))
+        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(eq(CALLER_RIDER_NO), any(), any()))
                 .thenReturn(Optional.of(existing));
         Delivery d = mockDelivery(50000, 0, null, null, null, null);
         when(deliveryRepository.findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
                 eq(CALLER_RIDER_NO), eq(DeliveryStatus.DELIVERED), any(), any()))
-                .thenReturn(List.of(d, d, d));  // 3건 × 50000 = gross 150000
+                .thenReturn(List.of(d, d));  // 2건 × 50000 = 100000
 
-        settlementService.calculate(LocalDate.of(2026, 5, 4), LocalDate.of(2026, 5, 10));
+        settlementService.recalculateThisWeek(CALLER_RIDER_NO);
 
         verify(settlementRepository, never()).save(any());
-        // 3 × 50000 = 150000 / commission=15000 / tax=(150000-15000)*0.033=4455 /
-        // insurance=5000 / payout=150000-15000-4455-5000=125545
-        verify(existing).recalculate(eq(3), eq(0), eq(150000), eq(0),
-                eq(15000), eq(4455), eq(5000), eq(125545));
+        // gross 100000 / commission=10000 / tax=(100000-10000)*0.033=2970 / insurance=5000 / payout=82030
+        verify(existing).recalculate(eq(2), eq(0), eq(100000), eq(0),
+                eq(10000), eq(2970), eq(5000), eq(82030));
     }
 
     @Test
-    @DisplayName("calculate: existing CONFIRMED → 그대로 반환 (admin 확정 보호, deliveryRepo 호출 X)")
-    void calculate_existingConfirmed_skipsAggregation() {
-        when(riderRepository.findAll()).thenReturn(List.of(rider));
+    @DisplayName("recalculateThisWeek: CONFIRMED → skip (deliveryRepo + save + publishEvent 호출 X, admin 확정 보호)")
+    void recalculateThisWeek_confirmed_skips() {
         Settlement existing = mock(Settlement.class);
         when(existing.getStatus()).thenReturn(SettlementStatus.CONFIRMED);
-        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(any(), any(), any()))
+        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(eq(CALLER_RIDER_NO), any(), any()))
                 .thenReturn(Optional.of(existing));
 
-        settlementService.calculate(LocalDate.of(2026, 5, 4), LocalDate.of(2026, 5, 10));
+        settlementService.recalculateThisWeek(CALLER_RIDER_NO);
 
         verify(settlementRepository, never()).save(any());
         verify(deliveryRepository, never()).findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
                 any(), any(), any(), any());
         verify(existing, never()).recalculate(any(), any(), any(), any(), any(), any(), any(), any());
+        // reviewer W-1 (2026-05-21): CONFIRMED는 데이터 변경 X → 불필요한 FE 렌더링 회피 위해 publishEvent skip 의도 박제.
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("recalculateThisWeek: riderNo null → BAD_REQUEST")
+    void recalculateThisWeek_riderNoNull_badRequest() {
+        assertThatThrownBy(() -> settlementService.recalculateThisWeek(null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getStatus())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        verifyNoInteractions(settlementRepository, deliveryRepository, eventPublisher);
+    }
+
+    @Test
+    @DisplayName("recalculateThisWeek: SettlementUpdatedEvent publishEvent — AFTER_COMMIT 리스너가 SSE 푸시")
+    void recalculateThisWeek_publishesEvent() {
+        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(eq(CALLER_RIDER_NO), any(), any()))
+                .thenReturn(Optional.empty());
+        Delivery d = mockDelivery(50000, 0, null, null, null, null);
+        when(deliveryRepository.findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
+                eq(CALLER_RIDER_NO), eq(DeliveryStatus.DELIVERED), any(), any()))
+                .thenReturn(List.of(d));
+        when(settlementRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        settlementService.recalculateThisWeek(CALLER_RIDER_NO);
+
+        ArgumentCaptor<SettlementUpdatedEvent> eventCaptor = ArgumentCaptor.forClass(SettlementUpdatedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        SettlementUpdatedEvent event = eventCaptor.getValue();
+        assertThat(event.riderNo()).isEqualTo(CALLER_RIDER_NO);
+        assertThat(event.payload().totalBaseFee()).isEqualTo(50000);
     }
 
     private Delivery mockDelivery(int baseFee, int extraFee,
