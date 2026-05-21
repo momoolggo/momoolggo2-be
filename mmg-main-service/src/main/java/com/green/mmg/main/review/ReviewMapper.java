@@ -45,6 +45,15 @@ public interface ReviewMapper {
             @Param("size") int size
     );
 
+    // 전체 리뷰 목록 (검색 조건 포함)
+    List<InternalReviewListRes> searchInternalReviewList(
+            @Param("storeName") String storeName,
+            @Param("startDate") String startDate,
+            @Param("endDate") String endDate,
+            @Param("startIdx") int startIdx,
+            @Param("size") int size
+    );
+
     // 리뷰 단건 조회 (internal)
     InternalReviewListRes findInternalReviewById(@Param("reviewId") Long reviewId);
 

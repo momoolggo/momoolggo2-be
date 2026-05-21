@@ -129,6 +129,34 @@
         LIMIT #{startIdx}, #{size}
     </select>
 
+    <!-- 전체 리뷰 검색 (storeName, 날짜 범위) -->
+    <select id="searchInternalReviewList" resultType="com.green.mmg.main.internal.dto.InternalReviewListRes">
+        SELECT
+            r.review_id AS reviewId,
+            s.store_name AS storeName,
+            o.user_no AS userNo,
+            '' AS writer,
+            r.contents AS content,
+            r.rating AS rating,
+            r.written_at AS createdAt
+        FROM review r
+        JOIN orders o ON o.order_id = r.order_id
+        JOIN store s ON s.store_id = o.store_id
+        <where>
+            <if test="storeName != null and storeName != ''">
+                AND s.store_name LIKE CONCAT('%', #{storeName}, '%')
+            </if>
+            <if test="startDate != null and startDate != ''">
+                AND r.written_at &gt;= #{startDate}
+            </if>
+            <if test="endDate != null and endDate != ''">
+                AND r.written_at &lt;= CONCAT(#{endDate}, ' 23:59:59')
+            </if>
+        </where>
+        ORDER BY r.written_at DESC
+        LIMIT #{startIdx}, #{size}
+    </select>
+
     <!-- 리뷰 단건 조회 (internal) -->
     <select id="findInternalReviewById" resultType="com.green.mmg.main.internal.dto.InternalReviewListRes">
         SELECT
