@@ -14,11 +14,15 @@ public class BlindController {
 
     private final BlindService blindService;
 
-    // 블라인드 목록 조회
+    // 블라인드 목록 조회 (검색 조건 포함)
     @GetMapping
     public ResultResponse<?> getBlindList(
-            @RequestParam(required = false) BlindStatus status) {
-        return new ResultResponse<>("조회 성공", blindService.getBlindList(status));
+            @RequestParam(required = false) BlindStatus status,
+            @RequestParam(required = false) String storeName,
+            @RequestParam(required = false) String writer,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        return new ResultResponse<>("조회 성공", blindService.getBlindList(status, storeName, writer, startDate, endDate));
     }
 
     // 블라인드 상세 조회
