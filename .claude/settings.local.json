@@ -5,7 +5,8 @@
       "Bash(./gradlew :mmg-admin-service:compileJava -x test)",
       "Bash(./gradlew :mmg-auth-service:compileJava :mmg-main-service:compileJava -x test)",
       "mcp__claude_ai_Notion__notion-search",
-      "mcp__claude_ai_Notion__notion-create-pages"
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "Bash(npm install *)"
     ]
   }
 }
