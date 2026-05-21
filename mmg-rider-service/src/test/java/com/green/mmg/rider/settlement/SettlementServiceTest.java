@@ -270,7 +270,7 @@ class SettlementServiceTest {
     }
 
     @Test
-    @DisplayName("recalculateThisWeek: CONFIRMED → skip (deliveryRepo + save 호출 X, admin 확정 보호)")
+    @DisplayName("recalculateThisWeek: CONFIRMED → skip (deliveryRepo + save + publishEvent 호출 X, admin 확정 보호)")
     void recalculateThisWeek_confirmed_skips() {
         Settlement existing = mock(Settlement.class);
         when(existing.getStatus()).thenReturn(SettlementStatus.CONFIRMED);
@@ -283,6 +283,8 @@ class SettlementServiceTest {
         verify(deliveryRepository, never()).findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
                 any(), any(), any(), any());
         verify(existing, never()).recalculate(any(), any(), any(), any(), any(), any(), any(), any());
+        // reviewer W-1 (2026-05-21): CONFIRMED는 데이터 변경 X → 불필요한 FE 렌더링 회피 위해 publishEvent skip 의도 박제.
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

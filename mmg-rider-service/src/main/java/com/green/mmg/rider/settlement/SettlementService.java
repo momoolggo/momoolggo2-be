@@ -31,7 +31,7 @@ import java.util.Objects;
  * <ul>
  *   <li>{@link #findByRiderAndPeriod} — 라이더 본인 정산 내역 (기간 옵션)</li>
  *   <li>{@link #getAccount} / {@link #updateAccount} — 정산 계좌 (Rider entity)</li>
- *   <li>{@link #calculate} — admin 트리거 (Internal) 주간 집계</li>
+ *   <li>{@link #recalculateThisWeek} — 배달 완료 시 자동 UPSERT (SSE 자동화 트랙, 2026-05-21)</li>
  *   <li>{@link #confirm} — admin 트리거 (Internal) PENDING → CONFIRMED</li>
  *   <li>{@link #findPending} — admin 모니터</li>
  * </ul>
@@ -153,23 +153,30 @@ public class SettlementService {
         LocalDateTime fromTs = periodStart.atStartOfDay();
         LocalDateTime toTs = periodEnd.plusDays(1).atStartOfDay();
 
+        boolean[] changed = {false};
         Settlement upserted = settlementRepository
                 .findByRiderNoAndPeriodStartAndPeriodEnd(riderNo, periodStart, periodEnd)
                 .map(existing -> {
                     if (existing.getStatus() == SettlementStatus.CONFIRMED) {
-                        return existing;
+                        return existing;  // changed=false, SSE 푸시 skip (admin 확정 보호)
                     }
                     Aggregated agg = aggregate(riderNo, fromTs, toTs);
                     existing.recalculate(
                             agg.deliveryCount, agg.totalDistanceM,
                             agg.totalBaseFee, agg.totalExtraFee,
                             agg.commission, agg.tax, agg.insurance, agg.payout);
+                    changed[0] = true;
                     return existing;
                 })
-                .orElseGet(() -> calculateAndSave(riderNo, periodStart, periodEnd, fromTs, toTs));
+                .orElseGet(() -> {
+                    changed[0] = true;
+                    return calculateAndSave(riderNo, periodStart, periodEnd, fromTs, toTs);
+                });
 
-        // SSE 자동화 트랙(2026-05-21) — 트랜잭션 commit 후 라이더 화면 푸시 (@TransactionalEventListener AFTER_COMMIT).
-        eventPublisher.publishEvent(new SettlementUpdatedEvent(riderNo, SettlementRowRes.from(upserted)));
+        // SSE 자동화 트랙(2026-05-21) — 데이터 변경 시에만 푸시 (CONFIRMED skip, reviewer W-1 정정).
+        if (changed[0]) {
+            eventPublisher.publishEvent(new SettlementUpdatedEvent(riderNo, SettlementRowRes.from(upserted)));
+        }
         return upserted;
     }
 
