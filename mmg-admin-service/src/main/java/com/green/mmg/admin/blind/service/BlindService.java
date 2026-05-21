@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -31,11 +32,14 @@ public class BlindService {
     @Autowired(required = false)
     private AuthFeignClient authFeignClient;
 
-    // 블라인드 목록 조회
-    public List<BlindRes> getBlindList(BlindStatus status) {
-        List<Blind> blinds = status != null
-                ? blindRepository.findByStatus(status)
-                : blindRepository.findAll();
+    // 블라인드 목록 조회 (검색 조건 포함)
+    public List<BlindRes> getBlindList(BlindStatus status, String storeName, String writer, String startDate, String endDate) {
+        boolean hasSearch = notBlank(storeName) || notBlank(writer) || notBlank(startDate) || notBlank(endDate);
+
+        List<Blind> blinds = hasSearch
+                ? blindRepository.search(status, blank2null(storeName), blank2null(writer),
+                        parseDate(startDate, false), parseDate(endDate, true))
+                : (status != null ? blindRepository.findByStatus(status) : blindRepository.findAll());
 
         List<Long> userNos = blinds.stream()
                 .map(Blind::getUserNo)
@@ -144,5 +148,11 @@ public class BlindService {
         expiredList.forEach(Blind::suspend);
     }
 
-
+    private boolean notBlank(String s) { return s != null && !s.isBlank(); }
+    private String blank2null(String s) { return notBlank(s) ? s : null; }
+    private LocalDateTime parseDate(String dateStr, boolean endOfDay) {
+        if (!notBlank(dateStr)) return null;
+        LocalDate date = LocalDate.parse(dateStr.replace(".", "-").substring(0, 10));
+        return endOfDay ? date.atTime(23, 59, 59) : date.atStartOfDay();
+    }
 }
