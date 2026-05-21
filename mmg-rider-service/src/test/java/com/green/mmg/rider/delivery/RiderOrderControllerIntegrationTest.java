@@ -112,7 +112,7 @@ class RiderOrderControllerIntegrationTest {
     private Delivery seedDelivery(Long riderNo, DeliveryStatus status) {
         Delivery d = new Delivery(uniqueDeliveryNo(), uniqueOrderId(),
                 "053-1", "010-1", "가게주소", 35.123, 128.456,
-                "손님주소", 35.130, 128.460, 4000);
+                "손님주소", 35.130, 128.460, 4000, 0);
         if (riderNo != null) d.assignRider(riderNo);
         if (status != DeliveryStatus.WAITING_ASSIGN) d.changeStatus(status, LocalDateTime.now());
         return deliveryRepository.saveAndFlush(d);
@@ -171,7 +171,7 @@ class RiderOrderControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("PUT /api/rider/order/{deliveryNo}/accept happy: ARRIVED_AT_STORE + log + Main 호출")
+    @DisplayName("PUT /api/rider/order/{deliveryNo}/accept happy: AWAITING_PICKUP (사례 #20) + log + Main 호출")
     void accept_happy() throws Exception {
         Rider rider = seedRider(true);
         authenticateAs(rider.getUserNo());
@@ -181,20 +181,23 @@ class RiderOrderControllerIntegrationTest {
 
         mockMvc.perform(put("/api/rider/order/" + d.getDeliveryNo() + "/accept"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.resultMessage").value("배차 수락 성공"));
+                .andExpect(jsonPath("$.resultMessage").value("가게 도착 처리 성공"));
+        // NOTE: controller message "가게 도착 처리 성공"은 사례 #20 정정 후 실제 동작과 의미 불일치.
+        // (실제: AWAITING_PICKUP 직행, ARRIVED_AT_STORE skip). 별 트랙에서 message 박제 정정 검토.
 
         em.flush();
         em.clear();
 
+        // 사례 #20 (figma-analysis): accept가 ARRIVED_AT_STORE 단계 skip하고 AWAITING_PICKUP 직행.
+        // AWAITING_PICKUP은 시각 미기록 (Delivery.changeStatus default 분기).
         Delivery saved = deliveryRepository.findById(d.getDeliveryNo()).orElseThrow();
-        assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
-        assertThat(saved.getArrivedAtStoreAt()).isNotNull();
+        assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.AWAITING_PICKUP);
 
         List<DeliveryLog> logs = deliveryLogRepository.findAll().stream()
                 .filter(l -> d.getDeliveryNo().equals(l.getDeliveryNo()))
                 .toList();
         assertThat(logs).anyMatch(l -> l.getActorRole() == ActorRole.RIDER
-                && l.getToStatus() == DeliveryStatus.ARRIVED_AT_STORE
+                && l.getToStatus() == DeliveryStatus.AWAITING_PICKUP
                 && java.util.Objects.equals(l.getActorUserNo(), rider.getUserNo()));
 
         verify(mainInternalClient).updateDeliveryStatus(eq(d.getOrderId()),

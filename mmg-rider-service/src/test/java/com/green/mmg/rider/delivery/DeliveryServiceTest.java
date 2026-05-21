@@ -79,7 +79,7 @@ class DeliveryServiceTest {
         Delivery delivery = spy(new Delivery(
                 DELIVERY_NO, ORDER_ID,
                 null, null, null, null, null, null, null, null,
-                3000));
+                3000, 0));
         if (status != DeliveryStatus.WAITING_ASSIGN) {
             delivery.changeStatus(status, LocalDateTime.now());
         }
@@ -221,9 +221,8 @@ class DeliveryServiceTest {
         @DisplayName("WAITING_ASSIGN → DELIVERED (terminal 직행)")
         void waitingAssign_to_delivered() { assertIllegal(DeliveryStatus.WAITING_ASSIGN, DeliveryStatus.DELIVERED); }
 
-        @Test
-        @DisplayName("ASSIGNED → AWAITING_PICKUP (단계 건너뜀)")
-        void assigned_to_awaitingPickup() { assertIllegal(DeliveryStatus.ASSIGNED, DeliveryStatus.AWAITING_PICKUP); }
+        // ASSIGNED → AWAITING_PICKUP 비합법 케이스 제거 (사례 #20, 2026-05-19):
+        // ARRIVED_AT_STORE 단계 라이더 흐름에서 제외 → ASSIGNED → AWAITING_PICKUP 합법화.
 
         @Test
         @DisplayName("ASSIGNED → PICKED_UP (단계 건너뜀)")
@@ -377,7 +376,9 @@ class DeliveryServiceTest {
             assertThat(saved.getRiderNo()).isEqualTo(CALLER_RIDER_NO);
             assertThat(saved.getOrderId()).isEqualTo(1L);
             assertThat(saved.getAssignedAt()).isNotNull();
-            assertThat(saved.getBaseFee()).isEqualTo(4000);
+            // 사례 #21 (2026-05-19): main 4000/1500 무시, base=1500 고정 + extra=ceil(0.86km)*1000=1000
+            assertThat(saved.getBaseFee()).isEqualTo(1500);
+            assertThat(saved.getExtraFee()).isEqualTo(1000);
 
             ArgumentCaptor<DeliveryLog> logCaptor = ArgumentCaptor.forClass(DeliveryLog.class);
             verify(deliveryLogRepository).save(logCaptor.capture());
@@ -489,6 +490,66 @@ class DeliveryServiceTest {
             assertThat(log.getToStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
             assertThat(log.getActorRole()).isEqualTo(ActorRole.SYSTEM);
             assertThat(log.getActorUserNo()).isNull();
+        }
+
+        // ─── 사례 #21 (2026-05-19) computeExtraFee 단위 검증 ──────────────────
+        // base=DELIVERY_BASE_FEE(1500) 고정 + extra=ceil(km)*1000 (Haversine).
+        // main이 보낸 baseFee/extraFee 무시. assignDelivery 통한 간접 검증 (private 메서드).
+
+        private RiderInternalAssignReq reqWithCoord(Double sLat, Double sLng, Double dLat, Double dLng) {
+            return new RiderInternalAssignReq(
+                    1L, CALLER_RIDER_NO, 7L, "맛있는집",
+                    "가게 주소", sLat, sLng, "053-111-2222",
+                    "손님 주소", dLat, dLng, "010-1234-5678",
+                    9999, 9999); // main 입력값은 의도적으로 큰 값 — rider override 검증용
+        }
+
+        private Delivery captureSavedAfterAssign(RiderInternalAssignReq req) {
+            Rider rider = activeRider();
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+            deliveryService.assignDelivery(req);
+            ArgumentCaptor<Delivery> captor = ArgumentCaptor.forClass(Delivery.class);
+            verify(deliveryRepository).saveAndFlush(captor.capture());
+            return captor.getValue();
+        }
+
+        @Test
+        @DisplayName("extraFee: 1~2km 구간(위도 0.014° ≈ 1556m) → ceil(1.556)=2 → 2000 + base 1500 override")
+        void extraFee_between1and2km_ceiledToTwo() {
+            // 위도 1° = 6371km * π/180 = 111.195km. Δlat=0.014° → ~1556m → ceil(1.556km)=2km → 2000원.
+            // 1km 초과 ceil 경계 검증 (under500m 케이스와 짝, 가짜 테스트 회피).
+            Delivery saved = captureSavedAfterAssign(reqWithCoord(35.000, 128.000, 35.014, 128.000));
+
+            assertThat(saved.getBaseFee()).isEqualTo(1500);   // main 9999 무시, 1500 고정
+            assertThat(saved.getExtraFee()).isEqualTo(2000);  // ceil(1.556) * 1000
+        }
+
+        @Test
+        @DisplayName("extraFee: 좌표 중 하나라도 null → 0 fallback (운영 무음 손실 방지용 W-3 log.warn)")
+        void extraFee_coordNull_returnsZero() {
+            Delivery saved = captureSavedAfterAssign(reqWithCoord(35.000, 128.000, null, 128.009));
+
+            assertThat(saved.getBaseFee()).isEqualTo(1500);
+            assertThat(saved.getExtraFee()).isZero();
+        }
+
+        @Test
+        @DisplayName("extraFee: 가게=손님 동일 좌표 (거리 0) → 0")
+        void extraFee_sameCoord_returnsZero() {
+            Delivery saved = captureSavedAfterAssign(reqWithCoord(35.123, 128.456, 35.123, 128.456));
+
+            assertThat(saved.getBaseFee()).isEqualTo(1500);
+            assertThat(saved.getExtraFee()).isZero();
+        }
+
+        @Test
+        @DisplayName("extraFee: 500m 미만(위도 0.001° ≈ 111m) → ceil(0.111)=1 → 1000 (km 1 미만도 1km로 올림)")
+        void extraFee_under500m_ceiledToOne() {
+            Delivery saved = captureSavedAfterAssign(reqWithCoord(35.000, 128.000, 35.001, 128.000));
+
+            assertThat(saved.getBaseFee()).isEqualTo(1500);
+            assertThat(saved.getExtraFee()).isEqualTo(1000);  // 111m도 ceil → 1km → 1000원
         }
     }
 
@@ -758,16 +819,16 @@ class DeliveryServiceTest {
         }
 
         @Test
-        @DisplayName("acceptDelivery happy: ASSIGNED → ARRIVED_AT_STORE + RIDER actor log")
+        @DisplayName("acceptDelivery happy: ASSIGNED → AWAITING_PICKUP (사례 #20) + RIDER actor log")
         void accept_happy_transitionsAndLogs() {
             Delivery delivery = deliveryAssignedToCaller();
             stubFindAndOwn(delivery);
 
             DeliveryTransitionResult result = deliveryService.acceptDelivery(DELIVERY_NO, CALLER_USER_NO);
 
-            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.AWAITING_PICKUP);
             assertThat(result.orderId()).isEqualTo(ORDER_ID);
-            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.AWAITING_PICKUP);
             assertThat(result.riderNo()).isEqualTo(CALLER_RIDER_NO);
             verify(deliveryRepository).saveAndFlush(delivery);
 
@@ -813,7 +874,7 @@ class DeliveryServiceTest {
             Delivery delivery = new Delivery(
                     DELIVERY_NO, ORDER_ID,
                     null, null, null, null, null, null, null, null,
-                    3000);
+                    3000, 0);
             delivery.assignRider(CALLER_RIDER_NO);
             delivery.changeStatus(DeliveryStatus.ASSIGNED, LocalDateTime.now());
 
@@ -919,7 +980,7 @@ class DeliveryServiceTest {
             Delivery delivery = new Delivery(
                     DELIVERY_NO, ORDER_ID,
                     null, null, null, null, null, null, null, null,
-                    3000);
+                    3000, 0);
             delivery.assignRider(CALLER_RIDER_NO);
             delivery.changeStatus(DeliveryStatus.PICKED_UP, LocalDateTime.now());
 
@@ -949,7 +1010,7 @@ class DeliveryServiceTest {
             Delivery delivery = new Delivery(
                     DELIVERY_NO, ORDER_ID,
                     null, null, null, null, null, null, null, null,
-                    3000);
+                    3000, 0);
             delivery.assignRider(CALLER_RIDER_NO);
             delivery.changeStatus(DeliveryStatus.DELIVERING, LocalDateTime.now());
 

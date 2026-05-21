@@ -111,13 +111,13 @@ public class Delivery extends BaseEntity {
     /**
      * 배차 대기 시점 생성자 — Main이 Feign으로 배차 요청 시 호출 (R3 DeliveryService).
      * status 고정: WAITING_ASSIGN (가입 시점 PENDING 패턴 일관, R1-A Rider 일관).
-     * extra_fee 고정: 0 (DDL DEFAULT 0 일관).
+     * 2026-05-19 정정: extra_fee 0 고정 → DeliveryService가 좌표 기반 거리 산출 후 동적 결정.
      */
     public Delivery(String deliveryNo, Long orderId,
                     String pickupPhone, String customerPhone,
                     String pickupAddress, Double pickupLat, Double pickupLng,
                     String deliveryAddress, Double deliveryLat, Double deliveryLng,
-                    Integer baseFee) {
+                    Integer baseFee, Integer extraFee) {
         this.deliveryNo = deliveryNo;
         this.orderId = orderId;
         this.status = DeliveryStatus.WAITING_ASSIGN;
@@ -130,7 +130,7 @@ public class Delivery extends BaseEntity {
         this.deliveryLat = deliveryLat;
         this.deliveryLng = deliveryLng;
         this.baseFee = baseFee;
-        this.extraFee = 0;
+        this.extraFee = extraFee;
     }
 
     /**

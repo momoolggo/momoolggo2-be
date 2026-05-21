@@ -69,7 +69,7 @@ class SettlementIntegrationTest {
                 "010-1111-1111", "010-2222-2222",
                 "가게", 37.5665, 126.9780,        // 서울
                 "손님", 37.5700, 126.9800,        // 약 400m
-                baseFee);
+                baseFee, 0);
         delivery.changeStatus(DeliveryStatus.DELIVERED, deliveredAt);
         Delivery saved = deliveryRepository.saveAndFlush(delivery);
         // rider_no + delivered_at 박제 (R3-c 패턴)
