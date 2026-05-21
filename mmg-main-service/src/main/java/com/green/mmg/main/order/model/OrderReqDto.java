@@ -10,4 +10,5 @@ public class OrderReqDto {
     private String  riderRequest;   // 라이더 요청사항
     private Integer payState;       // 결제수단 (1:카드, 2:카카오, 3:네이버, 4:만나서)
     private Long    addressId;      // 선택한 주소 ID
+    private Long couponId; // 쿠폰 ID
 }

@@ -3,6 +3,7 @@ package com.green.mmg.main.order;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.cart.CartDetailRepository;
 import com.green.mmg.main.cart.model.CartDetail;
+import com.green.mmg.main.coupon.CouponService;
 import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.address.UserAddressRepository;
 import com.green.mmg.main.cart.CartMapper;
@@ -16,7 +17,6 @@ import com.green.mmg.main.internal.dto.InternalSettlementOrderRes;
 import com.green.mmg.main.notification.NotificationService;
 import com.green.mmg.main.notification.model.NotificationCreateReq;
 import com.green.mmg.main.order.model.*;
-import com.green.mmg.main.owner.OwnerOrderSseService;
 import com.green.mmg.main.payment.PaymentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -80,6 +80,7 @@ public class OrderService {
     private final OrderDeliverySseService orderDeliverySseService;
     private final NotificationService notificationService;
     private final PaymentService paymentService;
+    private final CouponService couponService;
 
     private static final int ORDER_STATE_WAITING = 1;
     private static final int ORDER_STATE_CANCELED = 2;
@@ -89,7 +90,6 @@ public class OrderService {
     private static final int PAY_STATE_REFUNDED = 3;
 
     private static final int DELIVERY_FEE = 1500;
-    private final OwnerOrderSseService ownerOrderSseService;
 
     // 주문 화면 초기 데이터 조회
     @Transactional(readOnly = true)
@@ -127,7 +127,7 @@ public class OrderService {
     }
 
     @Transactional
-    public long placeOrder(Long userNo, OrderReqDto dto) {
+    public OrderCreateRes placeOrder(Long userNo, OrderReqDto dto) {
         Cart cart = cartRepository.findByUserNo(userNo)
                 .orElseThrow(() -> new RuntimeException("장바구니가 비어있습니다."));
 
@@ -143,6 +143,8 @@ public class OrderService {
 
         // 기존 패턴 유지: serverOrderId + timestamp 결합 큰 숫자 ID
         long uniqueId = Long.parseLong("39" + System.currentTimeMillis());
+
+        totalAmount = couponService.applyCouponToOrder(userNo, uniqueId, dto.getCouponId(), totalAmount);
 
         Orders order = new Orders();
         order.setOrderId(uniqueId);
@@ -172,14 +174,8 @@ public class OrderService {
         // 가게 누적 주문 수(store.order_count) 갱신 — 같은 트랜잭션 내 처리
         orderMapper.calSumOrder(cart.getStoreId());
 
-        ownerOrderSseService.sendNewOrder(cart.getStoreId(), Map.of(
-                "orderId", uniqueId,
-                "storeId", cart.getStoreId()
-        ));
-
-        return uniqueId;
+        return new OrderCreateRes(uniqueId, totalAmount);
     }
-
 
 
     // 주문 취소
