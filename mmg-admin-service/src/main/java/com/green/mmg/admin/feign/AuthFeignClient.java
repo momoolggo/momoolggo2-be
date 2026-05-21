@@ -29,11 +29,15 @@ public interface AuthFeignClient {
     @GetMapping("/internal/auth/owner/{userNo}")
     UserBriefDto getOwner(@PathVariable("userNo") long userNo);
 
-    // 전체 회원 목록
+    // 전체 회원 목록 (검색 조건 포함)
     @GetMapping("/internal/auth/users/list")
     ResultResponse<Page<AdminUserRes>> getUserList(
             @RequestParam(required = false) String role,
-            @RequestParam(defaultValue = "0") int page
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate
     );
 
     // 승인 대기 회원 목록

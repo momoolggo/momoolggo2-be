@@ -24,13 +24,17 @@ public class AdminUserController {
     private final MainFeignClient mainFeignClient;  // 추가
     private final RiderApprovalService riderApprovalService;  // ADR-001 (D) 라이더 통합 승인
 
-  //전체 회원 목록 조회
+    // 전체 회원 목록 조회 (검색 조건 포함)
     @GetMapping
     public ResultResponse<Page<AdminUserRes>> getUserList(
             @RequestParam(required = false) String role,
-            @RequestParam(defaultValue = "0") int page
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate
     ) {
-        return authFeignClient.getUserList(role, page);
+        return authFeignClient.getUserList(role, page, userId, name, startDate, endDate);
     }
 
     // 승인 대기 회원 목록
