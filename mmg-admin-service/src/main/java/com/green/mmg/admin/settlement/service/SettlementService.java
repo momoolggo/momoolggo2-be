@@ -78,8 +78,8 @@ public class SettlementService {
         LocalDate weekStart = today.with(DayOfWeek.MONDAY);
         LocalDate weekEnd = today.with(DayOfWeek.SUNDAY);
 
-        Integer expectedAmount = settlementRepository.sumExpectedAmountThisWeek(weekStart, weekEnd);
-        Integer completedAmount = settlementRepository.sumCompletedAmountThisWeek(weekStart, weekEnd);
+        Long expectedAmount = settlementRepository.sumExpectedAmountThisWeek(SettlementsStatus.PENDING, weekStart, weekEnd);
+        Long completedAmount = settlementRepository.sumCompletedAmountThisWeek(List.of(SettlementsStatus.DONE, SettlementsStatus.COMPLETED), weekStart, weekEnd);
         Long completedCount = settlementRepository.countByStatusInAndPeriodEndBetween(
                 List.of(SettlementsStatus.DONE, SettlementsStatus.COMPLETED), weekStart, weekEnd);
         Long pendingStoreCount = settlementRepository.countByTargetTypeAndStatusAndPeriodEndBetween(
