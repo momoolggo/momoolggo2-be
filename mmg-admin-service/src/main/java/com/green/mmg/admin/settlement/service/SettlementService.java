@@ -21,6 +21,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -70,14 +72,20 @@ public class SettlementService {
         );
     }
 
-    // 정산 요약
+    // 정산 요약 (이번 주 기준 - periodEnd 월~일)
     public SettlementSummaryRes getSummary() {
-        Integer expectedAmount = settlementRepository.sumExpectedAmount();
-        Integer completedAmount = settlementRepository.sumCompletedAmount();
-        Long completedCount = settlementRepository.countByStatusIn(
-                List.of(SettlementsStatus.DONE, SettlementsStatus.COMPLETED));
-        Long pendingCount = settlementRepository.countByStatus(SettlementsStatus.PENDING);
-        return new SettlementSummaryRes(expectedAmount, completedAmount, completedCount, pendingCount);
+        LocalDate today = LocalDate.now();
+        LocalDate weekStart = today.with(DayOfWeek.MONDAY);
+        LocalDate weekEnd = today.with(DayOfWeek.SUNDAY);
+
+        Integer expectedAmount = settlementRepository.sumExpectedAmountThisWeek(weekStart, weekEnd);
+        Integer completedAmount = settlementRepository.sumCompletedAmountThisWeek(weekStart, weekEnd);
+        Long completedCount = settlementRepository.countByStatusInAndPeriodEndBetween(
+                List.of(SettlementsStatus.DONE, SettlementsStatus.COMPLETED), weekStart, weekEnd);
+        Long pendingStoreCount = settlementRepository.countByTargetTypeAndStatusAndPeriodEndBetween(
+                SettlementTargetType.STORE, SettlementsStatus.PENDING, weekStart, weekEnd);
+        return new SettlementSummaryRes(expectedAmount, completedAmount, completedCount,
+                pendingStoreCount, pendingStoreCount, 0L);
     }
 
     // 정산 목록 조회 (가게 탭 전용 - STORE만, 페이지네이션)
@@ -211,6 +219,8 @@ public class SettlementService {
             return result;
 
         } catch (Exception e) {
+            log.error("정산 주문 내역 조회 실패: settlementId={}, cause={}, message={}",
+                    settlementId, e.getClass().getSimpleName(), e.getMessage(), e);
             return Map.of("dailySales", List.of(), "totalSales", 0L);
         }
     }

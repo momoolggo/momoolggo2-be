@@ -6,6 +6,7 @@ import com.green.mmg.admin.settlement.entity.Settlement;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -29,13 +30,19 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
     // 완료 건수 (DONE + COMPLETED 둘 다)
     Long countByStatusIn(List<SettlementsStatus> statuses);
 
-    // 완료 금액 합계
-    @Query("SELECT COALESCE(SUM(s.netAmount), 0) FROM Settlement s WHERE s.status IN ('DONE', 'COMPLETED')")
-    Integer sumCompletedAmount();
+    // 이번 주 완료 금액 합계 (periodEnd 기준 월~일)
+    @Query("SELECT COALESCE(SUM(s.netAmount), 0) FROM Settlement s WHERE s.status IN ('DONE', 'COMPLETED') AND s.periodEnd BETWEEN :weekStart AND :weekEnd")
+    Integer sumCompletedAmountThisWeek(@Param("weekStart") LocalDate weekStart, @Param("weekEnd") LocalDate weekEnd);
 
-    // 예상 금액 합계
-    @Query("SELECT COALESCE(SUM(s.netAmount), 0) FROM Settlement s WHERE s.status = 'PENDING'")
-    Integer sumExpectedAmount();
+    // 이번 주 예상 금액 합계 (periodEnd 기준 월~일)
+    @Query("SELECT COALESCE(SUM(s.netAmount), 0) FROM Settlement s WHERE s.status = 'PENDING' AND s.periodEnd BETWEEN :weekStart AND :weekEnd")
+    Integer sumExpectedAmountThisWeek(@Param("weekStart") LocalDate weekStart, @Param("weekEnd") LocalDate weekEnd);
+
+    // 이번 주 완료 건수
+    Long countByStatusInAndPeriodEndBetween(List<SettlementsStatus> statuses, LocalDate weekStart, LocalDate weekEnd);
+
+    // 이번 주 가게 대기 건수
+    Long countByTargetTypeAndStatusAndPeriodEndBetween(SettlementTargetType targetType, SettlementsStatus status, LocalDate weekStart, LocalDate weekEnd);
 
     List<Settlement> findByTargetTypeAndTargetNo(SettlementTargetType targetType, Long targetNo);
 

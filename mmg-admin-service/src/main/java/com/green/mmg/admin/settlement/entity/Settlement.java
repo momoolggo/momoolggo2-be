@@ -78,6 +78,11 @@ public class Settlement {
         this.status = SettlementsStatus.HELD;
     }
 
+    // 계좌번호 등록/수정
+    public void updateBankAccount(String bankAccount) {
+        this.bankAccount = bankAccount;
+    }
+
     // 토스 지급 ID 저장
     public void setTossPayoutId(String payoutId) {
         this.tossPayoutId = payoutId;
