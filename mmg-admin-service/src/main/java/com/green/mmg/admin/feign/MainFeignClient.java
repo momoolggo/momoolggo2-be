@@ -28,7 +28,11 @@ public interface MainFeignClient {
     @GetMapping("/internal/review/list")
     ResultResponse<List<InternalReviewListRes>> getReviewList(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "15") int size
+            @RequestParam(defaultValue = "15") int size,
+            @RequestParam(required = false) String storeName,
+            @RequestParam(required = false) String writer,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate
     );
 
     @GetMapping("/internal/store/list")

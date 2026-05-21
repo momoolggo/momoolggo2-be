@@ -18,7 +18,11 @@ public class AdminReviewController {
     @GetMapping
     public ResultResponse<List<InternalReviewListRes>> getReviewList(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "15") int size) {
-        return mainFeignClient.getReviewList(page, size);
+            @RequestParam(defaultValue = "15") int size,
+            @RequestParam(required = false) String storeName,
+            @RequestParam(required = false) String writer,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        return mainFeignClient.getReviewList(page, size, storeName, writer, startDate, endDate);
     }
 }
