@@ -11,8 +11,10 @@ import com.green.mmg.rider.settlement.dto.AccountRes;
 import com.green.mmg.rider.settlement.dto.SettlementRowRes;
 import com.green.mmg.rider.settlement.model.Settlement;
 import com.green.mmg.rider.settlement.model.SettlementStatus;
+import com.green.mmg.rider.settlement.sse.SettlementUpdatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,6 +61,7 @@ public class SettlementService {
     private final SettlementRepository settlementRepository;
     private final DeliveryRepository deliveryRepository;
     private final RiderRepository riderRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** GET /api/rider/settlement — 라이더 본인 정산 내역 (기간 옵션, 기본 12주). */
     @Transactional(readOnly = true)
@@ -150,7 +153,7 @@ public class SettlementService {
         LocalDateTime fromTs = periodStart.atStartOfDay();
         LocalDateTime toTs = periodEnd.plusDays(1).atStartOfDay();
 
-        return settlementRepository
+        Settlement upserted = settlementRepository
                 .findByRiderNoAndPeriodStartAndPeriodEnd(riderNo, periodStart, periodEnd)
                 .map(existing -> {
                     if (existing.getStatus() == SettlementStatus.CONFIRMED) {
@@ -164,6 +167,16 @@ public class SettlementService {
                     return existing;
                 })
                 .orElseGet(() -> calculateAndSave(riderNo, periodStart, periodEnd, fromTs, toTs));
+
+        // SSE 자동화 트랙(2026-05-21) — 트랜잭션 commit 후 라이더 화면 푸시 (@TransactionalEventListener AFTER_COMMIT).
+        eventPublisher.publishEvent(new SettlementUpdatedEvent(riderNo, SettlementRowRes.from(upserted)));
+        return upserted;
+    }
+
+    /** SSE stream endpoint용 — userNo → riderNo 매핑 (라이더 본인 검증). */
+    @Transactional(readOnly = true)
+    public Long findRiderNoByUserNo(Long callerUserNo) {
+        return riderByUserNo(callerUserNo).getRiderNo();
     }
 
     /** Internal — PENDING → CONFIRMED. admin 검토 후 호출. */

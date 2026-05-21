@@ -11,6 +11,7 @@ import com.green.mmg.rider.settlement.dto.AccountRes;
 import com.green.mmg.rider.settlement.dto.SettlementRowRes;
 import com.green.mmg.rider.settlement.model.Settlement;
 import com.green.mmg.rider.settlement.model.SettlementStatus;
+import com.green.mmg.rider.settlement.sse.SettlementUpdatedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDate;
@@ -46,6 +48,7 @@ class SettlementServiceTest {
     @Mock private SettlementRepository settlementRepository;
     @Mock private DeliveryRepository deliveryRepository;
     @Mock private RiderRepository riderRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private SettlementService settlementService;
 
@@ -289,7 +292,27 @@ class SettlementServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getStatus())
                 .isEqualTo(HttpStatus.BAD_REQUEST);
-        verifyNoInteractions(settlementRepository, deliveryRepository);
+        verifyNoInteractions(settlementRepository, deliveryRepository, eventPublisher);
+    }
+
+    @Test
+    @DisplayName("recalculateThisWeek: SettlementUpdatedEvent publishEvent — AFTER_COMMIT 리스너가 SSE 푸시")
+    void recalculateThisWeek_publishesEvent() {
+        when(settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(eq(CALLER_RIDER_NO), any(), any()))
+                .thenReturn(Optional.empty());
+        Delivery d = mockDelivery(50000, 0, null, null, null, null);
+        when(deliveryRepository.findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
+                eq(CALLER_RIDER_NO), eq(DeliveryStatus.DELIVERED), any(), any()))
+                .thenReturn(List.of(d));
+        when(settlementRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        settlementService.recalculateThisWeek(CALLER_RIDER_NO);
+
+        ArgumentCaptor<SettlementUpdatedEvent> eventCaptor = ArgumentCaptor.forClass(SettlementUpdatedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        SettlementUpdatedEvent event = eventCaptor.getValue();
+        assertThat(event.riderNo()).isEqualTo(CALLER_RIDER_NO);
+        assertThat(event.payload().totalBaseFee()).isEqualTo(50000);
     }
 
     private Delivery mockDelivery(int baseFee, int extraFee,
