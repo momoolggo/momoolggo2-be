@@ -69,6 +69,36 @@ class SettlementTest {
     }
 
     @Test
+    @DisplayName("recalculate: 8 합산 필드 UPDATE + status PENDING 유지 + confirmed/paid 필드 미변경")
+    void recalculate_updatesAggregates_keepsStatusAndConfirmedFields() {
+        LocalDate start = LocalDate.of(2026, 5, 5);
+        LocalDate end = LocalDate.of(2026, 5, 11);
+        Settlement s = new Settlement(
+                1L, start, end,
+                2, 1000, 50000, 0, 5000, 1485, 5000, 38515);
+
+        s.recalculate(5, 2500, 130000, 20000, 15000, 4455, 5000, 125545);
+
+        assertThat(s.getDeliveryCount()).isEqualTo(5);
+        assertThat(s.getTotalDistanceM()).isEqualTo(2500);
+        assertThat(s.getTotalBaseFee()).isEqualTo(130000);
+        assertThat(s.getTotalExtraFee()).isEqualTo(20000);
+        assertThat(s.getCommission()).isEqualTo(15000);
+        assertThat(s.getTax()).isEqualTo(4455);
+        assertThat(s.getInsurance()).isEqualTo(5000);
+        assertThat(s.getPayout()).isEqualTo(125545);
+        // 보호 필드 — PENDING 유지 + confirmed/paid NULL 유지
+        assertThat(s.getStatus()).isEqualTo(SettlementStatus.PENDING);
+        assertThat(s.getConfirmedByAdminNo()).isNull();
+        assertThat(s.getConfirmedAt()).isNull();
+        assertThat(s.getPaidAt()).isNull();
+        // 식별 필드 미변경
+        assertThat(s.getRiderNo()).isEqualTo(1L);
+        assertThat(s.getPeriodStart()).isEqualTo(start);
+        assertThat(s.getPeriodEnd()).isEqualTo(end);
+    }
+
+    @Test
     @DisplayName("생성자: period_start/period_end LocalDate 정확 매핑 (호출자 제어)")
     void constructor_periodDates_callerControlled() {
         LocalDate start1 = LocalDate.of(2026, 1, 5);

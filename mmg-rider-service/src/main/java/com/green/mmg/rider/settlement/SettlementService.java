@@ -96,9 +96,14 @@ public class SettlementService {
     }
 
     /**
-     * Internal — 주간 정산 집계 (D10-b admin 트리거). 멱등 처리: 동일 주 이미 INSERT시 기존 행 반환.
+     * Internal — 주간 정산 집계 (D10-b admin 트리거).
      *
-     * <p>전체 라이더 순회 → 각 라이더의 해당 기간 DELIVERED 배달 집계 → settlement INSERT.</p>
+     * <p>전체 라이더 순회 → 각 라이더의 해당 기간 DELIVERED 배달 집계.
+     * <ul>
+     *   <li>row 없음 → 신규 INSERT (status=PENDING)</li>
+     *   <li>row PENDING → {@link Settlement#recalculate}로 UPDATE (진행 중 배달 즉시 반영)</li>
+     *   <li>row CONFIRMED → 기존 그대로 반환 (admin 확정 보호)</li>
+     * </ul>
      */
     public List<SettlementRowRes> calculate(LocalDate periodStart, LocalDate periodEnd) {
         if (periodStart == null || periodEnd == null) {
@@ -115,19 +120,36 @@ public class SettlementService {
         List<Rider> riders = riderRepository.findAll();
         List<SettlementRowRes> result = new java.util.ArrayList<>();
         for (Rider rider : riders) {
-            // 멱등: 동일 주 이미 INSERT시 skip + 기존 반환
-            settlementRepository.findByRiderNoAndPeriodStartAndPeriodEnd(
-                    rider.getRiderNo(), periodStart, periodEnd)
-                    .ifPresentOrElse(
-                            existing -> result.add(SettlementRowRes.from(existing)),
-                            () -> result.add(SettlementRowRes.from(
-                                    calculateAndSave(rider.getRiderNo(), periodStart, periodEnd, fromTs, toTs))));
+            Settlement upserted = settlementRepository
+                    .findByRiderNoAndPeriodStartAndPeriodEnd(rider.getRiderNo(), periodStart, periodEnd)
+                    .map(existing -> {
+                        if (existing.getStatus() == SettlementStatus.CONFIRMED) {
+                            return existing;
+                        }
+                        Aggregated agg = aggregate(rider.getRiderNo(), fromTs, toTs);
+                        existing.recalculate(
+                                agg.deliveryCount, agg.totalDistanceM,
+                                agg.totalBaseFee, agg.totalExtraFee,
+                                agg.commission, agg.tax, agg.insurance, agg.payout);
+                        return existing;
+                    })
+                    .orElseGet(() -> calculateAndSave(rider.getRiderNo(), periodStart, periodEnd, fromTs, toTs));
+            result.add(SettlementRowRes.from(upserted));
         }
         return result;
     }
 
     private Settlement calculateAndSave(Long riderNo, LocalDate periodStart, LocalDate periodEnd,
                                          LocalDateTime fromTs, LocalDateTime toTs) {
+        Aggregated agg = aggregate(riderNo, fromTs, toTs);
+        Settlement s = new Settlement(
+                riderNo, periodStart, periodEnd,
+                agg.deliveryCount, agg.totalDistanceM, agg.totalBaseFee, agg.totalExtraFee,
+                agg.commission, agg.tax, agg.insurance, agg.payout);
+        return settlementRepository.save(s);
+    }
+
+    private Aggregated aggregate(Long riderNo, LocalDateTime fromTs, LocalDateTime toTs) {
         List<Delivery> rows = deliveryRepository
                 .findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
                         riderNo, DeliveryStatus.DELIVERED, fromTs, toTs);
@@ -140,15 +162,16 @@ public class SettlementService {
         int gross = totalBaseFee + totalExtraFee;
         int commission = (int) Math.round(gross * COMMISSION_RATE);
         int tax = (int) Math.round((gross - commission) * TAX_RATE);
-        int insurance = deliveryCount > 0 ? INSURANCE_PER_WEEK : 0;  // 미운행 주는 0
+        int insurance = deliveryCount > 0 ? INSURANCE_PER_WEEK : 0;
         int payout = Math.max(0, gross - commission - tax - insurance);
 
-        Settlement s = new Settlement(
-                riderNo, periodStart, periodEnd,
-                deliveryCount, totalDistanceM, totalBaseFee, totalExtraFee,
+        return new Aggregated(deliveryCount, totalDistanceM, totalBaseFee, totalExtraFee,
                 commission, tax, insurance, payout);
-        return settlementRepository.save(s);
     }
+
+    private record Aggregated(int deliveryCount, int totalDistanceM,
+                              int totalBaseFee, int totalExtraFee,
+                              int commission, int tax, int insurance, int payout) {}
 
     /** Internal — PENDING → CONFIRMED. admin 검토 후 호출. */
     public SettlementRowRes confirm(Long settlementNo, Long adminNo) {

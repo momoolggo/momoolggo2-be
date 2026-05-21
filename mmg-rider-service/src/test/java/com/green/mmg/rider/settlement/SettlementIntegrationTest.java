@@ -113,12 +113,18 @@ class SettlementIntegrationTest {
         // 거리 = 서울 좌표 약 400m × 2건 (Haversine)
         assertThat(mine.totalDistanceM()).isBetween(700, 900);
 
-        // 멱등 재호출: 동일 주 다시 calculate → 동일 settlementNo 반환
+        // PENDING 재집계 검증: 배달 1건 추가 → 재호출 시 동일 settlementNo (UPDATE) + deliveryCount 반영
+        seedDeliveredOf(rider.getRiderNo(), 30000, withinPeriod);
+        em.flush();
+        em.clear();
         List<SettlementRowRes> repeat = settlementService.calculate(periodStart, periodEnd);
         SettlementRowRes mineRepeat = repeat.stream()
                 .filter(r -> r.settlementNo().equals(mine.settlementNo()))
                 .findFirst().orElseThrow();
-        assertThat(mineRepeat.payout()).isEqualTo(82030);  // 새 INSERT X
+        assertThat(mineRepeat.deliveryCount()).isEqualTo(3);  // PENDING UPSERT (recalculate)
+        // gross=50000+50000+30000=130000 / commission=13000 / tax=(130000-13000)*0.033=3861 / payout=130000-13000-3861-5000=108139
+        assertThat(mineRepeat.totalBaseFee()).isEqualTo(130000);
+        assertThat(mineRepeat.payout()).isEqualTo(108139);
     }
 
     @Test

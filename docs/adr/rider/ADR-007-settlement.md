@@ -108,7 +108,12 @@ payout        = gross - commission - tax - insurance
 4. 매주 월요일 자정 (혹은 임의 시점):
    - admin 화면에서 "이번 주 정산 집계" 버튼 클릭
    - admin-service: GET /internal/settlement/calculate?period_start=&period_end=
-   - rider-service: 해당 기간 DELIVERED 배달 집계 → settlement INSERT (status=PENDING)
+   - rider-service: 해당 기간 DELIVERED 배달 집계 + 라이더별 UPSERT:
+     - row 없음 → 신규 INSERT (status=PENDING)
+     - row PENDING → recalculate UPDATE (진행 중 배달 즉시 반영, settlementNo PK 유지)
+     - row CONFIRMED → 기존 그대로 반환 (admin 확정 보호 — 재계산 X)
+   - admin 재트리거 시 진행 중인 주의 새 배달도 반영. 확정 처리한 과거 주는 보호.
+   - (정산 시연 UX 트랙, 2026-05-21 결정 — 기존 멱등 처리 의도 부분 변경)
 
 5. admin 검토:
    - admin 화면에서 PENDING 정산 목록 확인
