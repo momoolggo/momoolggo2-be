@@ -99,13 +99,13 @@ class RiderOrderControllerIntegrationTest {
                         .substring(0, 3).toUpperCase());
     }
 
+    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제. PENDING 시드 분기 폐기.
     private Rider seedRider(boolean active) {
         Rider rider = new Rider(
                 uniqueUserNo(),
                 "11-22-" + UUID.randomUUID().toString().substring(0, 6) + "-44",
                 "2종보통", VehicleType.MOTORBIKE,
                 "신한", "110-1", "홍길동");
-        if (active) rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 
@@ -142,15 +142,8 @@ class RiderOrderControllerIntegrationTest {
                         .value("WAITING_ASSIGN"));
     }
 
-    @Test
-    @DisplayName("GET /api/rider/order/waiting PENDING: 403 FORBIDDEN (reviewer C-2 정정)")
-    void waiting_pendingRider_returns403() throws Exception {
-        Rider rider = seedRider(false); // PENDING
-        authenticateAs(rider.getUserNo());
-
-        mockMvc.perform(get("/api/rider/order/waiting"))
-                .andExpect(status().isForbidden());
-    }
+    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제로 PENDING 라이더 시드 불가.
+    // PENDING 거부 검증은 단위 테스트(DeliveryServiceTest)에서 mock으로 충분. 본 통합 케이스 폐기.
 
     @Test
     @DisplayName("GET /api/rider/order/inprogress: 본인 진행 중 배달만 반환")

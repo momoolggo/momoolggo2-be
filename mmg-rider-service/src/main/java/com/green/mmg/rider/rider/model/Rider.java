@@ -1,12 +1,10 @@
 package com.green.mmg.rider.rider.model;
 
 import com.green.mmg.common.entity.BaseEntity;
-import com.green.mmg.common.exception.BusinessException;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.springframework.http.HttpStatus;
 
 /**
  * rider 테이블 엔티티 (my_mmg_rider.rider).
@@ -16,8 +14,9 @@ import org.springframework.http.HttpStatus;
  *
  * <p>BaseEntity 상속: created_at / updated_at 컬럼 자동 매핑 (Auditing).</p>
  *
- * <p>setter 미공개 — 상태 전환은 명시 메서드(approve/changeStatus 등)로만 변경 (ADR-004 화이트리스트 R3에서 도입).
- * R1 시점은 D11 auto-approve로 PENDING → ACTIVE 1회 전환만 사용.</p>
+ * <p>setter 미공개 — 상태 전환은 명시 메서드(toggleEating/resumeActive 등)로만 변경 (ADR-004 화이트리스트 R3에서 도입).
+ * SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 흐름 영구 폐기. 가입 시 status=ACTIVE 직접 박제.
+ * RiderStatus.PENDING/SUSPENDED enum 값은 DB 정합 + DeliveryService/WorkSessionService/LocationService의 거부 검증 의도로 보존.</p>
  */
 @Entity
 @Table(name = "rider")
@@ -71,7 +70,7 @@ public class Rider extends BaseEntity {
 
     /**
      * 정산 시연 UX 트랙 #9 (2026-05-21, 옵션 A) — phone 스냅샷 박제용 8 파라미터.
-     * 가입 시점 PENDING 고정 (D11 auto-approve로 ACTIVE 전환은 Service에서).
+     * SSE 자동화 트랙(2026-05-21) — 가입 시점 status=ACTIVE 직접 박제 (라이더 신원 승인 흐름 영구 폐기).
      */
     public Rider(Long userNo, String licenseNo, String licenseType, VehicleType vehicleType,
                  String accountBank, String accountNo, String accountHolder, String phone) {
@@ -83,44 +82,7 @@ public class Rider extends BaseEntity {
         this.accountNo = accountNo;
         this.accountHolder = accountHolder;
         this.phone = phone;
-        this.status = RiderStatus.PENDING;
-    }
-
-    /**
-     * admin 승인 처리 (interfaces.md §3.1, Q-A1 (라+) + Q-A20 (가) Group 8.5 정정 2026-05-17).
-     *
-     * <p>전이 검증: PENDING → ACTIVE만 허용. 다른 상태(ACTIVE/EATING/SUSPENDED)에서 호출 시 BAD_REQUEST.
-     * interfaces.md §3.1 박제 "rider 이미 ACTIVE — 400 BAD_REQUEST" 일관.
-     * ADR-004 ALLOWED_TRANSITIONS 패턴 일관 (전이 규칙 entity 박제).</p>
-     *
-     * <p>D11 auto-approve 시점에도 본 메서드 호출 — joinProfile 직후 PENDING → ACTIVE 안전.
-     * Q-A17 (iii) toggle 운영 false + dev backup 박제 일관.</p>
-     */
-    public void approve() {
-        if (this.status != RiderStatus.PENDING) {
-            throw new BusinessException(
-                    "PENDING 상태만 승인 가능합니다 (현재: " + this.status + ").",
-                    HttpStatus.BAD_REQUEST);
-        }
         this.status = RiderStatus.ACTIVE;
-    }
-
-    /**
-     * admin 제재 처리 (interfaces.md §3.2, Q-A1 (라+) + Q-A20 (가) Group 8.5 신설 2026-05-17).
-     *
-     * <p>전이 검증: PENDING/ACTIVE/EATING → SUSPENDED 허용. SUSPENDED → SUSPENDED 중복 시 BAD_REQUEST.
-     * interfaces.md §3.2 박제 일관.</p>
-     *
-     * <p>{@code reason}은 entity 박제 X — audit log/blind 테이블 별 영역 (Q-A18 (b) cross-schema 정합성
-     * Phase 6+ outbox 위임 일관). 본 메서드는 단순 status 전이.</p>
-     */
-    public void suspend() {
-        if (this.status == RiderStatus.SUSPENDED) {
-            throw new BusinessException(
-                    "이미 SUSPENDED 상태입니다.",
-                    HttpStatus.BAD_REQUEST);
-        }
-        this.status = RiderStatus.SUSPENDED;
     }
 
     /**

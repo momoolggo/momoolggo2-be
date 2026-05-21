@@ -56,7 +56,6 @@ class SettlementIntegrationTest {
                 "12-34-" + UUID.randomUUID().toString().substring(0, 6) + "-12",
                 "2종보통", VehicleType.MOTORBIKE,
                 "국민", "110-987-654321", "홍길동");
-        rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 

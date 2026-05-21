@@ -1,14 +1,12 @@
 package com.green.mmg.rider.rider;
 
 import com.green.mmg.common.exception.BusinessException;
-import com.green.mmg.rider.config.RiderProperties;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderProfileReq;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
 import com.green.mmg.rider.rider.model.RiderStatus;
 import com.green.mmg.rider.rider.model.VehicleType;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,18 +21,15 @@ import java.util.List;
  * 매 요청 rider.status를 DB에서 읽음. JwtUser.status는 토큰 발급 시점 동결되어
  * 토글 후 stale 가능 — 신뢰하지 않음.
  *
- * <h3>D11 임시 운영 (admin-service 도입 전)</h3>
- * {@link #joinProfile}에서 RiderProperties.autoApprove true이면 PENDING → ACTIVE
- * 즉시 전환. admin-service approve endpoint 도입 후 임시 블록 + RIDER_AUTO_APPROVE=false.
- * 관련 ADR: docs/adr/rider/ADR-001-service-boundary.md "임시 운영" 섹션.
+ * <h3>SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 흐름 영구 폐기</h3>
+ * 가입 시점에 Rider 생성자에서 status=ACTIVE 직접 박제 (D11 auto-approve toggle 폐기).
+ * RiderStatus.PENDING/SUSPENDED enum 값은 DB 정합 + DeliveryService/WorkSessionService/LocationService 거부 검증 의도로 보존.
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RiderService {
 
     private final RiderRepository riderRepository;
-    private final RiderProperties riderProperties;
 
     /**
      * 라이더 가입 프로필 등록 (ADR-001 Q1-C — auth signup 후 별도 endpoint).
@@ -42,24 +37,20 @@ public class RiderService {
      * <ol>
      *   <li>중복 가입 방지 (existsByUserNo)</li>
      *   <li>입력 검증 (필수 필드 + vehicleType 화이트리스트)</li>
-     *   <li>Rider INSERT (status=PENDING)</li>
-     *   <li>D11: autoApprove true 시 ACTIVE 전환 (TODO: admin endpoint 도입 후 제거)</li>
+     *   <li>Rider INSERT — 생성자에서 status=ACTIVE 직접 박제 (SSE 자동화 트랙, 2026-05-21)</li>
      * </ol>
      *
      * @param callerUserNo SecurityContextHolder 추출 — dto.userNo 신뢰 X (위조 방지)
      */
     @Transactional
     public RiderProfileRes joinProfile(long callerUserNo, RiderProfileReq req) {
-        // 1. 중복 가입 방지
         if (riderRepository.existsByUserNo(callerUserNo)) {
             throw new BusinessException("이미 라이더로 등록된 계정입니다.", HttpStatus.CONFLICT);
         }
 
-        // 2. 입력 검증 (auth/main 기존 패턴 — validation starter 미도입)
         validate(req);
         VehicleType vehicleType = parseVehicleType(req.vehicleType());
 
-        // 3. Rider INSERT (status=PENDING) — 정산 시연 UX 트랙 #9 (2026-05-21) phone 스냅샷 박제
         Rider rider = new Rider(
                 callerUserNo,
                 req.licenseNo(),
@@ -71,16 +62,6 @@ public class RiderService {
                 req.phone()
         );
         rider = riderRepository.save(rider);
-
-        // === D11 (Q-A17 (iii) 정정 2026-05-17): admin approve endpoint 도입 완료 ===
-        // dev 환경 시연용 backup 유지 (운영 false). Phase 6+ 제거 검토.
-        // 관련 ADR: docs/adr/rider/ADR-001-service-boundary.md "임시 운영" + Q-A1 (라+) 박제.
-        // case-#33 후속 정정 누락 패턴 회피 — 박제 인용 명시.
-        if (riderProperties.autoApprove()) {
-            rider.approve();
-            log.debug("D11 auto-approve (dev backup) applied: riderNo={}, userNo={}", rider.getRiderNo(), callerUserNo);
-        }
-
         return RiderProfileRes.from(rider);
     }
 
@@ -93,33 +74,6 @@ public class RiderService {
         Rider rider = riderRepository.findByUserNo(callerUserNo)
                 .orElseThrow(() -> new BusinessException(
                         "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
-        return RiderProfileRes.from(rider);
-    }
-
-    /**
-     * admin 승인 처리 (interfaces.md §3.1, Q-A1 (라+) Group 8.5 신설 2026-05-17).
-     * PENDING → ACTIVE 전이 (Rider entity approve() 메서드 박제 검증 동반).
-     */
-    @Transactional
-    public RiderProfileRes approveRider(Long riderNo) {
-        Rider rider = riderRepository.findById(riderNo)
-                .orElseThrow(() -> new BusinessException(
-                        "라이더를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        rider.approve();  // PENDING → ACTIVE 전이 검증 (Q-A20 (가))
-        return RiderProfileRes.from(rider);
-    }
-
-    /**
-     * admin 제재 처리 (interfaces.md §3.2, Q-A1 (라+) Group 8.5 신설 2026-05-17).
-     * PENDING/ACTIVE/EATING → SUSPENDED 전이. reason은 본 메서드 인자 X (Q-A18 (b) audit log Phase 6+ outbox 위임).
-     */
-    @Transactional
-    public RiderProfileRes suspendRider(Long riderNo, String reason) {
-        Rider rider = riderRepository.findById(riderNo)
-                .orElseThrow(() -> new BusinessException(
-                        "라이더를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        rider.suspend();  // ?→SUSPENDED 전이 검증 (Q-A20 (가))
-        log.info("라이더 제재 완료: riderNo={}, reason={} (audit log Phase 6+ outbox 위임)", riderNo, reason);
         return RiderProfileRes.from(rider);
     }
 

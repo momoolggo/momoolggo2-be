@@ -33,12 +33,6 @@ spring.cloud.openfeign.client.config.default:
   connectTimeout: 3000
   readTimeout: 5000
 
-# === D11 정정 (SSE 자동화 트랙, 2026-05-21): admin 신원 승인 흐름 폐기 ===
-# auto-approve: 가입 직후 자동 ACTIVE 전환. dev/prod 동일하게 true.
-# BE dead code 정리는 별 트랙(학원 발표 후).
-rider:
-  auto-approve: ${RIDER_AUTO_APPROVE:true}
-
 # mmg-common ConstJwt 바인딩용 — 시크릿/만료는 .env에서 주입 (auth-service와 공유)
 constants:
   jwt:

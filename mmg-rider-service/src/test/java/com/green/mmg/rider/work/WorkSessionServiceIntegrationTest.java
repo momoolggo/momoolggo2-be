@@ -74,9 +74,7 @@ class WorkSessionServiceIntegrationTest {
                 "국민은행",
                 "110-987-654321",
                 "홍길동");
-        if (initial == RiderStatus.ACTIVE || initial == RiderStatus.EATING) {
-            rider.approve();
-        }
+        // SSE 자동화 트랙(2026-05-21) — 가입 시 ACTIVE 직접 박제. PENDING 시드 분기 폐기.
         if (initial == RiderStatus.EATING) {
             rider.toggleEating();
         }

@@ -4,7 +4,6 @@ import com.green.mmg.rider.delivery.DeliveryService;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
 import com.green.mmg.rider.feign.MainInternalClient;
 import com.green.mmg.rider.feign.dto.DeliveryStatusUpdateReq;
-import com.green.mmg.rider.internal.dto.RiderApproveReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
 import com.green.mmg.rider.internal.dto.RiderInternalLocationRes;
@@ -12,7 +11,6 @@ import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
 import com.green.mmg.rider.internal.dto.RiderInternalNoticeReq;
 import com.green.mmg.rider.internal.dto.RiderInternalNoticeRes;
 import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
-import com.green.mmg.rider.internal.dto.RiderSuspendReq;
 import com.green.mmg.rider.location.LocationService;
 import com.green.mmg.rider.notice.NoticeService;
 import com.green.mmg.rider.notice.model.Notice;
@@ -155,22 +153,8 @@ public class RiderInternalController {
      * {@code req.approvedByAdminNo}는 audit log 별 영역 (Q-A18 (b) Phase 6+ outbox 위임) — 본 단계 미사용.
      * Phase 6+ audit log 도입 시 req 인자 service 메서드로 전달 연결.
      */
-    @PostMapping("/{riderNo}/approve")
-    public RiderProfileRes approve(@PathVariable Long riderNo,
-                                   @RequestBody RiderApproveReq req) {
-        return riderService.approveRider(riderNo);
-    }
-
-    /**
-     * 라이더 제재 — interfaces.md §3.2. ?→SUSPENDED 전이 (Q-A20 (가) entity 검증).
-     * {@code reason}/{@code untilAt}은 본 단계 수신 + log.info만 (audit log Phase 6+ 위임).
-     * Phase 6+ scheduler 도입 시 untilAt 인자 활용 (자동 SUSPENDED 해제).
-     */
-    @PostMapping("/{riderNo}/suspend")
-    public RiderProfileRes suspend(@PathVariable Long riderNo,
-                                   @RequestBody RiderSuspendReq req) {
-        return riderService.suspendRider(riderNo, req.reason());
-    }
+    // SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 endpoint 영구 폐기.
+    // 가입 즉시 ACTIVE 박제 (Rider 생성자) + 회원 정지는 user 도메인으로 단일화.
 
     /**
      * 라이더 목록 조회 — interfaces.md §3.5 (Q-A1 (라++) Group 8 신설 2026-05-17).
