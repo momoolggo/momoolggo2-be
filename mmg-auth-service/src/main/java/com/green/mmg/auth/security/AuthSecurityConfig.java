@@ -21,6 +21,7 @@ public class AuthSecurityConfig {
                                 "/api/user/login",
                                 "/api/user/join",
                                 "/api/user/check-id",
+                                "/api/user/check-email",
                                 "/api/user/find-id",
                                 "/api/user/reissue",
                                 "/api/user/reset-pw",

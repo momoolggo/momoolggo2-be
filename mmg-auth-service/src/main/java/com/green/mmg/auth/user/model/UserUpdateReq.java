@@ -10,6 +10,7 @@ public class UserUpdateReq {
     private String  name;
     private String  userPw;
     private String  tel;
+    private String  email;
     /** 미전송(null)과 0("선택 안 함"으로 변경)을 구분하기 위해 Integer */
     private Integer gender;
     private String  birth;

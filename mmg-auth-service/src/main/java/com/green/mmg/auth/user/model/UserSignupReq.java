@@ -13,6 +13,7 @@ public class UserSignupReq {
     private Integer gender;
     private String birth;
     private String tel;
+    private String email;
     private String role;
     private String address;
     private String addressDetail;
