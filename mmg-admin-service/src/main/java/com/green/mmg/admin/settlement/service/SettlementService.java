@@ -16,6 +16,7 @@ import com.green.mmg.admin.settlement.payout.SettlementPayoutService;
 import com.green.mmg.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -77,56 +78,74 @@ public class SettlementService {
         LocalDate today = LocalDate.now();
         LocalDate weekStart = today.with(DayOfWeek.MONDAY);
         LocalDate weekEnd = today.with(DayOfWeek.SUNDAY);
+        LocalDate monthStart = today.withDayOfMonth(1);
+        LocalDate monthEnd = today.withDayOfMonth(today.lengthOfMonth());
 
         Long expectedAmount = settlementRepository.sumExpectedAmountThisWeek(SettlementsStatus.PENDING, weekStart, weekEnd);
+        Long monthlyExpectedAmount = settlementRepository.sumCompletedAmountThisWeek(
+                List.of(SettlementsStatus.values()), monthStart, monthEnd);
         Long completedAmount = settlementRepository.sumCompletedAmountThisWeek(List.of(SettlementsStatus.DONE, SettlementsStatus.COMPLETED), weekStart, weekEnd);
         Long completedCount = settlementRepository.countByStatusInAndPeriodEndBetween(
                 List.of(SettlementsStatus.DONE, SettlementsStatus.COMPLETED), weekStart, weekEnd);
         Long pendingStoreCount = settlementRepository.countByTargetTypeAndStatusAndPeriodEndBetween(
                 SettlementTargetType.STORE, SettlementsStatus.PENDING, weekStart, weekEnd);
-        return new SettlementSummaryRes(expectedAmount, completedAmount, completedCount,
+        return new SettlementSummaryRes(expectedAmount, monthlyExpectedAmount, completedAmount, completedCount,
                 pendingStoreCount, pendingStoreCount, 0L);
     }
 
-    // 정산 목록 조회 (가게 탭 전용 - STORE만, 페이지네이션)
+    // 정산 목록 조회 (가게 탭 전용 - STORE만, 페이지네이션 + keyword 검색)
     public Map<String, Object> getSettlementList(SettlementReq req) {
         Map<Long, String> storeNameMap = getStoreNameMap();
         Pageable pageable = PageRequest.of(req.getPage(), req.getSize());
-        List<Settlement> list;
-        long totalCount;
 
-        if (req.getStatus() != null) {
-            // COMPLETED 선택 시 DONE도 같이 조회
-            if (req.getStatus() == SettlementsStatus.COMPLETED) {
-                list = settlementRepository.findByTargetTypeAndStatusIn(
-                        SettlementTargetType.STORE,
-                        List.of(SettlementsStatus.COMPLETED, SettlementsStatus.DONE),
-                        pageable);
-                totalCount = settlementRepository.countByTargetTypeAndStatusIn(
-                        SettlementTargetType.STORE,
-                        List.of(SettlementsStatus.COMPLETED, SettlementsStatus.DONE));
-            } else {
-                list = settlementRepository.findByTargetTypeAndStatus(SettlementTargetType.STORE, req.getStatus(), pageable);
-                totalCount = settlementRepository.countByTargetTypeAndStatus(SettlementTargetType.STORE, req.getStatus());
+        // status 정규화: null=전체, COMPLETED → [COMPLETED, DONE]
+        List<SettlementsStatus> statuses = normalizeStatuses(req.getStatus());
+
+        // keyword → 매칭 가게 ID 목록 추출
+        List<Long> matchingTargetNos = null;
+        if (req.getKeyword() != null && !req.getKeyword().isBlank()) {
+            String kw = req.getKeyword().toLowerCase();
+            matchingTargetNos = storeNameMap.entrySet().stream()
+                    .filter(e -> e.getValue().toLowerCase().contains(kw))
+                    .map(Map.Entry::getKey)
+                    .toList();
+            if (matchingTargetNos.isEmpty()) {
+                Map<String, Object> empty = new java.util.LinkedHashMap<>();
+                empty.put("content", List.of());
+                empty.put("totalCount", 0L);
+                empty.put("totalPages", 1);
+                empty.put("currentPage", req.getPage());
+                return empty;
             }
-        } else if (req.getStartDate() != null && req.getEndDate() != null) {
-            list = settlementRepository.findByTargetTypeAndPeriodStartGreaterThanEqualAndPeriodEndLessThanEqual(
-                    SettlementTargetType.STORE, req.getStartDate(), req.getEndDate(), pageable);
-            totalCount = list.size();
-        } else {
-            list = settlementRepository.findByTargetType(SettlementTargetType.STORE, pageable);
-            totalCount = settlementRepository.countByTargetType(SettlementTargetType.STORE);
         }
 
-        List<SettlementRes> content = list.stream().map(s -> toRes(s, storeNameMap)).toList();
-        int totalPages = (int) Math.ceil((double) totalCount / req.getSize());
+        LocalDate startDate = req.getStartDate() != null ? req.getStartDate() : LocalDate.of(2000, 1, 1);
+        LocalDate endDate   = req.getEndDate()   != null ? req.getEndDate()   : LocalDate.of(2099, 12, 31);
+
+        Page<Settlement> page = (matchingTargetNos != null)
+                ? settlementRepository.searchByFiltersWithKeyword(
+                        SettlementTargetType.STORE, statuses,
+                        startDate, endDate,
+                        matchingTargetNos, pageable)
+                : settlementRepository.searchByFilters(
+                        SettlementTargetType.STORE, statuses,
+                        startDate, endDate, pageable);
+
+        List<SettlementRes> content = page.getContent().stream()
+                .map(s -> toRes(s, storeNameMap)).toList();
 
         Map<String, Object> result = new java.util.LinkedHashMap<>();
         result.put("content", content);
-        result.put("totalCount", totalCount);
-        result.put("totalPages", Math.max(totalPages, 1));
+        result.put("totalCount", page.getTotalElements());
+        result.put("totalPages", Math.max(page.getTotalPages(), 1));
         result.put("currentPage", req.getPage());
         return result;
+    }
+
+    private List<SettlementsStatus> normalizeStatuses(SettlementsStatus status) {
+        if (status == null) return List.of(SettlementsStatus.values());
+        if (status == SettlementsStatus.COMPLETED) return List.of(SettlementsStatus.COMPLETED, SettlementsStatus.DONE);
+        return List.of(status);
     }
 
     // 정산 상세 조회
@@ -149,6 +168,22 @@ public class SettlementService {
         } catch (Exception e) {
             log.warn("지급 요청 실패 (정산 완료는 유지) settlementId={} error={}", settlementId, e.getMessage());
         }
+    }
+
+    // 보류 해제 (HELD → PENDING)
+    @Transactional
+    public void releaseHold(Long settlementId) {
+        Settlement settlement = settlementRepository.findById(settlementId)
+                .orElseThrow(() -> new ResourceNotFoundException("정산 정보를 찾을 수 없습니다."));
+        settlement.release();
+    }
+
+    // 계좌 정보 변경
+    @Transactional
+    public void updateBankAccount(Long settlementId, String bankAccount) {
+        Settlement settlement = settlementRepository.findById(settlementId)
+                .orElseThrow(() -> new ResourceNotFoundException("정산 정보를 찾을 수 없습니다."));
+        settlement.updateBankAccount(bankAccount);
     }
 
     // 정산 보류 처리

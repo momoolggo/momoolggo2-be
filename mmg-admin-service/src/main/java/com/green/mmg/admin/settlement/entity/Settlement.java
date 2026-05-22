@@ -78,6 +78,11 @@ public class Settlement {
         this.status = SettlementsStatus.HELD;
     }
 
+    // 보류 해제 (HELD → PENDING)
+    public void release() {
+        this.status = SettlementsStatus.PENDING;
+    }
+
     // 계좌번호 등록/수정
     public void updateBankAccount(String bankAccount) {
         this.bankAccount = bankAccount;
