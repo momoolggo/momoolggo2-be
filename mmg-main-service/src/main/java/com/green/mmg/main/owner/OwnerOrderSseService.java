@@ -1,6 +1,6 @@
 package com.green.mmg.main.owner;
 
-import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
-
+@Slf4j
 public class OwnerOrderSseService {
     private final Map<Long, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
@@ -29,8 +29,9 @@ public class OwnerOrderSseService {
             emitter.send(SseEmitter.event()
                     .name("connect")
                     .data("connected"));
-        } catch (IOException e) {
+        } catch (Exception e) {
             removeEmitter(storeId, emitter);
+            log.debug("사장 주문 SSE 연결 확인 실패 storeId={} error={}", storeId, e.getMessage());
         }
             return emitter;
     }
@@ -47,8 +48,9 @@ public class OwnerOrderSseService {
                 emitter.send(SseEmitter.event()
                         .name("new-order")
                         .data(data));
-            } catch (IOException e) {
+            } catch (Exception e) {
                 removeEmitter(storeId, emitter);
+                log.debug("사장 신규 주문 SSE 전송 실패 storeId={} error={}", storeId, e.getMessage());
             }
         }
     }

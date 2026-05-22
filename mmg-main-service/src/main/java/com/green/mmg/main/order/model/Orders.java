@@ -66,6 +66,9 @@ public class Orders implements Persistable<Long> {
     @Column(name = "order_state")
     private Integer orderState;
 
+    @Column(name = "eco_selected")
+    private Boolean ecoSelected;
+
     @Transient
     private boolean isNewEntity = true;
 
@@ -78,4 +81,5 @@ public class Orders implements Persistable<Long> {
     @PostLoad
     @PostPersist
     void markNotNew() { this.isNewEntity = false; }
+
 }

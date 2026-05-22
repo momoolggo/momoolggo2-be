@@ -33,6 +33,20 @@ public interface CouponListRepository extends JpaRepository<CouponList, Long> {
     );
 
     @Query("""
+            SELECT COUNT(cl)
+            FROM CouponList cl, Coupon c
+            WHERE cl.couponId = c.couponId
+              AND cl.userNo = :userNo
+              AND COALESCE(cl.used, false) = false
+              AND cl.expiresAt >= :now
+              AND c.isActive = true
+            """)
+    long countUsableCouponsByUserNo(
+            @Param("userNo") Long userNo,
+            @Param("now") LocalDateTime now
+    );
+
+    @Query("""
         SELECT cl
         FROM CouponList  cl, Coupon c
         WHERE cl.couponId = c.couponId
@@ -52,4 +66,6 @@ public interface CouponListRepository extends JpaRepository<CouponList, Long> {
     );
 
     Optional<CouponList> findFirstByOrderIdAndUserNoAndUsedFalse(Long orderId, Long userNo);
+
+    List<CouponList> findAllByOrderIdAndUsedFalse(Long orderId);
 }

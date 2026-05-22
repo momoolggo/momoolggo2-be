@@ -147,7 +147,8 @@ public class UserService {
     public UserGetRes getUser(Long userNo) {
         User user = userRepository.findById(userNo)
                 .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        return new UserGetRes(user.getUserId(), user.getName(), user.getTel(), user.getGender(), user.getBirth());
+        return new UserGetRes(user.getUserId(), user.getName(), user.getTel(), user.getGender(), user.getBirth(),
+                user.getGreen() == null ? 0 : user.getGreen());
     }
 
     // 내 정보 수정 — JPA dirty checking (기존 MyBatis <if> 동적 UPDATE와 동일 의미)

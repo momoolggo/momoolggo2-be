@@ -159,6 +159,7 @@ public class OrderService {
         order.setPayState(dto.getPayState());
         order.setOrderState(ORDER_STATE_WAITING);
         order.setDeliveryState(1);
+        order.setEcoSelected(Boolean.TRUE.equals(dto.getEcoSelected()));
         orderRepository.saveAndFlush(order);
 
         for (CartItemRes item : items) {
@@ -285,7 +286,7 @@ public class OrderService {
             throw new BusinessException("본인 주문 내역만 조회 가능합니다.", HttpStatus.FORBIDDEN);
         }
         // 응답 동결: 기존 OrderMapper.maxHistoryPage가 int 반환 → 동일 타입 유지
-        return (int) orderRepository.countByUserNo(userId);
+        return (int) orderRepository.countByUserNoAndPayState(userId, PAY_STATE_PAID);
     }
 
     // 주문 취소 건 재주문(장바구니 다시 담기)

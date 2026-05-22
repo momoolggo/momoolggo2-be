@@ -1,9 +1,6 @@
 package com.green.mmg.auth.internal;
 
-import com.green.mmg.auth.internal.dto.InternalAdminUserRes;
-import com.green.mmg.auth.internal.dto.InternalUserApprovalReq;
-import com.green.mmg.auth.internal.dto.InternalUserDetailRes;
-import com.green.mmg.auth.internal.dto.InternalUserSuspensionReq;
+import com.green.mmg.auth.internal.dto.*;
 import com.green.mmg.auth.user.UserRepository;
 import com.green.mmg.auth.user.model.User;
 import com.green.mmg.common.dto.ResultResponse;
@@ -246,4 +243,26 @@ public class InternalUserController {
                 userRepository.countByCreatedAtBetween(from, to));
     }
 
+    /**  친환경(그린포인트)  */
+    @Transactional
+    @PostMapping("/user/{userNo}/greenpoint")
+    public  ResultResponse<Integer> addGreenPoint(@PathVariable long userNo,
+                                                  @RequestBody InternalGreenPointAddReq req){
+        User user = userRepository.findById(userNo)
+                .orElseThrow(() -> new BusinessException("user not found:" + userNo));
+
+        if (!"CUSTOMER".equals(user.getRole())) {
+            throw new BusinessException("친환경 점수는 고객만 적립할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        int point = req.point() == null ? 0 : req.point();
+        if (point <= 0) {
+            throw new BusinessException("적립 포인트는 1 이상이어야 합니다", HttpStatus.BAD_REQUEST);
+        }
+
+        int currentGreen = user.getGreen() == null ? 0 : user.getGreen();
+        user.setGreen(currentGreen + point);
+
+        return new ResultResponse<>("그린포인트 적립 완료", user.getGreen());
+    }
 }

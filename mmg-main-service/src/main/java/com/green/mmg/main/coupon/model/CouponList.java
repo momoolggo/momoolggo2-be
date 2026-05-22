@@ -43,6 +43,10 @@ public class CouponList {
         this.orderId = orderId;
     }
 
+    public void releaseReservation(){
+        this.orderId = null;
+    }
+
     public void markUsed(){
         this.used = true;
         this.usedAt = LocalDateTime.now();
