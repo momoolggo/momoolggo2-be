@@ -32,6 +32,15 @@ public class UserController {
     }
 
     // ── 회원가입 POST /api/user/join (옵션 D-1: BFF 패턴, 즉시 AT/RT 발급)
+    @GetMapping("/check-email")
+    public ResultResponse<Void> checkEmail(@RequestParam String email) {
+        boolean available = userService.checkEmail(email);
+        if (!available) {
+            throw new BusinessException("이미 사용 중인 이메일입니다.", HttpStatus.CONFLICT);
+        }
+        return new ResultResponse<>("사용 가능한 이메일입니다.", null);
+    }
+
     @PostMapping("/join")
     public ResultResponse<UserSigninRes> signup(@RequestBody UserSignupReq req,
                                                 HttpServletResponse res) {
@@ -93,4 +102,14 @@ public class UserController {
     }
 
     // 리뷰 엔드포인트는 Phase 2에서 main-service에 작성
+    @PostMapping("/find-id")
+    public ResultResponse<UserFindIdRes> findId(@RequestBody UserFindIdReq req) {
+        return new ResultResponse<>("아이디 찾기 성공", userService.findId(req));
+    }
+
+    @PostMapping("/reset-pw")
+    public ResultResponse<Void> resetPassword(@RequestBody UserResetPwReq req) {
+        userService.resetPassword(req);
+        return new ResultResponse<>("비밀번호 재설정 성공", null);
+    }
 }
