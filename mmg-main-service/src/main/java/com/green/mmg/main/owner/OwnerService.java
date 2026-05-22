@@ -8,6 +8,10 @@ import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.feign.RiderFeignClient;
 import com.green.mmg.main.feign.model.RiderAssignReq;
+import com.green.mmg.main.notification.NotificationService;
+import com.green.mmg.main.notification.model.NotificationCreateReq;
+import com.green.mmg.main.order.OrderRepository;
+import com.green.mmg.main.order.model.Orders;
 import com.green.mmg.main.owner.entity.MenuOption;
 import com.green.mmg.main.owner.entity.MenuOptionCategory;
 import com.green.mmg.main.owner.model.*;
@@ -40,6 +44,8 @@ public class OwnerService {
     private final MenuOptionCategoryRepository menuOptionCategoryRepository;
     private final AdminFeignClient adminFeignClient;
     private final OwnerOrderSseService ownerOrderSseService;
+    private final OrderRepository orderRepository;
+    private final NotificationService notificationService;
 
     private static final int IMAGE_MAX_WIDTH = 1200;
     private static final int IMAGE_MAX_HEIGHT = 1200;
@@ -183,9 +189,20 @@ public class OwnerService {
     @Transactional
     public void updateOrderState(long callerOwnerNo, OwnerOrderStateReq req){
         verifyOrderOwner(callerOwnerNo, req.getOrderId());
+        Orders order = orderRepository.findById(req.getOrderId())
+                .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다."));
+        Integer previousOrderState = order.getOrderState();
+
         int result = ownerMapper.updateOrderState(req);
         if (result == 0){
             throw new RuntimeException("주문 상태 변경 실패: 주문을 찾을 수 없습니다.");
+        }
+
+        // 점주가 주문을 수락해 조리중으로 처음 진입한 시점에 고객 내부 알림을 저장한다.
+        // SSE 실시간 수신을 놓치거나 재로그인하더라도 알림 목록 조회로 다시 확인할 수 있다.
+        if (!Objects.equals(previousOrderState, ORDER_STATE_COOKING)
+                && req.getOrderState() == ORDER_STATE_COOKING) {
+            sendOrderAcceptedNotification(order);
         }
 
         // 점주 수락 시점 (order_state=3 진입)에 자동 배차 트리거 (team-handoff §8, Q-A9.a (β+δ)).
@@ -194,6 +211,16 @@ public class OwnerService {
         if (req.getOrderState() == ORDER_STATE_COOKING) {
             triggerRiderAssign(req.getOrderId());
         }
+    }
+
+    private void sendOrderAcceptedNotification(Orders order) {
+        notificationService.createNotification(new NotificationCreateReq(
+                order.getUserNo(),
+                "ORDER_STATUS",
+                "주문이 수락되었습니다.",
+                "가게에서 주문을 확인하고 조리를 시작했습니다.",
+                "/order/history/" + order.getOrderId()
+        ));
     }
 
     /**

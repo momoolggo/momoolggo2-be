@@ -18,6 +18,7 @@ public class OrderHistoryDto {
     private int deliveryFee;       // orders.delivery_fee
     private int couponDiscount;   // 쿠폰 할인 금액
     private long orderId;          // orders.order_id
+    private int payState;          // orders.pay_state
     private int orderState;        // orders.order_state
     private int hasReview;
     private List<OrderItemDto> items;

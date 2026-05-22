@@ -4,6 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(scanBasePackages = {"com.green.mmg.main", "com.green.mmg.common"})
 @EnableFeignClients(basePackages = {
@@ -11,8 +12,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
         "com.green.mmg.main.feign"
 })
 @EnableJpaAuditing
+@EnableScheduling
 public class MainApplication {
     public static void main(String[] args) {
         SpringApplication.run(MainApplication.class, args);
     }
+
 }

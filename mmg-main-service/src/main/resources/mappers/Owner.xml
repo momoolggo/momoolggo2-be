@@ -127,9 +127,11 @@
         o.user_no AS userNo,
         DATE_FORMAT(o.order_time, '%H:%i') AS orderDate,
         o.amount AS totalPrice,
+        o.pay_state AS payState,
         o.order_state AS state,
         o.address AS address,
         o.request AS request,
+        o.eco_selected AS ecoSelected,
         GROUP_CONCAT(CONCAT(od.menu_name, ' x', od.quantity) SEPARATOR ', ') AS menuList
         FROM orders o
         JOIN order_detail od ON o.order_id = od.order_id

@@ -11,4 +11,5 @@ public class UserGetRes {
     private String tel;
     private int    gender;
     private String birth;
+    private Integer green;
 }
