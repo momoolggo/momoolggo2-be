@@ -45,4 +45,11 @@ public interface DeliveryRepository extends JpaRepository<Delivery, String> {
      */
     List<Delivery> findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
             Long riderNo, DeliveryStatus status, LocalDateTime from, LocalDateTime to);
+
+    /** Admin 모니터 keyword 검색 — storeName LIKE, status 미지정. */
+    Page<Delivery> findByStoreNameContainingIgnoreCase(String storeName, Pageable pageable);
+
+    /** Admin 모니터 keyword 검색 — storeName LIKE + status 그룹 필터. */
+    Page<Delivery> findByStatusInAndStoreNameContainingIgnoreCase(
+            Collection<DeliveryStatus> statuses, String storeName, Pageable pageable);
 }

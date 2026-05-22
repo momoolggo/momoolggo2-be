@@ -28,7 +28,8 @@ public interface RiderFeignClient {
     @GetMapping("/internal/rider/monitor")
     RiderInternalMonitorRes getMonitor(
             @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "0") int page
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String keyword
     );
 
     /** 라이더 전체 공지 발송 — POST /internal/rider/notice */

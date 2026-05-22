@@ -24,9 +24,10 @@ public class AdminDeliveryController {
     @GetMapping("/monitor")
     public RiderInternalMonitorRes getDeliveryMonitor(
             @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "0") int page
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String keyword
     ) {
-        return riderFeignClient.getMonitor(status, page);
+        return riderFeignClient.getMonitor(status, page, keyword);
     }
 
     /** 라이더 전체 공지 발송 */

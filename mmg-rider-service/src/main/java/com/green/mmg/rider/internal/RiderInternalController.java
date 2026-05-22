@@ -91,12 +91,13 @@ public class RiderInternalController {
         return deliveryService.getRiderInternalStatus(riderNo);
     }
 
-    /** Admin 모니터 — summary 4그룹 카운트 + status 필터 + page 목록. */
+    /** Admin 모니터 — summary 4그룹 카운트 + status 필터 + keyword(storeName) + page 목록. */
     @GetMapping("/monitor")
     public RiderInternalMonitorRes monitor(
             @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "0") int page) {
-        return deliveryService.getMonitor(status, page);
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String keyword) {
+        return deliveryService.getMonitor(status, page, keyword);
     }
 
     /** Admin 공지 작성 — 즉시(NOW) 또는 예약(RESERVED) 발송. */

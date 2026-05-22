@@ -14,6 +14,7 @@ public class SettlementReq {
     private LocalDate endDate;
     private SettlementsStatus status;
     private Long targetNo;
+    private String keyword;
     private int page = 0;
     private int size = 10;
 }

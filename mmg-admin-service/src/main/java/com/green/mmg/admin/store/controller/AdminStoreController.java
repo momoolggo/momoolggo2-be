@@ -31,6 +31,8 @@ public class AdminStoreController {
         return mainFeignClient
 
                 .getStoreList(page, size, storeName, businessNo, userId, date, name, category);
+
+
     }
     @GetMapping("/{storeId}")
     public ResultResponse<?> getStoreDetail(@PathVariable Long storeId) {

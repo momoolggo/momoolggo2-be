@@ -8,8 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
@@ -43,13 +43,13 @@ public class SettlementPayoutService {
             return;
         }
 
-        // 계좌 파싱 (예: "국민은행 111-2222-3333" → bankCode + accountNumber)
-        BankInfo bankInfo = parseBankAccount(settlement.getBankAccount());
-
-        String requestedAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"))
-                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX"));
-
         try {
+            // 계좌 파싱 (예: "국민은행 111-2222-3333" → bankCode + accountNumber)
+            BankInfo bankInfo = parseBankAccount(settlement.getBankAccount());
+
+            String requestedAt = ZonedDateTime.now(ZoneId.of("Asia/Seoul"))
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX"));
+
             TossPayoutClient.TossPayoutReq req = new TossPayoutClient.TossPayoutReq(
                     settlement.getNetAmount(),
                     bankInfo.bankCode(),
