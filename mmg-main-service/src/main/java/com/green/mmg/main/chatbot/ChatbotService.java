@@ -5,6 +5,7 @@ import com.green.mmg.main.chatbot.dto.ChatMessageRes;
 import com.green.mmg.main.chatbot.dto.ChatSendRes;
 import com.green.mmg.main.chatbot.dto.ChatSessionRes;
 import com.green.mmg.main.chatbot.entity.*;
+import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.pet.PetService;
 import com.green.mmg.main.pet.entity.Pet;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +15,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -28,6 +31,7 @@ public class ChatbotService {
     private final PetService petService;
     private final GeminiClient geminiClient;
     private final ChatbotPromptBuilder promptBuilder;
+    private final AdminFeignClient adminFeignClient;  // P-7 에스컬레이션
 
     /** 옵션 주입 — P-4/P-5 컨텍스트 확장 시 별 @Component 등록되면 자동 주입. */
     @Autowired(required = false)
@@ -99,7 +103,31 @@ public class ChatbotService {
             throw new BusinessException("CS 세션만 상담원 연결이 가능합니다.", HttpStatus.BAD_REQUEST);
         }
         session.escalate();
+        notifyAdminEscalation(session);
         return new ChatSessionRes(session);
+    }
+
+    /**
+     * P-7 admin 알림 — best-effort. Feign 실패해도 main escalate transition은 그대로 유지.
+     * lastUserMessage = 세션의 가장 최근 USER 메시지 1건.
+     */
+    private void notifyAdminEscalation(ChatSession session) {
+        try {
+            List<ChatMessage> history = messageRepository.findBySessionIdOrderByMessageIdAsc(session.getSessionId());
+            String lastUser = history.stream()
+                    .filter(m -> m.getRole() == MessageRole.USER)
+                    .reduce((a, b) -> b)
+                    .map(ChatMessage::getContent)
+                    .orElse(null);
+            Map<String, Object> req = new HashMap<>();
+            req.put("userNo", session.getUserNo());
+            req.put("sessionId", session.getSessionId());
+            req.put("lastUserMessage", lastUser);
+            adminFeignClient.escalateChatbot(req);
+        } catch (Exception e) {
+            log.warn("에스컬레이션 admin 알림 실패 (best-effort) — sessionId={}, cause={}",
+                    session.getSessionId(), e.getMessage());
+        }
     }
 
     @Transactional

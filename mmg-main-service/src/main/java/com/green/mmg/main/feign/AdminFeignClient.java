@@ -33,4 +33,8 @@ public interface AdminFeignClient {
     @PostMapping("/internal/review/{reviewId}/auto-detect")
     ResultResponse<Void> autoDetect(@PathVariable("reviewId") Long reviewId,
                                     @RequestBody Map<String, String> req);
+
+    /** P-7 챗봇 에스컬레이션 — main → admin. body: {userNo, sessionId, lastUserMessage}. */
+    @PostMapping("/internal/chatbot/escalate")
+    ResultResponse<Void> escalateChatbot(@RequestBody Map<String, Object> req);
 }

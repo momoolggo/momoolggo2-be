@@ -1,10 +1,12 @@
 package com.green.mmg.main.chatbot;
 
 import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.main.chatbot.dto.ChatMessageRes;
 import com.green.mmg.main.chatbot.dto.ChatSendRes;
 import com.green.mmg.main.chatbot.dto.ChatSessionRes;
 import com.green.mmg.main.chatbot.entity.*;
+import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.pet.PetService;
 import com.green.mmg.main.pet.entity.Pet;
 import com.green.mmg.main.pet.entity.PetSpecies;
@@ -37,6 +39,7 @@ class ChatbotServiceTest {
     @Mock private PetService petService;
     @Mock private GeminiClient geminiClient;
     @Mock private ChatbotPromptBuilder promptBuilder;
+    @Mock private AdminFeignClient adminFeignClient;
 
     @InjectMocks
     private ChatbotService chatbotService;
@@ -245,15 +248,35 @@ class ChatbotServiceTest {
     class Transition {
 
         @Test
-        @DisplayName("CS escalate happy → status=ESCALATED")
+        @DisplayName("CS escalate happy → status=ESCALATED + admin Feign 1회 호출")
         void cs_escalate_happy() {
             ChatSession session = new ChatSession(USER_NO, null, EntryPoint.CS, ToneMode.SERIOUS);
             when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+            ChatMessage userMsg = new ChatMessage(SESSION_ID, MessageRole.USER, "도와주세요");
+            when(messageRepository.findBySessionIdOrderByMessageIdAsc(any()))
+                    .thenReturn(java.util.List.of(userMsg));
+            when(adminFeignClient.escalateChatbot(any())).thenReturn(new ResultResponse<>("ok", null));
 
             ChatSessionRes res = chatbotService.escalate(USER_NO, SESSION_ID);
 
             assertThat(res.getStatus()).isEqualTo(SessionStatus.ESCALATED);
             assertThat(session.getEscalatedAt()).isNotNull();
+            verify(adminFeignClient, times(1)).escalateChatbot(any());
+        }
+
+        @Test
+        @DisplayName("admin Feign 실패 → escalate state는 그대로 ESCALATED 유지 (best-effort)")
+        void cs_escalate_feignFails_stateStillEscalated() {
+            ChatSession session = new ChatSession(USER_NO, null, EntryPoint.CS, ToneMode.SERIOUS);
+            when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+            when(messageRepository.findBySessionIdOrderByMessageIdAsc(any()))
+                    .thenReturn(java.util.List.of());
+            when(adminFeignClient.escalateChatbot(any()))
+                    .thenThrow(new RuntimeException("admin down"));
+
+            ChatSessionRes res = chatbotService.escalate(USER_NO, SESSION_ID);
+
+            assertThat(res.getStatus()).isEqualTo(SessionStatus.ESCALATED);
         }
 
         @Test
