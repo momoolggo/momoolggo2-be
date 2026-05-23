@@ -6,7 +6,18 @@
 ---
 
 ## 진행 중
-(현재 작업 중인 부채)
+
+### Phase 5 펫+챗봇 풀세트 트랙 잔존 (2026-05-23)
+
+| 항목 | 발견일 | 위치 | 처리 시점 |
+|---|---|---|---|
+| **admin FE 챗봇 문의 화면 부재** (`AdminChatbotInquiryView.vue`) | 2026-05-23 | `momoolggo2-fe/src/views/admin/` | Phase 6+ — case-#37 강제 sub: admin FE 별 repo + 사용자 영역 별 (admin views 8건 박제 일관). AdminFaqView 패턴 일관 신설 (list/detail/reply + escalation-stream SSE 구독) |
+| **기상청 단기예보 실 API + nx/ny 좌표 변환 + Redis 캐시 (Lv.10+ 날씨)** | 2026-05-23 | `WeatherContextSourceImpl.lookupWeather` | Phase 6+ — 현재 시연용 placeholder "맑음". 실 API = 공공데이터포털 단기예보 + 위경도→격자 변환 알고리즘(LCC) + Redis `weather:grid:{nx}:{ny}` TTL 1h |
+| **green_point_log status PENDING → auth user.green 동기화 worker 부재** | 2026-05-23 | (worker 부재) | Phase 6+ — outbox 패턴 박제 (status PENDING/SUCCESS/FAILED + retry_count + last_error 컬럼) 그대로 활용. 별 worker가 auth Feign 호출 후 status 갱신 |
+| **AdminEscalationSseService 운영 분산 (Redis Pub/Sub 또는 STOMP)** | 2026-05-23 | `AdminEscalationSseService` (ConcurrentHashMap 단일 인스턴스) | Phase 6+ — admin 멀티 인스턴스 운영 시 SSE 구독자 분산 필요. 현재 단일 인스턴스 가정. |
+| **`/api/admin/cs/internal/inquiry` 경로 컨벤션 위반** (외부 prefix `/api/admin/cs/...`에 internal 포함) | 2026-05-23 | `CsController.createInquiry` (line 48) | Phase 6+ — 정식 `/internal/...` 경로로 분리. 본 P-7에서 `/internal/chatbot/escalate` 정식 컨벤션 박제. |
+| **Gemini 실 호출 e2e 통합 테스트 0건** (인증 토큰 + API 키 의존) | 2026-05-23 | `ChatbotControllerIntegrationTest` 부재 | Phase 6+ — 단위 mock만 47건 박제. 실 통합은 e2e 자동화 + API 호출 비용 관리 |
+| **StoreServiceTest 17건 실패 (Feign batch null NPE)** | 2026-05-23 | `mmg-main-service/src/test/.../StoreServiceTest` | 별 트랙 — 본 트랙 무관 기존 부채 (Phase 4-A 백필 시점 패턴이 깨진 상태). team-handoff 후보. |
 
 ---
 
