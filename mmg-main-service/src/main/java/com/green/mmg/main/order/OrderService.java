@@ -18,6 +18,8 @@ import com.green.mmg.main.notification.model.NotificationCreateReq;
 import com.green.mmg.main.order.model.*;
 import com.green.mmg.main.owner.OwnerOrderSseService;
 import com.green.mmg.main.payment.PaymentService;
+import com.green.mmg.main.pet.PetService;
+import com.green.mmg.main.pet.dto.PetRewardRes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -80,6 +82,7 @@ public class OrderService {
     private final OrderDeliverySseService orderDeliverySseService;
     private final NotificationService notificationService;
     private final PaymentService paymentService;
+    private final PetService petService;  // P-6 주문 완료 시 펫 보상
 
     private static final int ORDER_STATE_WAITING = 1;
     private static final int ORDER_STATE_CANCELED = 2;
@@ -414,7 +417,32 @@ public class OrderService {
         orderDeliverySseService.sendDeliveryStatus(orderId, status);
         sendOrderStatusNotification(order, status);
 
+        grantPetReward(order);
+
         return new DeliveryCompleteRes(orderId, 3);
+    }
+
+    /**
+     * P-6 펫 보상 — best-effort. 실패해도 주문 완료 영향 X.
+     * 1주문 1회 idempotent (PetService.grantOrderReward 내부에서 green_point_log.order_id UNIQUE 검사).
+     */
+    private void grantPetReward(Orders order) {
+        try {
+            Integer amount = order.getAmount();
+            PetRewardRes reward = petService.grantOrderReward(
+                    order.getUserNo(), order.getOrderId(), amount == null ? 0 : amount);
+            if (reward.isLeveledUp()) {
+                notificationService.createNotification(new NotificationCreateReq(
+                        order.getUserNo(),
+                        "PET_LEVEL_UP",
+                        "펫 레벨업!",
+                        "펫이 Lv." + reward.getNewLevel() + "에 도달했어요! 포인트 " + reward.getPointGranted() + "P 적립.",
+                        "/mypage/pet"
+                ));
+            }
+        } catch (Exception e) {
+            log.warn("펫 보상 실패 (best-effort 진행) — orderId={}, cause={}", order.getOrderId(), e.getMessage());
+        }
     }
 
     private void sendOrderStatusNotification(Orders order, OrderDeliveryStatusRes status) {

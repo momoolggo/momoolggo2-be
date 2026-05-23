@@ -2,7 +2,9 @@ package com.green.mmg.main.pet;
 
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.pet.dto.PetRes;
+import com.green.mmg.main.pet.dto.PetRewardRes;
 import com.green.mmg.main.pet.dto.PetUpdateReq;
+import com.green.mmg.main.pet.entity.GreenPointLog;
 import com.green.mmg.main.pet.entity.Pet;
 import com.green.mmg.main.pet.entity.PetSpecies;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +29,7 @@ import static org.mockito.Mockito.*;
 class PetServiceTest {
 
     @Mock private PetRepository petRepository;
+    @Mock private GreenPointLogRepository greenPointLogRepository;
     @InjectMocks private PetService petService;
 
     private static final Long USER_NO = 42L;
@@ -163,6 +166,92 @@ class PetServiceTest {
             assertThatThrownBy(() -> petService.updatePet(USER_NO, new PetUpdateReq()))
                     .isInstanceOf(BusinessException.class)
                     .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("grantOrderReward — P-6 주문 완료 보상")
+    class GrantReward {
+
+        private static final Long ORDER_ID = 901L;
+
+        @Test
+        @DisplayName("idempotent: 이미 적립된 orderId → 보상 X + 펫 상태 그대로 반환")
+        void already_granted_returns_existing() {
+            Pet pet = new Pet(USER_NO, PetSpecies.DOG, "테스트");
+            when(greenPointLogRepository.existsByOrderId(ORDER_ID)).thenReturn(true);
+            when(petRepository.findByUserNo(USER_NO)).thenReturn(java.util.Optional.of(pet));
+
+            PetRewardRes res = petService.grantOrderReward(USER_NO, ORDER_ID, 15000);
+
+            assertThat(res.isLeveledUp()).isFalse();
+            assertThat(res.getPointGranted()).isZero();
+            verify(petRepository, never()).save(any());
+            verify(greenPointLogRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("happy: 펫 EXP/친밀도 상승 + 레벨업 미발생 → 포인트 0")
+        void exp_below_levelup_no_point() {
+            Pet pet = new Pet(USER_NO, PetSpecies.DOG, "테스트");
+            when(greenPointLogRepository.existsByOrderId(ORDER_ID)).thenReturn(false);
+            when(petRepository.findByUserNo(USER_NO)).thenReturn(java.util.Optional.of(pet));
+
+            PetRewardRes res = petService.grantOrderReward(USER_NO, ORDER_ID, 0);  // EXP_BASE=30
+
+            assertThat(res.isLeveledUp()).isFalse();
+            assertThat(res.getPointGranted()).isZero();
+            assertThat(res.getNewExp()).isEqualTo(30);
+            assertThat(res.getNewIntimacy()).isEqualTo(5);
+            verify(greenPointLogRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("happy: 큰 주문 → 레벨업 발생 → green_point_log INSERT + 포인트 적립")
+        void big_order_levelup_point_inserted() {
+            Pet pet = new Pet(USER_NO, PetSpecies.DOG, "테스트");
+            when(greenPointLogRepository.existsByOrderId(ORDER_ID)).thenReturn(false);
+            when(petRepository.findByUserNo(USER_NO)).thenReturn(java.util.Optional.of(pet));
+            ArgumentCaptor<GreenPointLog> captor = ArgumentCaptor.forClass(GreenPointLog.class);
+            when(greenPointLogRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+            // EXP_BASE 30 + (200000/10000)*10 = 30 + 200 = 230 EXP → Lv1 100 EXP 소진 + Lv2 130 EXP
+            PetRewardRes res = petService.grantOrderReward(USER_NO, ORDER_ID, 200_000);
+
+            assertThat(res.isLeveledUp()).isTrue();
+            assertThat(res.getNewLevel()).isEqualTo(2);
+            assertThat(res.getPointGranted()).isEqualTo(200);  // Lv.2 * 100
+            assertThat(captor.getValue().getOrderId()).isEqualTo(ORDER_ID);
+            assertThat(captor.getValue().getPoint()).isEqualTo(200);
+            assertThat(captor.getValue().getStatus()).isEqualTo("PENDING");
+            assertThat(captor.getValue().getReason()).contains("Lv.2");
+        }
+
+        @Test
+        @DisplayName("펫 부재 → lazy 생성 후 보상")
+        void absent_pet_lazyCreate() {
+            when(greenPointLogRepository.existsByOrderId(ORDER_ID)).thenReturn(false);
+            when(petRepository.findByUserNo(USER_NO)).thenReturn(java.util.Optional.empty());
+            when(petRepository.save(any(Pet.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            PetRewardRes res = petService.grantOrderReward(USER_NO, ORDER_ID, 5000);
+
+            assertThat(res.getNewIntimacy()).isEqualTo(5);
+            verify(petRepository).save(any(Pet.class));
+        }
+
+        @Test
+        @DisplayName("green_point_log race (UNIQUE 충돌) → swallow + 보상 그대로")
+        void greenPointLog_race_swallowed() {
+            Pet pet = new Pet(USER_NO, PetSpecies.DOG, "테스트");
+            when(greenPointLogRepository.existsByOrderId(ORDER_ID)).thenReturn(false);
+            when(petRepository.findByUserNo(USER_NO)).thenReturn(java.util.Optional.of(pet));
+            when(greenPointLogRepository.save(any(GreenPointLog.class)))
+                    .thenThrow(new org.springframework.dao.DataIntegrityViolationException("UNIQUE order_id"));
+
+            PetRewardRes res = petService.grantOrderReward(USER_NO, ORDER_ID, 200_000);
+
+            assertThat(res.isLeveledUp()).isTrue();
         }
     }
 
