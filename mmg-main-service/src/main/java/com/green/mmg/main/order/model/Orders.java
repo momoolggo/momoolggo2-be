@@ -66,6 +66,10 @@ public class Orders implements Persistable<Long> {
     @Column(name = "order_state")
     private Integer orderState;
 
+    // 자잘 에러 트랙 #9-B (2026-05-23) — 라이더 배달 완료 사진 URL (예: /uploads/delivery/abc.jpg)
+    @Column(name = "delivered_photo_url")
+    private String deliveredPhotoUrl;
+
     @Transient
     private boolean isNewEntity = true;
 

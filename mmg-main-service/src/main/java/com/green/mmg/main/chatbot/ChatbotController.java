@@ -20,7 +20,9 @@ public class ChatbotController {
     public ResultResponse<ChatSessionRes> startSession(@AuthenticationPrincipal UserPrincipal principal,
                                                        @RequestBody ChatSessionStartReq req) {
         return new ResultResponse<>("세션 시작",
-                chatbotService.startSession(principal.getSignedUserNo(), req.getEntryPoint(), req.getToneMode()));
+                chatbotService.startSession(
+                        principal.getSignedUserNo(), principal.getRole(),
+                        req.getEntryPoint(), req.getToneMode()));
     }
 
     @GetMapping("/sessions")

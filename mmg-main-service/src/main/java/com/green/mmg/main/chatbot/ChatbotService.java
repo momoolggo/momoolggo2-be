@@ -42,12 +42,18 @@ public class ChatbotService {
             "지금은 답변을 드리기 어려워요. 잠시 후 다시 시도해주세요.";
 
     @Transactional
-    public ChatSessionRes startSession(Long userNo, EntryPoint entryPoint, ToneMode toneMode) {
+    public ChatSessionRes startSession(Long userNo, String callerRole, EntryPoint entryPoint, ToneMode toneMode) {
         if (entryPoint == null) {
             throw new BusinessException("entryPoint가 필요합니다.", HttpStatus.BAD_REQUEST);
         }
         Long petNo = null;
         if (entryPoint == EntryPoint.MYPET) {
+            // 자잘 에러 트랙(2026-05-23) — 펫 챗봇은 CUSTOMER 전용 (사장/라이더 펫 자동 생성 side effect 차단).
+            if (!"CUSTOMER".equals(callerRole)) {
+                throw new BusinessException(
+                        "펫 챗봇은 고객 전용입니다. 사장/라이더는 CS 챗봇만 사용 가능합니다.",
+                        HttpStatus.FORBIDDEN);
+            }
             Pet pet = petService.getOrCreatePet(userNo);
             petNo = pet.getPetNo();
         }

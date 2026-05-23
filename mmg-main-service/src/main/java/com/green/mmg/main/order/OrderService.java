@@ -371,6 +371,21 @@ public class OrderService {
         Integer previousState = order.getDeliveryState();
         order.setDeliveryState(newState);
 
+        // 자잘 에러 트랙 #7 (2026-05-23) — order_state 자동 동기화 (사장-라이더 정합).
+        // 이전: delivery_state만 변경되어 사장 화면이 "조리 중"(3) 영구 고착 → 사장이 "라이더 배차"(4) 버튼 무용지물.
+        // 이후: delivery 1(배차됨, ASSIGNED/ARRIVED/AWAITING) → order 4(라이더 배차).
+        //       delivery 2(배달중, PICKED_UP/DELIVERING) → order 5(배달 중).
+        // reviewer W-1 정정 — WAITING_ASSIGN은 newState=1이지만 라이더가 reject로 풀 복귀한 경우라 order_state 전진 X.
+        Integer currentOrderState = order.getOrderState();
+        if (currentOrderState != null && currentOrderState >= 3) {
+            Integer targetOrderState = null;
+            if (newState == 1 && !"WAITING_ASSIGN".equals(deliveryStatus)) targetOrderState = 4;
+            else if (newState == 2) targetOrderState = 5;
+            if (targetOrderState != null && targetOrderState > currentOrderState) {
+                order.setOrderState(targetOrderState);
+            }
+        }
+
         OrderDeliveryStatusRes status = new OrderDeliveryStatusRes(
                 order.getOrderId(),
                 order.getOrderState(),
@@ -393,9 +408,10 @@ public class OrderService {
      * rider → main 배달 완료 처리 (interfaces.md §2.2).
      * delivery_state=3 (DELIVERED 종결, ADR-004) + order_state=6 (배달완료, CLAUDE.md §7).
      * completedAt body 인자는 수신 후 무시 (Q-A8.e-1 (나), orders.completed_at 컬럼 부재 — tech-debt).
+     * deliveredPhotoUrl은 자잘 에러 트랙 #9-B (2026-05-23) — orders.delivered_photo_url 저장.
      */
     @Transactional
-    public DeliveryCompleteRes completeDelivery(Long orderId, LocalDateTime completedAt) {
+    public DeliveryCompleteRes completeDelivery(Long orderId, LocalDateTime completedAt, String deliveredPhotoUrl) {
         Orders order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다: " + orderId, HttpStatus.NOT_FOUND));
 
@@ -405,6 +421,9 @@ public class OrderService {
 
         order.setDeliveryState(3);
         order.setOrderState(6);
+        if (deliveredPhotoUrl != null && !deliveredPhotoUrl.isBlank()) {
+            order.setDeliveredPhotoUrl(deliveredPhotoUrl);
+        }
 
         OrderDeliveryStatusRes status = new OrderDeliveryStatusRes(
                 order.getOrderId(),

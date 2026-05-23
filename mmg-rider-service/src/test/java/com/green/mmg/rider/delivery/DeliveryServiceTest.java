@@ -65,6 +65,7 @@ class DeliveryServiceTest {
     @Mock private DeliveryLogRepository deliveryLogRepository;
     @Mock private RiderRepository riderRepository;
     @Mock private com.green.mmg.rider.settlement.SettlementService settlementService;
+    @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private DeliveryService deliveryService;
 
@@ -491,6 +492,25 @@ class DeliveryServiceTest {
             assertThat(log.getToStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
             assertThat(log.getActorRole()).isEqualTo(ActorRole.SYSTEM);
             assertThat(log.getActorUserNo()).isNull();
+
+            // 자잘 에러 트랙(2026-05-23) — 풀 모델 진입 시 OrderAssignEvent(ASSIGNED) publish 검증.
+            ArgumentCaptor<com.green.mmg.rider.delivery.sse.OrderAssignEvent> eventCaptor =
+                    ArgumentCaptor.forClass(com.green.mmg.rider.delivery.sse.OrderAssignEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            assertThat(eventCaptor.getValue().type())
+                    .isEqualTo(com.green.mmg.rider.delivery.sse.OrderAssignEvent.Type.ASSIGNED);
+        }
+
+        @Test
+        @DisplayName("강제 배차 (riderNo 명시) → OrderAssignEvent publish 없음 (broadcast 대상 X)")
+        void strict_riderNoExplicit_noPublish() {
+            Rider rider = activeRider();
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            deliveryService.assignDelivery(sampleReq());
+
+            verify(eventPublisher, never()).publishEvent(any(com.green.mmg.rider.delivery.sse.OrderAssignEvent.class));
         }
 
         // ─── 사례 #21 (2026-05-19) computeExtraFee 단위 검증 ──────────────────
@@ -1197,6 +1217,57 @@ class DeliveryServiceTest {
                     .isEqualTo(HttpStatus.NOT_FOUND);
             verify(deliveryRepository, never()).findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
                     any(), any(), any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("claimDelivery (자잘 에러 트랙 2026-05-23, broadcast 검증)")
+    class ClaimDelivery {
+
+        private Rider activeRider() {
+            Rider rider = mock(Rider.class);
+            lenient().when(rider.getRiderNo()).thenReturn(CALLER_RIDER_NO);
+            lenient().when(rider.getStatus()).thenReturn(RiderStatus.ACTIVE);
+            return rider;
+        }
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("WAITING_ASSIGN + riderNo=null → ASSIGNED + OrderAssignEvent(CLAIMED) publish")
+        void claim_happy_publishesClaimed() {
+            Delivery delivery = deliveryWith(DeliveryStatus.WAITING_ASSIGN, null);
+            Rider rider = activeRider();
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            DeliveryTransitionResult result = deliveryService.claimDelivery(DELIVERY_NO, CALLER_USER_NO);
+
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            assertThat(result.riderNo()).isEqualTo(CALLER_RIDER_NO);
+
+            ArgumentCaptor<com.green.mmg.rider.delivery.sse.OrderAssignEvent> eventCaptor =
+                    ArgumentCaptor.forClass(com.green.mmg.rider.delivery.sse.OrderAssignEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            com.green.mmg.rider.delivery.sse.OrderAssignEvent event = eventCaptor.getValue();
+            assertThat(event.type())
+                    .isEqualTo(com.green.mmg.rider.delivery.sse.OrderAssignEvent.Type.CLAIMED);
+            assertThat(event.payload()).isEqualTo(DELIVERY_NO);
+        }
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("이미 다른 라이더가 잡은 배차 (rider_no 비어있지 않음) → CONFLICT + publish 없음")
+        void claim_alreadyTaken_noPublish() {
+            Delivery delivery = deliveryWith(DeliveryStatus.WAITING_ASSIGN, 99L);  // 다른 라이더
+            Rider rider = activeRider();
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
+
+            assertThatThrownBy(() -> deliveryService.claimDelivery(DELIVERY_NO, CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.CONFLICT);
+
+            verify(eventPublisher, never()).publishEvent(any(com.green.mmg.rider.delivery.sse.OrderAssignEvent.class));
         }
     }
 }

@@ -58,14 +58,14 @@ class ChatbotServiceTest {
     class Start {
 
         @Test
-        @DisplayName("MYPET happy — 펫 lazy 생성 + ChatSession 저장")
+        @DisplayName("MYPET happy (CUSTOMER) — 펫 lazy 생성 + ChatSession 저장")
         void mypet_happy() {
             Pet pet = sampleLv1Pet();
             when(petService.getOrCreatePet(USER_NO)).thenReturn(pet);
             ArgumentCaptor<ChatSession> captor = ArgumentCaptor.forClass(ChatSession.class);
             when(sessionRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
 
-            ChatSessionRes res = chatbotService.startSession(USER_NO, EntryPoint.MYPET, ToneMode.PLAYFUL);
+            ChatSessionRes res = chatbotService.startSession(USER_NO, "CUSTOMER", EntryPoint.MYPET, ToneMode.PLAYFUL);
 
             assertThat(captor.getValue().getEntryPoint()).isEqualTo(EntryPoint.MYPET);
             assertThat(captor.getValue().getStatus()).isEqualTo(SessionStatus.ACTIVE);
@@ -74,12 +74,12 @@ class ChatbotServiceTest {
         }
 
         @Test
-        @DisplayName("CS happy — pet 조회 X + petNo null")
+        @DisplayName("CS happy (CUSTOMER) — pet 조회 X + petNo null")
         void cs_happy() {
             ArgumentCaptor<ChatSession> captor = ArgumentCaptor.forClass(ChatSession.class);
             when(sessionRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
 
-            ChatSessionRes res = chatbotService.startSession(USER_NO, EntryPoint.CS, ToneMode.SERIOUS);
+            ChatSessionRes res = chatbotService.startSession(USER_NO, "CUSTOMER", EntryPoint.CS, ToneMode.SERIOUS);
 
             assertThat(captor.getValue().getPetNo()).isNull();
             assertThat(res.getEntryPoint()).isEqualTo(EntryPoint.CS);
@@ -89,10 +89,60 @@ class ChatbotServiceTest {
         @Test
         @DisplayName("null entryPoint → BAD_REQUEST")
         void null_entryPoint_throws() {
-            assertThatThrownBy(() -> chatbotService.startSession(USER_NO, null, ToneMode.PLAYFUL))
+            assertThatThrownBy(() -> chatbotService.startSession(USER_NO, "CUSTOMER", null, ToneMode.PLAYFUL))
                     .isInstanceOf(BusinessException.class)
                     .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
             verifyNoInteractions(sessionRepository);
+        }
+
+        // 자잘 에러 트랙(2026-05-23) — MYPET role 가드 (펫 자동 생성 side effect 차단)
+
+        @Test
+        @DisplayName("MYPET + OWNER → FORBIDDEN + pet 생성 skip + session 저장 X")
+        void mypet_owner_forbidden() {
+            assertThatThrownBy(() -> chatbotService.startSession(USER_NO, "OWNER", EntryPoint.MYPET, ToneMode.PLAYFUL))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("펫 챗봇은 고객 전용")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+            verifyNoInteractions(petService);
+            verifyNoInteractions(sessionRepository);
+        }
+
+        @Test
+        @DisplayName("MYPET + RIDER → FORBIDDEN + pet 생성 skip + session 저장 X")
+        void mypet_rider_forbidden() {
+            assertThatThrownBy(() -> chatbotService.startSession(USER_NO, "RIDER", EntryPoint.MYPET, ToneMode.PLAYFUL))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("펫 챗봇은 고객 전용")
+                    .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
+            verifyNoInteractions(petService);
+            verifyNoInteractions(sessionRepository);
+        }
+
+        @Test
+        @DisplayName("CS + OWNER happy — pet 조회 X + petNo null (사장도 CS 사용 가능)")
+        void cs_owner_happy() {
+            ArgumentCaptor<ChatSession> captor = ArgumentCaptor.forClass(ChatSession.class);
+            when(sessionRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+            ChatSessionRes res = chatbotService.startSession(USER_NO, "OWNER", EntryPoint.CS, ToneMode.SERIOUS);
+
+            assertThat(captor.getValue().getPetNo()).isNull();
+            assertThat(res.getEntryPoint()).isEqualTo(EntryPoint.CS);
+            verifyNoInteractions(petService);
+        }
+
+        @Test
+        @DisplayName("CS + RIDER happy — pet 조회 X + petNo null (라이더도 CS 사용 가능)")
+        void cs_rider_happy() {
+            ArgumentCaptor<ChatSession> captor = ArgumentCaptor.forClass(ChatSession.class);
+            when(sessionRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+            ChatSessionRes res = chatbotService.startSession(USER_NO, "RIDER", EntryPoint.CS, ToneMode.SERIOUS);
+
+            assertThat(captor.getValue().getPetNo()).isNull();
+            assertThat(res.getEntryPoint()).isEqualTo(EntryPoint.CS);
+            verifyNoInteractions(petService);
         }
     }
 

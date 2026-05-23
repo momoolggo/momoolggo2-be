@@ -51,7 +51,8 @@
         s.store_id      AS storeId,
         o.amount        AS totalPrice,
         o.delivery_fee  AS deliveryFee,
-        o.order_state   AS orderState
+        o.order_state   AS orderState,
+        o.delivered_photo_url AS deliveredPhotoUrl
         FROM orders o
             JOIN store s ON s.store_id = o.store_id
         WHERE o.order_id = #{id}

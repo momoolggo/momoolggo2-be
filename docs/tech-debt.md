@@ -18,6 +18,13 @@
 | **`/api/admin/cs/internal/inquiry` 경로 컨벤션 위반** (외부 prefix `/api/admin/cs/...`에 internal 포함) | 2026-05-23 | `CsController.createInquiry` (line 48) | Phase 6+ — 정식 `/internal/...` 경로로 분리. 본 P-7에서 `/internal/chatbot/escalate` 정식 컨벤션 박제. |
 | **Gemini 실 호출 e2e 통합 테스트 0건** (인증 토큰 + API 키 의존) | 2026-05-23 | `ChatbotControllerIntegrationTest` 부재 | Phase 6+ — 단위 mock만 47건 박제. 실 통합은 e2e 자동화 + API 호출 비용 관리 |
 | **StoreServiceTest 17건 실패 (Feign batch null NPE)** | 2026-05-23 | `mmg-main-service/src/test/.../StoreServiceTest` | 별 트랙 — 본 트랙 무관 기존 부채 (Phase 4-A 백필 시점 패턴이 깨진 상태). team-handoff 후보. |
+| **CLAUDE.md §5 라이더 사진 Feign→main 박제 vs 실구현 FE 직접 main (옵션 A 채택)** | 2026-05-23 | `CLAUDE.md §5` 표 (라이더 배달 완료 사진) ↔ `DeliveryPhotoUploadController` + `momoolggo2-fe/src/services/deliveryService.js#uploadDeliveryPhoto` | Phase 6+ — §5 표 갱신 또는 ADR. Feign multipart 복잡도 회피 (SpringFormEncoder 추가 의존성 필요)로 FE 직접 main 호출 채택. main 단독 저장 책임 원칙은 유지. |
+| **자잘 에러 트랙 #9-A/B 배달 사진 고아 파일 정리 worker 부재** | 2026-05-23 | `C:/uploads/delivery/` 디스크 | Phase 6+ — 라이더가 사진 업로드 후 complete 미호출 (취소/탈퇴) 시 디스크 잔존. 9-B 종결로 정상 경로 사진은 orders.delivered_photo_url에 박제되지만 cleanup worker 필요. orphan 탐지 = `SELECT * FROM orders WHERE delivered_photo_url IS NULL` 대비 디스크 파일 비교 또는 업로드 시점 임시 토큰 + complete 시점 confirm 패턴. |
+| **자잘 에러 트랙 #9-B 후속 — `findOrdersByUserId` 쿼리 `delivered_photo_url` 누락** | 2026-05-23 | `mmg-main-service/src/main/resources/mappers/Order.xml#findOrdersByUserId` | 별 트랙 — 목록 응답 `OrderHistoryDto.deliveredPhotoUrl` 항상 null. 현재 FE 목록 화면이 사진 미사용으로 무해. 다음 손볼 때 목록/상세 DTO 분리 또는 컬럼 추가. |
+| **자잘 에러 트랙 #6 — RiderLayout `getMe` 매 페이지 이동마다 호출** | 2026-05-23 | `momoolggo2-fe/src/views/rider/RiderLayout.vue#onMounted` | Phase 6+ — RiderLayout이 slot wrapper라 라우트 전환 시 unmount/remount. tracker stop/start는 내부 guard로 무해하나 getMe API 호출 반복. 학원 발표 환경 무해, 운영 시 caching 또는 store-level status 캐시 필요. |
+| **자잘 에러 트랙 #7 후속 — 사장 FE OrderList delivery-status SSE 미구독** | 2026-05-23 | `momoolggo2-fe/src/components/owner/OrderList.vue` | 별 트랙 — BE `OrderDeliverySseService.sendDeliveryStatus`는 발화하지만 사장 OrderList는 `new-order` 이벤트만 구독. order_state 변경 즉시 갱신은 fetchOrders 폴링 또는 모달 닫을 때만. delivery-status 이벤트 구독 추가 후 fetchOrders 자동 트리거 필요. |
+| **자잘 에러 트랙 #7 후속 — 사장 FE `라이더 배차`(4) 버튼 무용지물** | 2026-05-23 | `momoolggo2-fe/src/components/owner/OrderDetailModal.vue#L118` | 별 트랙 UX — BE는 사장이 "주문 수락"(3) 누르면 자동 배차 트리거 + 라이더 진행 시 자동 동기화. 사장이 "라이더 배차"(4) 별도 클릭하는 흐름 자체가 무용. 버튼 제거 또는 비활성화. |
+| **OrderServiceTest 3건 실패 (getOrderInfo Mock 정합)** | 2026-05-23 | `mmg-main-service/src/test/.../order/OrderServiceTest#getOrderInfo` | 별 트랙 기존 부채 — 본 트랙 #7 추가 Mock 7건과 무관 (`Feign null`/`happy`/`기본 주소 없음`). team-handoff 후보. StoreServiceTest 17건 fail과 동일 결. |
 
 ---
 

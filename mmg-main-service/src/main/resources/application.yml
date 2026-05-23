@@ -38,10 +38,11 @@ spring.jpa:
 # 이미지 업로드 (main-service 단독 책임 — CLAUDE.md §5)
 file:
   upload:
-    menu-path:   C:/uploads/menu/
-    store-path:  C:/uploads/store/
-    review-path: C:/uploads/review/
-    pet-path:    C:/uploads/pet/
+    menu-path:     C:/uploads/menu/
+    store-path:    C:/uploads/store/
+    review-path:   C:/uploads/review/
+    pet-path:      C:/uploads/pet/
+    delivery-path: C:/uploads/delivery/  # 자잘 에러 트랙 #9 (2026-05-23) 라이더 배달 완료 사진
 
 # Phase 4-A 백필: Feign client timeout 명시 (60s 기본값 → connect 3s / read 5s)
 spring.cloud.openfeign.client.config.default:

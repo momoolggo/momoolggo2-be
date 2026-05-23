@@ -32,6 +32,9 @@ public class MainSecurityConfig {
                         // OWNER 전용 (사장 관리)
                         .requestMatchers("/api/owner/**").hasRole("OWNER")
 
+                        // 자잘 에러 트랙 #9 (2026-05-23) — 라이더 배달 완료 사진 업로드
+                        .requestMatchers("/api/delivery-photo/**").hasRole("RIDER")
+
                         // CUSTOMER 전용 (Phase 2-C에서 cart/order 코드 추가 시 활성화 예정)
                         .requestMatchers("/api/cart/**").hasRole("CUSTOMER")
                         .requestMatchers("/api/order/**").hasRole("CUSTOMER")
