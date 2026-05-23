@@ -11,6 +11,7 @@ import com.green.mmg.main.cart.model.CartItemRes;
 import com.green.mmg.main.order.model.OrderAddressInfo;
 import com.green.mmg.main.order.model.OrderHistoryDto;
 import com.green.mmg.main.order.model.OrderHistoryReq;
+import com.green.mmg.main.order.model.OrderItemDto;
 import com.green.mmg.main.order.model.OrderInfoRes;
 import com.green.mmg.main.order.model.Orders;
 import org.junit.jupiter.api.BeforeEach;
@@ -192,10 +193,10 @@ class OrderServiceTest {
             o2.setOrderId(391_000_002L);
             when(orderMapper.findOrdersByUserId(req)).thenReturn(List.of(o1, o2));
 
-            List<OrderHistoryDto.OrderItemDto> items1 = List.of(
-                    new OrderHistoryDto.OrderItemDto("피자", 2, 15000));
-            List<OrderHistoryDto.OrderItemDto> items2 = List.of(
-                    new OrderHistoryDto.OrderItemDto("치킨", 1, 18000));
+            List<OrderItemDto> items1 = List.of(
+                    new OrderItemDto("피자", 2, 15000));
+            List<OrderItemDto> items2 = List.of(
+                    new OrderItemDto("치킨", 1, 18000));
             when(orderDetailRepository.findItemsByOrderId(391_000_001L)).thenReturn(items1);
             when(orderDetailRepository.findItemsByOrderId(391_000_002L)).thenReturn(items2);
 
@@ -252,8 +253,8 @@ class OrderServiceTest {
             dto.setStoreName("가게A");
             when(orderMapper.orderHistoryDetail(orderId)).thenReturn(dto);
 
-            List<OrderHistoryDto.OrderItemDto> items = List.of(
-                    new OrderHistoryDto.OrderItemDto("피자", 1, 15000));
+            List<OrderItemDto> items = List.of(
+                    new OrderItemDto("피자", 1, 15000));
             when(orderDetailRepository.findItemsByOrderId(orderId)).thenReturn(items);
 
             OrderHistoryDto result = orderService.orderHistoryDetail(USER_NO, orderId);

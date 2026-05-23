@@ -1,5 +1,7 @@
 package com.green.mmg.auth.user;
 
+import com.green.mmg.auth.feign.MainPetClient;
+import com.green.mmg.auth.feign.dto.PetInitReq;
 import com.green.mmg.auth.user.model.*;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.exception.BusinessException;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+    private final MainPetClient mainPetClient;
 
 
     // ── 아이디 중복확인 GET /api/user/check-id?userId=xxx
@@ -36,7 +39,20 @@ public class UserController {
     public ResultResponse<UserSigninRes> signup(@RequestBody UserSignupReq req,
                                                 HttpServletResponse res) {
         UserSigninRes data = userService.signup(req, res);
+        triggerPetInit(data.getUserNo());
         return new ResultResponse<>("회원가입 성공", data);
+    }
+
+    // Phase 5 P-2: 펫 자동 지급 — signup commit 후 best-effort 호출.
+    // 실패 시 PetService.getOrCreatePet lazy fallback.
+    private void triggerPetInit(Long userNo) {
+        if (userNo == null) return;
+        try {
+            mainPetClient.initPet(new PetInitReq(userNo));
+        } catch (Exception e) {
+            log.warn("펫 자동 지급 Feign 실패 (lazy fallback 진행) — userNo={}, cause={}",
+                    userNo, e.getMessage());
+        }
     }
 
     // ── 로그인 POST /api/user/login
