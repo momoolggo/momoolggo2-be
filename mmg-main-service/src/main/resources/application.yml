@@ -52,6 +52,14 @@ spring.cloud.openfeign.client.config.default:
 toss:
   secret-key: ${TOSS_SECRET_KEY}
 
+# Gemini API (Phase 5 P-3 펫 챗봇 + CS 챗봇 단일 엔진, CLAUDE.md §7)
+app:
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    base-url: https://generativelanguage.googleapis.com
+    default-model: ${GEMINI_MODEL:gemini-2.5-flash}
+    lite-model: gemini-2.0-flash
+
 # 네이버 API (지도/검색 — main-service만 사용, CLAUDE.md §2) — prod와 일관 패턴, 5키 모두 .env
 naver:
   client-id: ${NAVER_CLIENT_ID}
