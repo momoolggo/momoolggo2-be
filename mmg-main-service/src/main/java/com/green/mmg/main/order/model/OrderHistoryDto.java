@@ -18,5 +18,6 @@ public class OrderHistoryDto {
     private long orderId;          // orders.order_id
     private int orderState;        // orders.order_state
     private int hasReview;
+    private String deliveredPhotoUrl;
     private List<OrderItemDto> items;
 }

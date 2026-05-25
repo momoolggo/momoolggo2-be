@@ -129,6 +129,7 @@
         o.amount AS totalPrice,
         o.pay_state AS payState,
         o.order_state AS state,
+        o.delivery_state AS deliveryState,
         o.address AS address,
         o.request AS request,
         o.eco_selected AS ecoSelected,

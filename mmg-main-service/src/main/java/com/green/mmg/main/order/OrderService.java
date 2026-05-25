@@ -402,6 +402,19 @@ public class OrderService {
         Integer previousState = order.getDeliveryState();
         order.setDeliveryState(newState);
 
+        // 2026-05-23 자잘 에러 트랙 #7 — 사장-라이더 배차 정합 (delivery → order_state forward 동기화)
+        // delivery 1(ASSIGNED 등) → order_state=4 / delivery 2(PICKED_UP/DELIVERING) → 5
+        // WAITING_ASSIGN(reject) keep / completeDelivery에서 delivery 3 → order_state=6 별도 처리
+        if (!"WAITING_ASSIGN".equals(deliveryStatus)) {
+            Integer mappedOrderState = null;
+            if (newState == 1) mappedOrderState = 4;
+            else if (newState == 2) mappedOrderState = 5;
+            if (mappedOrderState != null
+                    && (order.getOrderState() == null || mappedOrderState > order.getOrderState())) {
+                order.setOrderState(mappedOrderState);
+            }
+        }
+
         OrderDeliveryStatusRes status = new OrderDeliveryStatusRes(
                 order.getOrderId(),
                 order.getOrderState(),

@@ -7,7 +7,8 @@ import com.green.mmg.main.pet.dto.PetRes;
 import com.green.mmg.main.pet.dto.PetRewardRes;
 import com.green.mmg.main.pet.dto.PetSnackRes;
 import com.green.mmg.main.pet.dto.PetUpdateReq;
-import com.green.mmg.main.pet.entity.GreenPointLog;
+import com.green.mmg.main.greenpoint.GreenPointLog;
+import com.green.mmg.main.greenpoint.GreenPointLogRepository;
 import com.green.mmg.main.pet.entity.Pet;
 import com.green.mmg.main.pet.entity.PetSpecies;
 import lombok.RequiredArgsConstructor;
@@ -94,7 +95,7 @@ public class PetService {
         if (leveledUp) {
             pointReward = pet.getLevel() * LEVEL_UP_POINT_REWARD;
             try {
-                greenPointLogRepository.save(new GreenPointLog(orderId, userNo, pointReward,
+                greenPointLogRepository.save(GreenPointLog.pending(orderId, userNo, pointReward,
                         "펫 레벨업 보상 (Lv." + pet.getLevel() + ")"));
             } catch (DataIntegrityViolationException race) {
                 // 동시 race — 다른 트랜잭션이 INSERT 성공. 보상 자체는 그대로 진행.

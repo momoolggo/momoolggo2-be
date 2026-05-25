@@ -16,6 +16,8 @@ public interface OrderRepository extends JpaRepository<Orders, Long> {
 
     long countByUserNoAndPayState(Long userNo, Integer payState);
 
+    long countByUserNoAndOrderState(Long userNo, Integer orderState);
+
     /** 결제 전 주문만 삭제 (pay_state=1 조건부) */
     @Modifying
     @Query("DELETE FROM Orders o WHERE o.orderId = :orderId AND o.payState = 1")
