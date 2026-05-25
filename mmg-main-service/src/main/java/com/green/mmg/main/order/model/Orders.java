@@ -69,6 +69,9 @@ public class Orders implements Persistable<Long> {
     @Column(name = "eco_selected")
     private Boolean ecoSelected;
 
+    @Column(name = "delivered_photo_url")
+    private String deliveredPhotoUrl;
+
     @Transient
     private boolean isNewEntity = true;
 

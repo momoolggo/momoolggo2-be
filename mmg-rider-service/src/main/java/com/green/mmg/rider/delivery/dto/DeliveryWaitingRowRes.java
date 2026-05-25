@@ -22,6 +22,9 @@ public record DeliveryWaitingRowRes(
         String customerPhone,
         Integer baseFee,
         Integer extraFee,
-        LocalDateTime assignedAt
+        LocalDateTime assignedAt,
+        // 2026-05-25 9건 트랙 #3 — 가게/배달 요청사항 라이더 노출
+        String orderRequest,
+        String riderRequest
 ) {
 }

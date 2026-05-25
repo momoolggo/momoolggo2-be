@@ -37,20 +37,25 @@ public class OwnerOrderSseService {
     }
 
     public void sendNewOrder(Long storeId, Object data) {
+        sendEvent(storeId, "new-order", data);
+    }
+
+    /**
+     * 2026-05-25 9건 트랙 — 라이더 배차 수락/픽업/배달완료 시 사장 OrderList 자동 갱신.
+     */
+    public void sendOrderStateChanged(Long storeId, Object data) {
+        sendEvent(storeId, "order-state-changed", data);
+    }
+
+    private void sendEvent(Long storeId, String eventName, Object data) {
         List<SseEmitter> storeEmitters = emitters.get(storeId);
-
-        if(storeEmitters == null || storeEmitters.isEmpty()) {
-            return;
-        }
-
+        if (storeEmitters == null || storeEmitters.isEmpty()) return;
         for (SseEmitter emitter : storeEmitters) {
             try {
-                emitter.send(SseEmitter.event()
-                        .name("new-order")
-                        .data(data));
+                emitter.send(SseEmitter.event().name(eventName).data(data));
             } catch (Exception e) {
                 removeEmitter(storeId, emitter);
-                log.debug("사장 신규 주문 SSE 전송 실패 storeId={} error={}", storeId, e.getMessage());
+                log.debug("사장 SSE 전송 실패 storeId={} event={} error={}", storeId, eventName, e.getMessage());
             }
         }
     }

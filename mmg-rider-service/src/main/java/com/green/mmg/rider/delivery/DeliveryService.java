@@ -12,6 +12,7 @@ import com.green.mmg.rider.delivery.dto.DeliveryHistoryRowRes;
 import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
 import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
 import com.green.mmg.rider.delivery.model.DeliveryCancelReason;
+import com.green.mmg.rider.delivery.sse.OrderAssignEvent;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
 import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
@@ -22,6 +23,7 @@ import com.green.mmg.rider.rider.model.RiderStatus;
 import com.green.mmg.rider.settlement.SettlementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -100,6 +102,7 @@ public class DeliveryService {
     private final DeliveryLogRepository deliveryLogRepository;
     private final RiderRepository riderRepository;
     private final SettlementService settlementService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 배달 상태 전환 (화이트리스트 + 권한 + 낙관적 락 + delivery_log INSERT).
@@ -184,7 +187,8 @@ public class DeliveryService {
                 req.storePhone(), req.customerPhone(), req.storeName(),
                 req.storeAddress(), req.storeLat(), req.storeLng(),
                 req.deliveryAddress(), req.deliveryLat(), req.deliveryLng(),
-                baseFee, extraFee);
+                baseFee, extraFee,
+                req.orderRequest(), req.riderRequest());
         LocalDateTime now = LocalDateTime.now();
         DeliveryStatus initialStatus;
         if (!isPool) {
@@ -205,6 +209,13 @@ public class DeliveryService {
 
         deliveryLogRepository.save(new DeliveryLog(
                 deliveryNo, null, initialStatus, ActorRole.SYSTEM, null));
+
+        // 자잘 에러 트랙(2026-05-23) — WAITING_ASSIGN 풀 진입 시 모든 활성 라이더에게 SSE broadcast.
+        // strict 강제 배차(ASSIGNED 직행)는 특정 라이더 1명만 받으므로 broadcast 대상 X.
+        if (isPool) {
+            eventPublisher.publishEvent(new OrderAssignEvent(
+                    OrderAssignEvent.Type.ASSIGNED, toWaitingRow(delivery)));
+        }
 
         return new RiderInternalAssignRes(true, deliveryNo, isPool ? null : reqRiderNo, now);
     }
@@ -461,6 +472,10 @@ public class DeliveryService {
         deliveryLogRepository.save(new DeliveryLog(
                 deliveryNo, from, DeliveryStatus.ASSIGNED, ActorRole.RIDER, callerUserNo, null));
 
+        // 자잘 에러 트랙(2026-05-23) — 풀 잡힘을 모든 활성 라이더에게 broadcast (FE 자동 close).
+        eventPublisher.publishEvent(new OrderAssignEvent(
+                OrderAssignEvent.Type.CLAIMED, deliveryNo));
+
         return new DeliveryTransitionResult(delivery.getOrderId(), DeliveryStatus.ASSIGNED, caller.getRiderNo(), now);
     }
 
@@ -651,7 +666,8 @@ public class DeliveryService {
                 d.getDeliveryNo(), d.getOrderId(), d.getStatus().name(),
                 d.getPickupAddress(), d.getPickupLat(), d.getPickupLng(), d.getPickupPhone(),
                 d.getDeliveryAddress(), d.getDeliveryLat(), d.getDeliveryLng(), d.getCustomerPhone(),
-                d.getBaseFee(), d.getExtraFee(), d.getAssignedAt());
+                d.getBaseFee(), d.getExtraFee(), d.getAssignedAt(),
+                d.getOrderRequest(), d.getRiderRequest());
     }
 
     /** delivery_no 자동 생성 — 5자리 timestamp + 3자리 영문 (interfaces.md §1.1 박제 형식 예시 일관). */

@@ -33,14 +33,14 @@ public interface UserAddressRepository extends JpaRepository<UserAddress, Long> 
     @Query("UPDATE UserAddress a SET a.defaultAd = 0 WHERE a.userNo = :userNo")
     int resetDefault(@Param("userNo") long userNo);
 
-    /** OrderService 위임 (Phase 3-C 잔존 OrderMapper.findDefaultAddress 대체) */
+    /** OrderService 위임 — 2026-05-25 9건 트랙 정정: 거리 기반 배달팁용 좌표 추가 (lat/lng). */
     @Query("""
-            SELECT new com.green.mmg.main.order.model.OrderAddressInfo(a.address, a.addressDetail)
+            SELECT new com.green.mmg.main.order.model.OrderAddressInfo(
+                a.address, a.addressDetail, a.latitude, a.longitude)
             FROM UserAddress a
             WHERE a.userNo = :userNo AND a.defaultAd = 1
             ORDER BY a.addressId DESC
             """)
-
     List<OrderAddressInfo> findDefaultByUserNo(@Param("userNo") Long userNo);
 
     default Optional<OrderAddressInfo> findFirstDefaultByUserNo(Long userNo) {

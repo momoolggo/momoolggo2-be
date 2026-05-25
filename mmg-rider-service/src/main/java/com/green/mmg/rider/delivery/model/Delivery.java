@@ -92,6 +92,13 @@ public class Delivery extends BaseEntity {
     @Column(name = "delivered_photo_url", length = 500)
     private String deliveredPhotoUrl;
 
+    // 2026-05-25 9건 트랙 #3 라이더 — 가게/배달 요청사항 스냅샷 (orders → delivery 복제)
+    @Column(name = "order_request", length = 500)
+    private String orderRequest;
+
+    @Column(name = "rider_request", length = 500)
+    private String riderRequest;
+
     @Column(name = "assigned_at")
     private LocalDateTime assignedAt;
 
@@ -124,18 +131,19 @@ public class Delivery extends BaseEntity {
         this(deliveryNo, orderId, pickupPhone, customerPhone, null,
                 pickupAddress, pickupLat, pickupLng,
                 deliveryAddress, deliveryLat, deliveryLng,
-                baseFee, extraFee);
+                baseFee, extraFee, null, null);
     }
 
     /**
      * 정산 시연 UX 트랙 #6 (2026-05-21) — storeName 스냅샷 박제용 13 파라미터.
-     * assignDelivery에서 RiderInternalAssignReq.storeName 박제 후 admin 배달관리 화면 표시.
+     * 2026-05-25 9건 트랙 #3 — orderRequest/riderRequest 2 파라미터 추가 (총 15).
      */
     public Delivery(String deliveryNo, Long orderId,
                     String pickupPhone, String customerPhone, String storeName,
                     String pickupAddress, Double pickupLat, Double pickupLng,
                     String deliveryAddress, Double deliveryLat, Double deliveryLng,
-                    Integer baseFee, Integer extraFee) {
+                    Integer baseFee, Integer extraFee,
+                    String orderRequest, String riderRequest) {
         this.deliveryNo = deliveryNo;
         this.orderId = orderId;
         this.status = DeliveryStatus.WAITING_ASSIGN;
@@ -150,6 +158,8 @@ public class Delivery extends BaseEntity {
         this.deliveryLng = deliveryLng;
         this.baseFee = baseFee;
         this.extraFee = extraFee;
+        this.orderRequest = orderRequest;
+        this.riderRequest = riderRequest;
     }
 
     /**

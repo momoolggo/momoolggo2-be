@@ -32,4 +32,7 @@ public interface OrderMapper {
     Long sumSettlementSales(@Param("storeId") Long storeId,
                             @Param("start") LocalDateTime start,
                             @Param("end") LocalDateTime end);
+
+    /** 2026-05-25 9건 트랙 정정 — 거리 기반 배달팁용 가게 좌표 조회 */
+    java.util.Map<String, Object> findStoreCoord(@Param("storeId") Long storeId);
 }

@@ -7,10 +7,16 @@ import com.green.mmg.rider.delivery.dto.DeliveryCompleteReq;
 import com.green.mmg.rider.delivery.dto.DeliveryHistoryRes;
 import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
 import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
+import com.green.mmg.rider.delivery.sse.OrderAssignSseRegistry;
 import com.green.mmg.rider.feign.MainInternalClient;
 import com.green.mmg.rider.feign.dto.DeliveryStatusUpdateReq;
+import com.green.mmg.rider.rider.RiderRepository;
+import com.green.mmg.rider.rider.model.Rider;
+import com.green.mmg.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -42,6 +49,26 @@ public class RiderOrderController {
 
     private final DeliveryService deliveryService;
     private final MainInternalClient mainInternalClient;
+    private final OrderAssignSseRegistry sseRegistry;
+    private final RiderRepository riderRepository;
+
+    /** SSE stream timeout — SettlementController 패턴 일관 (30분). 클라이언트 EventSource 자동 재연결. */
+    private static final long SSE_TIMEOUT_MS = 30L * 60 * 1000;
+
+    /**
+     * GET /api/rider/order/stream — 배차 알림 SSE (자잘 에러 트랙, 2026-05-23).
+     *
+     * <p>{@code order-assigned} event = 새 배차 도착 (모든 활성 라이더), {@code order-claimed} = 풀에서 누가 잡음.
+     * 같은 라이더 재접속 시 기존 emitter close (다중 탭/네트워크 단절 안전).</p>
+     */
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@AuthenticationPrincipal UserPrincipal principal) {
+        Rider rider = riderRepository.findByUserNo(principal.getSignedUserNo())
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+        return sseRegistry.register(rider.getRiderNo(), emitter);
+    }
 
     @GetMapping("/waiting")
     public ResultResponse<List<DeliveryWaitingRowRes>> waiting(

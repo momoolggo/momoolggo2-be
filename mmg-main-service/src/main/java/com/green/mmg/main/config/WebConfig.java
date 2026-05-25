@@ -23,6 +23,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${file.upload.store-path}")  private String storePath;
     @Value("${file.upload.review-path:}")  private String reviewPath;
     @Value("${file.upload.pet-path:}")     private String petPath;
+    @Value("${file.upload.delivery-path:}") private String deliveryPath;
 
     private static final CacheControl UPLOADS_CACHE_CONTROL =
             CacheControl.maxAge(365, TimeUnit.DAYS).cachePublic();
@@ -43,6 +44,12 @@ public class WebConfig implements WebMvcConfigurer {
         if (!petPath.isBlank()) {
             registry.addResourceHandler("/uploads/pet/**")
                     .addResourceLocations("file:" + petPath)
+                    .setCacheControl(UPLOADS_CACHE_CONTROL);
+        }
+        // 자잘 에러 트랙 #9 (2026-05-23) — 라이더 배달 완료 사진 정적 서빙
+        if (!deliveryPath.isBlank()) {
+            registry.addResourceHandler("/uploads/delivery/**")
+                    .addResourceLocations("file:" + deliveryPath)
                     .setCacheControl(UPLOADS_CACHE_CONTROL);
         }
     }

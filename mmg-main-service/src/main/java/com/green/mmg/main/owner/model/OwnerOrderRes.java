@@ -16,6 +16,7 @@ public class OwnerOrderRes {
     private int totalPrice;
     private Integer payState;
     private String state;       // orderState(int) -> state(String) 로 변경 (DB가 PENDING, WATING 문자열이라서)
+    private Integer deliveryState;  // 2026-05-25 — state=4 라이더 모집/배정 구분용 (0/null = 모집 중, >=1 = 배정 완료)
     private String address;
     private String request;
     private String customerName;
