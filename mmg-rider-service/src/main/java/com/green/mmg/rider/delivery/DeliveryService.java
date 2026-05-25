@@ -187,7 +187,8 @@ public class DeliveryService {
                 req.storePhone(), req.customerPhone(), req.storeName(),
                 req.storeAddress(), req.storeLat(), req.storeLng(),
                 req.deliveryAddress(), req.deliveryLat(), req.deliveryLng(),
-                baseFee, extraFee);
+                baseFee, extraFee,
+                req.orderRequest(), req.riderRequest());
         LocalDateTime now = LocalDateTime.now();
         DeliveryStatus initialStatus;
         if (!isPool) {
@@ -657,7 +658,8 @@ public class DeliveryService {
                 d.getDeliveryNo(), d.getOrderId(), d.getStatus().name(),
                 d.getPickupAddress(), d.getPickupLat(), d.getPickupLng(), d.getPickupPhone(),
                 d.getDeliveryAddress(), d.getDeliveryLat(), d.getDeliveryLng(), d.getCustomerPhone(),
-                d.getBaseFee(), d.getExtraFee(), d.getAssignedAt());
+                d.getBaseFee(), d.getExtraFee(), d.getAssignedAt(),
+                d.getOrderRequest(), d.getRiderRequest());
     }
 
     /** delivery_no 자동 생성 — 5자리 timestamp + 3자리 영문 (interfaces.md §1.1 박제 형식 예시 일관). */

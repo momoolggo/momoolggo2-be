@@ -99,5 +99,12 @@
           AND o.order_state != 2
     </select>
 
+    <!-- 2026-05-25 9건 트랙 정정 — 거리 기반 배달팁용 가게 좌표 조회 -->
+    <select id="findStoreCoord" resultType="java.util.Map">
+        SELECT latitude AS storeLat, longitude AS storeLng
+        FROM store
+        WHERE store_id = #{storeId}
+    </select>
+
 
 </mapper>

@@ -41,6 +41,16 @@ public class MainSecurityConfig {
                         .requestMatchers("/api/payment/**").hasRole("CUSTOMER")
                         .requestMatchers("/api/notification/**").hasRole("CUSTOMER")
 
+                        // 2026-05-25 9건 트랙 #5/#6 — 챗봇은 CUSTOMER/OWNER/RIDER 모두 사용 (CS 챗봇 공용)
+                        // MYPET 진입은 ChatbotService에서 CUSTOMER 체크 (사장/라이더 펫 자동 생성 차단)
+                        .requestMatchers("/api/chatbot/**").authenticated()
+
+                        // 2026-05-25 9건 트랙 #8 부채 Step B — 출석 시스템 (CUSTOMER 전용)
+                        .requestMatchers("/api/attendance/**").hasRole("CUSTOMER")
+
+                        // 2026-05-25 9건 트랙 #8 — 펫 도메인 (CUSTOMER 전용)
+                        .requestMatchers("/api/pet/**").hasRole("CUSTOMER")
+
                         // 리뷰 작성/수정/삭제는 인증 (Phase 2-E에서 활성화 예정)
                         .requestMatchers(HttpMethod.POST, "/api/user/review/**").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/user/review/**").authenticated()

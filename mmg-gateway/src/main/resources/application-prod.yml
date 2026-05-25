@@ -59,6 +59,18 @@ spring:
               uri: ${MAIN_SERVICE_URL}
               predicates:
                 - Path=/api/owner/**
+            - id: main-chatbot-route          # 2026-05-25 9건 트랙 #5/#6 — 사장/라이더 챗봇 호출 라우트
+              uri: ${MAIN_SERVICE_URL}
+              predicates:
+                - Path=/api/chatbot/**
+            - id: main-attendance-route       # 2026-05-25 9건 트랙 #8 부채 Step B — 출석 시스템
+              uri: ${MAIN_SERVICE_URL}
+              predicates:
+                - Path=/api/attendance/**
+            - id: main-pet-route              # 2026-05-25 9건 트랙 #8 — 펫 도메인
+              uri: ${MAIN_SERVICE_URL}
+              predicates:
+                - Path=/api/pet/**
             - id: main-uploads-route     # 이미지 정적 (CLAUDE.md §5 main 단독 책임)
               uri: ${MAIN_SERVICE_URL}
               predicates:

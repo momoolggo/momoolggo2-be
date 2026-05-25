@@ -5,10 +5,13 @@ import com.green.mmg.main.cart.CartDetailRepository;
 import com.green.mmg.main.cart.CartRepository;
 import com.green.mmg.main.order.OrderRepository;
 import com.green.mmg.main.order.model.Orders;
+import com.green.mmg.main.owner.OwnerOrderSseService;
 import com.green.mmg.main.payment.model.PaymentConfirmReq;
 import com.green.mmg.main.payment.model.PaymentEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.Map;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,6 +54,7 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final CartRepository cartRepository;
     private final CartDetailRepository cartDetailRepository;
+    private final OwnerOrderSseService ownerOrderSseService;  // 2026-05-25 9건 트랙 — 결제 완료 시 사장 SSE 발송
 
     private static final int PAY_STATE_REFUNDED = 3;
 
@@ -95,6 +99,13 @@ public class PaymentService {
                 cartRepository.delete(cart);
             });
         }
+
+        // 2026-05-25 9건 트랙 정정 — 결제 완료(pay_state=2) 시점에 사장 SSE 발송.
+        // 이전: placeOrder 시점에 SSE 발송했으나, 결제 안 한 주문이 사장 화면에 노출되는 문제 → 결제 완료 시점으로 옮김.
+        ownerOrderSseService.sendNewOrder(order.getStoreId(), Map.of(
+                "orderId", order.getOrderId(),
+                "storeId", order.getStoreId()
+        ));
     }
 
     /**
