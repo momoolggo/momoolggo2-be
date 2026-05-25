@@ -32,8 +32,8 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<?> placeOrder(@AuthenticationPrincipal UserPrincipal principal,
             @RequestBody OrderReqDto dto) {
-        long orderId = orderService.placeOrder(principal.getSignedUserNo(), dto);
-        return ResponseEntity.ok(Map.of("result", "success","orderId", orderId));
+        OrderCreateRes res = orderService.placeOrder(principal.getSignedUserNo(), dto);
+        return ResponseEntity.ok(Map.of("result", "success","orderId", res.orderId(), "totalAmount", res.totalAmount()));
     }
 
     // 주문 취소

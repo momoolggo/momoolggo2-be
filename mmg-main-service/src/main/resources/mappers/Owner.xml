@@ -1,10 +1,10 @@
-<?xml version="1.0" encoding="UTF-8" ?>
+﻿<?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="com.green.mmg.main.owner.OwnerMapper">
 
-    <!-- 가게 등록 -->
+    <!-- 媛寃??깅줉 -->
     <insert id="registerStore">
         INSERT INTO store(
             owner_id,
@@ -33,7 +33,7 @@
                  )
     </insert>
 
-    <!-- 가게 기본 정보 수정 -->
+    <!-- 媛寃?湲곕낯 ?뺣낫 ?섏젙 -->
     <update id="updateStore">
         UPDATE store
         SET store_name = #{storeName},
@@ -45,7 +45,7 @@
         WHERE store_id = #{storeId}
     </update>
 
-    <!-- 가게 운영정보 수정 -->
+    <!-- 媛寃??댁쁺?뺣낫 ?섏젙 -->
     <update id="updateStoreStatus">
         UPDATE store
         SET holiday = #{holiday},
@@ -56,7 +56,7 @@
         WHERE store_id = #{storeId}
     </update>
 
-    <!-- 가게 단건 조회 -->
+    <!-- 媛寃??④굔 議고쉶 -->
     <select id="getStoreById" resultType="com.green.mmg.main.owner.model.OwnerStoreRes">
         SELECT
             store_id AS storeId,
@@ -73,13 +73,13 @@
         WHERE store_id = #{storeId}
     </select>
 
-    <!-- 가게 삭제 -->
+    <!-- 媛寃???젣 -->
     <delete id="deleteStore">
         DELETE FROM store
         WHERE store_id = #{storeId}
     </delete>
 
-    <!-- 내 가게 1개 조회 (매출 등 내부용) -->
+    <!-- ??媛寃?1媛?議고쉶 (留ㅼ텧 ???대??? -->
     <select id="getMyStore" resultType="com.green.mmg.main.owner.model.OwnerStoreRes">
         SELECT
             store_id AS storeId,
@@ -99,7 +99,7 @@
             LIMIT 1
     </select>
 
-    <!-- 내 가게 목록 조회 (여러 가게 지원) -->
+    <!-- ??媛寃?紐⑸줉 議고쉶 (?щ윭 媛寃?吏?? -->
     <select id="getMyStores" resultType="com.green.mmg.main.owner.model.OwnerStoreRes">
         SELECT
             store_id AS storeId,
@@ -119,23 +119,24 @@
         ORDER BY store_id ASC
     </select>
 
-    <!-- 주문 목록 조회 -->
-    <!-- Phase 4-A: user JOIN 제거. customerName/tel은 OwnerService에서 Feign batch로 합성 -->
-    <!-- 2026-05-25 9건 트랙 정정 — pay_state >= 2 필터 추가 (결제 완료된 주문만 사장에게 노출, 미결제 주문 숨김) -->
+    <!-- 二쇰Ц 紐⑸줉 議고쉶 -->
+    <!-- Phase 4-A: user JOIN ?쒓굅. customerName/tel? OwnerService?먯꽌 Feign batch濡??⑹꽦 -->
     <select id="getOrders" resultType="com.green.mmg.main.owner.model.OwnerOrderRes">
         SELECT
         o.order_id AS orderId,
         o.user_no AS userNo,
         DATE_FORMAT(o.order_time, '%H:%i') AS orderDate,
         o.amount AS totalPrice,
+        o.pay_state AS payState,
         o.order_state AS state,
         o.address AS address,
         o.request AS request,
+        o.eco_selected AS ecoSelected,
         GROUP_CONCAT(CONCAT(od.menu_name, ' x', od.quantity) SEPARATOR ', ') AS menuList
         FROM orders o
         JOIN order_detail od ON o.order_id = od.order_id
         WHERE o.store_id = #{storeId}
-        AND o.pay_state &gt;= 2
+          AND o.pay_state = 2
         <if test="state != null">
             AND o.order_state = #{state}
         </if>
@@ -146,20 +147,20 @@
         ORDER BY o.order_time DESC
     </select>
 
-    <!-- 주문 상태 수정 -->
+    <!-- 二쇰Ц ?곹깭 ?섏젙 -->
     <update id="updateOrderState">
         UPDATE orders
         SET order_state = #{orderState}
         WHERE order_id = #{orderId}
     </update>
 
-    <!-- 가게 메뉴 등록 -->
+    <!-- 媛寃?硫붾돱 ?깅줉 -->
     <insert id="registerMenu" useGeneratedKeys="true" keyProperty="menuId">
         INSERT INTO menu (category_id, name, menu_info, price, menu_pic)
         VALUES (#{categoryId}, #{name}, #{menuInfo}, #{price}, #{menuPic})
     </insert>
 
-    <!-- 가게 메뉴 단건 조회 -->
+    <!-- 媛寃?硫붾돱 ?④굔 議고쉶 -->
     <select id="getMenuById" resultType="com.green.mmg.main.owner.model.OwnerMenuRes">
         SELECT
             menu_id AS menuId,
@@ -171,7 +172,7 @@
         WHERE menu_id = #{menuId}
     </select>
 
-    <!-- 가게 메뉴 수정 -->
+    <!-- 媛寃?硫붾돱 ?섏젙 -->
     <update id="updateMenu">
         UPDATE menu
         SET name = #{name},
@@ -182,23 +183,23 @@
         WHERE menu_id = #{menuId}
     </update>
 
-    <!-- 가게 메뉴 삭제 -->
+    <!-- 媛寃?硫붾돱 ??젣 -->
     <delete id="deleteMenu">
         DELETE FROM menu
         WHERE menu_id = #{menuId}
     </delete>
 
-    <!-- 기본 메뉴 카테고리 등록 -->
+    <!-- 湲곕낯 硫붾돱 移댄뀒怨좊━ ?깅줉 -->
     <insert id="registerDefaultMenuCategory">
         INSERT INTO menu_category (store_id, category, category_order)
-        SELECT store_id, '인기메뉴', 1
+        SELECT store_id, '?멸린硫붾돱', 1
         FROM store
         WHERE owner_id = #{userId}
         ORDER BY store_id DESC
             LIMIT 1
     </insert>
 
-    <!-- 가게 카테고리 등록 -->
+    <!-- 媛寃?移댄뀒怨좊━ ?깅줉 -->
     <insert id="registerStoreCategory">
         INSERT INTO store_category (store_id, category_id)
         SELECT store_id, #{categoryId}
@@ -208,13 +209,14 @@
             LIMIT 1
     </insert>
 
-    <!-- 기간별 매출 통계 -->
+    <!-- 湲곌컙蹂?留ㅼ텧 ?듦퀎 -->
     <select id="getSalesStats" resultType="com.green.mmg.main.owner.model.OwnerSalesStatsRes">
         SELECT
         COUNT(o.order_id) AS orderCount,
         IFNULL(SUM(o.amount), 0) AS totalSales
         FROM orders o
         WHERE o.store_id = #{storeId}
+          AND o.pay_state = 2
         AND o.order_state != 2
         <if test="period == 'day'">
             AND DATE(o.order_time) = CURDATE()
@@ -230,7 +232,7 @@
         </if>
     </select>
 
-    <!-- 상품 매출 순위 -->
+    <!-- ?곹뭹 留ㅼ텧 ?쒖쐞 -->
     <select id="getSalesRanking" resultType="com.green.mmg.main.owner.model.OwnerSalesRankingRes">
         SELECT
         od.menu_name AS menuName,
@@ -285,6 +287,7 @@
         FROM orders o
         JOIN order_detail od ON o.order_id = od.order_id
         WHERE o.store_id = #{storeId}
+          AND o.pay_state = 2
         AND o.order_state != 2
         <if test="period == 'day'">
             AND DATE(o.order_time) = CURDATE()
@@ -303,7 +306,7 @@
         LIMIT 10
     </select>
 
-    <!-- 가게 메뉴 목록 조회 -->
+    <!-- 媛寃?硫붾돱 紐⑸줉 議고쉶 -->
     <select id="getMenusByStoreId" resultType="com.green.mmg.main.owner.model.OwnerMenuRes">
         SELECT
             m.menu_id AS menuId,
@@ -318,7 +321,7 @@
         ORDER BY mc.category_order ASC, m.menu_order ASC
     </select>
 
-    <!-- 가게 카테고리 목록 조회 -->
+    <!-- 媛寃?移댄뀒怨좊━ 紐⑸줉 議고쉶 -->
     <select id="getCategoriesByStoreId" resultType="java.util.Map">
         SELECT category_id AS categoryId, category AS categoryName, category_order AS categoryOrder
         FROM menu_category
@@ -326,7 +329,7 @@
         ORDER BY category_order ASC
     </select>
 
-    <!-- 카테고리 추가 -->
+    <!-- 移댄뀒怨좊━ 異붽? -->
     <insert id="addCategory">
         INSERT INTO menu_category (store_id, category, category_order)
         VALUES (#{storeId}, #{category},
@@ -334,14 +337,14 @@
                )
     </insert>
 
-    <!-- 카테고리 수정 -->
+    <!-- 移댄뀒怨좊━ ?섏젙 -->
     <update id="updateCategory">
         UPDATE menu_category
         SET category = #{category}
         WHERE category_id = #{categoryId}
     </update>
 
-    <!-- 카테고리 삭제 -->
+    <!-- 移댄뀒怨좊━ ??젣 -->
     <delete id="deleteCategory">
         DELETE FROM menu_category
         WHERE category_id = #{categoryId}
@@ -356,15 +359,15 @@
     </delete>
 
     <!-- ============================================================ -->
-    <!-- Phase 2-Backfill-D-bis: 권한 검증 헬퍼 4개 -->
+    <!-- Phase 2-Backfill-D-bis: 沅뚰븳 寃利??ы띁 4媛?-->
     <!-- ============================================================ -->
 
-    <!-- (1) store_id → owner_id -->
+    <!-- (1) store_id ??owner_id -->
     <select id="findStoreOwnerByStoreId" resultType="java.lang.Long">
         SELECT owner_id FROM store WHERE store_id = #{storeId}
     </select>
 
-    <!-- (2) order_id → orders.store_id → store.owner_id -->
+    <!-- (2) order_id ??orders.store_id ??store.owner_id -->
     <select id="findStoreOwnerByOrderId" resultType="java.lang.Long">
         SELECT s.owner_id
         FROM orders o
@@ -372,7 +375,7 @@
         WHERE o.order_id = #{orderId}
     </select>
 
-    <!-- (3) menu_id → menu.category_id → menu_category.store_id → store.owner_id -->
+    <!-- (3) menu_id ??menu.category_id ??menu_category.store_id ??store.owner_id -->
     <select id="findStoreOwnerByMenuId" resultType="java.lang.Long">
         SELECT s.owner_id
         FROM menu m
@@ -381,7 +384,7 @@
         WHERE m.menu_id = #{menuId}
     </select>
 
-    <!-- (4) category_id → menu_category.store_id → store.owner_id -->
+    <!-- (4) category_id ??menu_category.store_id ??store.owner_id -->
     <select id="findStoreOwnerByCategoryId" resultType="java.lang.Long">
         SELECT s.owner_id
         FROM menu_category mc
@@ -389,12 +392,9 @@
         WHERE mc.category_id = #{categoryId}
     </select>
 
-    <!-- 점주 수락 시점 라이더 배차 정보 조회 — Phase 5+ 작업 A Group 4, interfaces.md §1.1 박제 14 필드.
-         Q-A9.c MyBatis 박제 일관. Q-A9.e (나) NULL/0 패스 (orders.delivery_lat/lng/customer_phone/extra_fee 부재, case-#34-후속).
-         resultType=RiderAssignReq record 직접 매핑 (분류 B 자율, StoreInfoDto 신설 X). -->
-    <!-- 2026-05-25 9건 트랙 정정 — user_address LEFT JOIN으로 배달지 좌표 박제 (이전 NULL → 실 좌표).
-         user_address는 default_ad=1 row (UserAddressRepository.findFirstDefaultByUserNo 패턴 일관).
-         좌표 부재 시(주소 없는 사용자) LEFT JOIN으로 NULL fallback 유지. -->
+    <!-- ?먯＜ ?섎씫 ?쒖젏 ?쇱씠??諛곗감 ?뺣낫 議고쉶 ??Phase 5+ ?묒뾽 A Group 4, interfaces.md 짠1.1 諛뺤젣 14 ?꾨뱶.
+         Q-A9.c MyBatis 諛뺤젣 ?쇨?. Q-A9.e (?? NULL/0 ?⑥뒪 (orders.delivery_lat/lng/customer_phone/extra_fee 遺?? case-#34-?꾩냽).
+         resultType=RiderAssignReq record 吏곸젒 留ㅽ븨 (遺꾨쪟 B ?먯쑉, StoreInfoDto ?좎꽕 X). -->
     <select id="findStoreInfoByOrderId" resultType="com.green.mmg.main.feign.model.RiderAssignReq">
         SELECT
             o.order_id                                                AS orderId,
@@ -406,20 +406,17 @@
             s.longitude                                               AS storeLng,
             s.store_tel                                               AS storePhone,
             CONCAT(o.address, ' ', IFNULL(o.address_detail, ''))      AS deliveryAddress,
-            a.latitude                                                AS deliveryLat,
-            a.longitude                                               AS deliveryLng,
+            NULL                                                      AS deliveryLat,
+            NULL                                                      AS deliveryLng,
             NULL                                                      AS customerPhone,
             o.delivery_fee                                            AS baseFee,
-            0                                                         AS extraFee,
-            o.request                                                 AS orderRequest,
-            o.rider_request                                           AS riderRequest
+            0                                                         AS extraFee
         FROM orders o
         JOIN store s ON o.store_id = s.store_id
-        LEFT JOIN address a ON a.user_no = o.user_no AND a.default_ad = 1
         WHERE o.order_id = #{orderId}
     </select>
 
-    <!-- 가게 리뷰 조회 — Phase 4-A: user JOIN 제거, OwnerService에서 Feign batch 합성 -->
+    <!-- 媛寃?由щ럭 議고쉶 ??Phase 4-A: user JOIN ?쒓굅, OwnerService?먯꽌 Feign batch ?⑹꽦 -->
     <select id="getStoreReviews" resultType="map">
         SELECT
             r.review_id  AS reviewId,
@@ -434,6 +431,7 @@
         FROM review r
             JOIN orders o ON o.order_id = r.order_id
         WHERE o.store_id = #{storeId}
+          AND o.pay_state = 2
         ORDER BY r.write_at DESC
     </select>
 

@@ -261,10 +261,10 @@ public class DeliveryService {
 
     /**
      * Admin 모니터 — GET /internal/rider/monitor.
-     * summary 4그룹 카운트 + status 필터 + page 목록.
+     * summary 4그룹 카운트 + status 필터 + keyword(storeName LIKE) + page 목록.
      */
     @Transactional(readOnly = true)
-    public RiderInternalMonitorRes getMonitor(String status, int page) {
+    public RiderInternalMonitorRes getMonitor(String status, int page, String keyword) {
         if (page < 0) {
             throw new BusinessException("page는 0 이상이어야 합니다.", HttpStatus.BAD_REQUEST);
         }
@@ -291,9 +291,17 @@ public class DeliveryService {
         Pageable pageable = PageRequest.of(page, MONITOR_PAGE_SIZE,
                 Sort.by(Sort.Direction.DESC, "assignedAt"));
 
-        Page<Delivery> result = (group == null)
-                ? deliveryRepository.findAll(pageable)
-                : deliveryRepository.findByStatusIn(group, pageable);
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
+        Page<Delivery> result;
+        if (hasKeyword) {
+            result = (group == null)
+                    ? deliveryRepository.findByStoreNameContainingIgnoreCase(keyword, pageable)
+                    : deliveryRepository.findByStatusInAndStoreNameContainingIgnoreCase(group, keyword, pageable);
+        } else {
+            result = (group == null)
+                    ? deliveryRepository.findAll(pageable)
+                    : deliveryRepository.findByStatusIn(group, pageable);
+        }
 
         // 정산 시연 UX 트랙 #9 (2026-05-21) — rider phone 일괄 조회 (N+1 회피)
         Set<Long> riderNos = result.getContent().stream()

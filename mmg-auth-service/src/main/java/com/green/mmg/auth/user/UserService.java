@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * Phase 3-A: MyBatis → JPA 전환 (단순 CRUD).
@@ -28,6 +29,8 @@ import java.time.Duration;
 @Service
 @RequiredArgsConstructor
 public class UserService {
+
+    private static final List<String> FIND_AUTH_ROLES = List.of("CUSTOMER", "OWNER", "RIDER");
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -43,6 +46,13 @@ public class UserService {
         return !userRepository.existsByUserId(userId);
     }
 
+    @Transactional(readOnly = true)
+    public boolean checkEmail(String email) {
+        String normalizedEmail = normalizeEmail(email);
+        validateRequired(normalizedEmail, "이메일은 필수입니다.");
+        return !userRepository.existsByEmail(normalizedEmail);
+    }
+
     // ── 회원가입 (옵션 D-1: BFF 패턴)
     // 가입 후 즉시 AT/RT 발급. user_address 등록은 프론트가 별도 POST /api/address 호출 (main-service).
     @Transactional
@@ -53,6 +63,9 @@ public class UserService {
         }
 
         String role = (req.getRole() == null || req.getRole().isBlank()) ? "CUSTOMER" : req.getRole();
+        String email = normalizeEmail(req.getEmail());
+        validateRequiredEmail(role, email);
+        validateDuplicateEmail(email, null);
 
         User user = new User();
         user.setUserId(req.getUserId());
@@ -61,6 +74,7 @@ public class UserService {
         user.setBirth(req.getBirth());
         user.setGender(req.getGender() == null ? 0 : req.getGender());
         user.setTel(req.getTel());
+        user.setEmail(email);
         user.setRole(role);
         if("OWNER".equals(role) || "RIDER".equals(role)) {
             user.setStatus("PENDING");
@@ -147,7 +161,8 @@ public class UserService {
     public UserGetRes getUser(Long userNo) {
         User user = userRepository.findById(userNo)
                 .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        return new UserGetRes(user.getUserId(), user.getName(), user.getTel(), user.getGender(), user.getBirth());
+        return new UserGetRes(user.getUserId(), user.getName(), user.getTel(), user.getEmail(), user.getGender(), user.getBirth(),
+                user.getGreen() == null ? 0 : user.getGreen());
     }
 
     // 내 정보 수정 — JPA dirty checking (기존 MyBatis <if> 동적 UPDATE와 동일 의미)
@@ -157,9 +172,75 @@ public class UserService {
                 .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         if (req.getName() != null && !req.getName().isBlank())  user.setName(req.getName());
         if (req.getTel() != null && !req.getTel().isBlank())    user.setTel(req.getTel());
+        if (req.getEmail() != null && !req.getEmail().isBlank()) {
+            String email = normalizeEmail(req.getEmail());
+            validateDuplicateEmail(email, userNo);
+            user.setEmail(email);
+        }
         if (req.getGender() != null)                             user.setGender(req.getGender());
         if (req.getBirth() != null && !req.getBirth().isBlank()) user.setBirth(req.getBirth());
         if (req.getUserPw() != null && !req.getUserPw().isBlank())
             user.setUserPw(passwordEncoder.encode(req.getUserPw()));
+    }
+
+    @Transactional(readOnly = true)
+    public UserFindIdRes findId(UserFindIdReq req) {
+        validateRequired(req.getName(), "이름은 필수입니다.");
+        validateRequired(req.getTel(), "연락처는 필수입니다.");
+
+        String email = normalizeEmail(req.getEmail());
+        User user = email == null
+                ? userRepository.findFirstByNameAndTelAndRoleIn(req.getName(), req.getTel(), FIND_AUTH_ROLES)
+                .orElseThrow(() -> new BusinessException("일치하는 회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND))
+                : userRepository.findFirstByNameAndTelAndEmailAndRoleIn(req.getName(), req.getTel(), email, FIND_AUTH_ROLES)
+                .orElseThrow(() -> new BusinessException("일치하는 회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        return new UserFindIdRes(user.getUserId());
+    }
+
+    @Transactional
+    public void resetPassword(UserResetPwReq req) {
+        validateRequired(req.getUserId(), "아이디는 필수입니다.");
+        validateRequired(req.getName(), "이름은 필수입니다.");
+        validateRequired(req.getTel(), "연락처는 필수입니다.");
+        validateRequired(req.getEmail(), "이메일은 필수입니다.");
+        validateRequired(req.getNewPassword(), "새 비밀번호는 필수입니다.");
+
+        String email = normalizeEmail(req.getEmail());
+        User user = userRepository.findByUserIdAndNameAndTelAndEmailAndRoleIn(
+                        req.getUserId(), req.getName(), req.getTel(), email, FIND_AUTH_ROLES)
+                .orElseThrow(() -> new BusinessException("일치하는 회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        user.setUserPw(passwordEncoder.encode(req.getNewPassword()));
+    }
+
+    private void validateRequiredEmail(String role, String email) {
+        if (FIND_AUTH_ROLES.contains(role) && email == null) {
+            throw new BusinessException("이메일은 필수입니다.", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private void validateDuplicateEmail(String email, Long currentUserNo) {
+        if (email == null) {
+            return;
+        }
+        userRepository.findByEmail(email)
+                .filter(user -> currentUserNo == null || user.getUserNo() != currentUserNo)
+                .ifPresent(user -> {
+                    throw new BusinessException("이미 사용 중인 이메일입니다.", HttpStatus.CONFLICT);
+                });
+    }
+
+    private void validateRequired(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(message, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private String normalizeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        return email.trim();
     }
 }

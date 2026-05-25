@@ -7,13 +7,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import org.springframework.data.domain.Pageable;
 
 public interface OrderRepository extends JpaRepository<Orders, Long> {
 
     long countByUserNo(Long userNo);
 
-    /** 2026-05-25 9건 트랙 #8 부채 — 본인 주문 완료(orderState=6) 누적 횟수 (펫 페이지 '준 간식'용) */
-    long countByUserNoAndOrderState(Long userNo, Integer orderState);
+    long countByUserNoAndPayState(Long userNo, Integer payState);
 
     /** 결제 전 주문만 삭제 (pay_state=1 조건부) */
     @Modifying
@@ -25,4 +26,10 @@ public interface OrderRepository extends JpaRepository<Orders, Long> {
 
     @Query("SELECT COALESCE(SUM(o.amount), 0) FROM Orders o WHERE o.orderTime >= :start AND o.orderTime < :end")
     long sumTodayRevenue(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    List<Orders> findByPayStateAndOrderTimeBeforeOrderByOrderTimeAsc(
+            Integer payState,
+            LocalDateTime cutoff,
+            Pageable pageable
+    );
 }

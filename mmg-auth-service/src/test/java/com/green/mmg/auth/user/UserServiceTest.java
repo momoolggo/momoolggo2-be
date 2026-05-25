@@ -66,6 +66,7 @@ class UserServiceTest {
         existingUser.setBirth("1990-01-01");
         existingUser.setGender(1);
         existingUser.setTel("010-1234-5678");
+        existingUser.setEmail("haeon@example.com");
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -118,6 +119,7 @@ class UserServiceTest {
             assertThat(saved.getName()).isEqualTo("준하");
             assertThat(saved.getRole()).isEqualTo("CUSTOMER");
             assertThat(saved.getGender()).isEqualTo(1);
+            assertThat(saved.getEmail()).isEqualTo("haeon@example.com");
 
             // 분리 호출 패턴 (D2): generate → 쿠키 → Redis (저장 순서)
             verify(jwtTokenManager).setAccessTokenInCookie(httpRes, "at-token");
@@ -199,6 +201,7 @@ class UserServiceTest {
             req.setBirth("1990-01-01");
             req.setGender(1);
             req.setTel("010-1234-5678");
+            req.setEmail("haeon@example.com");
             req.setAgreedToTerms(true);  // 작업 C (2026-05-18): happy path fixture, 미동의 케이스는 별 테스트
             return req;
         }
@@ -463,6 +466,7 @@ class UserServiceTest {
             assertThat(res.getUserId()).isEqualTo("kjh");
             assertThat(res.getName()).isEqualTo("준하");
             assertThat(res.getTel()).isEqualTo("010-1234-5678");
+            assertThat(res.getEmail()).isEqualTo("haeon@example.com");
             assertThat(res.getGender()).isEqualTo(1);
             assertThat(res.getBirth()).isEqualTo("1990-01-01");
         }
@@ -549,6 +553,46 @@ class UserServiceTest {
             assertThatThrownBy(() -> userService.updateUser(999L, req))
                     .isInstanceOf(BusinessException.class)
                     .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("findId/resetPassword — 계정 찾기")
+    class AccountFindAuth {
+        @Test
+        @DisplayName("findId: 이름+연락처+이메일 일치 → userId 반환")
+        void findId_withEmail_returnsUserId() {
+            UserFindIdReq req = new UserFindIdReq();
+            req.setName("준하");
+            req.setTel("010-1234-5678");
+            req.setEmail("haeon@example.com");
+            when(userRepository.findFirstByNameAndTelAndEmailAndRoleIn(
+                    "준하", "010-1234-5678", "haeon@example.com", java.util.List.of("CUSTOMER", "OWNER", "RIDER")))
+                    .thenReturn(Optional.of(existingUser));
+
+            UserFindIdRes res = userService.findId(req);
+
+            assertThat(res.getUserId()).isEqualTo("kjh");
+        }
+
+        @Test
+        @DisplayName("resetPassword: 검증 성공 → 새 비밀번호 BCrypt 저장")
+        void resetPassword_encodesNewPassword() {
+            UserResetPwReq req = new UserResetPwReq();
+            req.setUserId("kjh");
+            req.setName("준하");
+            req.setTel("010-1234-5678");
+            req.setEmail("haeon@example.com");
+            req.setNewPassword("new-pw");
+            when(userRepository.findByUserIdAndNameAndTelAndEmailAndRoleIn(
+                    "kjh", "준하", "010-1234-5678", "haeon@example.com", java.util.List.of("CUSTOMER", "OWNER", "RIDER")))
+                    .thenReturn(Optional.of(existingUser));
+            when(passwordEncoder.encode("new-pw")).thenReturn("encoded-new-pw");
+
+            userService.resetPassword(req);
+
+            assertThat(existingUser.getUserPw()).isEqualTo("encoded-new-pw");
+            verify(passwordEncoder).encode("new-pw");
         }
     }
 }

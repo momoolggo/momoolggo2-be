@@ -3,6 +3,7 @@ package com.green.mmg.main.order;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.cart.CartDetailRepository;
 import com.green.mmg.main.cart.model.CartDetail;
+import com.green.mmg.main.coupon.CouponService;
 import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.address.UserAddressRepository;
 import com.green.mmg.main.cart.CartMapper;
@@ -16,10 +17,7 @@ import com.green.mmg.main.internal.dto.InternalSettlementOrderRes;
 import com.green.mmg.main.notification.NotificationService;
 import com.green.mmg.main.notification.model.NotificationCreateReq;
 import com.green.mmg.main.order.model.*;
-import com.green.mmg.main.owner.OwnerOrderSseService;
 import com.green.mmg.main.payment.PaymentService;
-import com.green.mmg.main.pet.PetService;
-import com.green.mmg.main.pet.dto.PetRewardRes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -82,7 +80,7 @@ public class OrderService {
     private final OrderDeliverySseService orderDeliverySseService;
     private final NotificationService notificationService;
     private final PaymentService paymentService;
-    private final PetService petService;  // P-6 주문 완료 시 펫 보상
+    private final CouponService couponService;
 
     private static final int ORDER_STATE_WAITING = 1;
     private static final int ORDER_STATE_CANCELED = 2;
@@ -91,42 +89,7 @@ public class OrderService {
     private static final int PAY_STATE_PAID = 2;
     private static final int PAY_STATE_REFUNDED = 3;
 
-    // 2026-05-25 9건 트랙 정정 — 거리 기반 동적 배달팁 (rider DeliveryService와 일관).
-    // base 1500 고정 + extra = ceil(km) * 1000 (Haversine 직선).
-    private static final int DELIVERY_BASE_FEE = 1500;
-    private static final int FEE_PER_KM = 1000;
-    private static final double EARTH_RADIUS_M = 6_371_000.0;
-    private final OwnerOrderSseService ownerOrderSseService;
-
-    /** 거리 기반 배달팁 — 좌표 NULL시 base만(1500). cart의 store와 사용자 default 주소 좌표 사용. */
-    private int computeDeliveryFee(Double storeLat, Double storeLng, Double dLat, Double dLng) {
-        if (storeLat == null || storeLng == null || dLat == null || dLng == null) {
-            return DELIVERY_BASE_FEE;
-        }
-        double phi1 = Math.toRadians(storeLat);
-        double phi2 = Math.toRadians(dLat);
-        double dPhi = Math.toRadians(dLat - storeLat);
-        double dLambda = Math.toRadians(dLng - storeLng);
-        double a = Math.sin(dPhi/2)*Math.sin(dPhi/2) + Math.cos(phi1)*Math.cos(phi2)*Math.sin(dLambda/2)*Math.sin(dLambda/2);
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        double distanceM = EARTH_RADIUS_M * c;
-        if (distanceM <= 0) return DELIVERY_BASE_FEE;
-        int km = (int) Math.ceil(distanceM / 1000.0);
-        return DELIVERY_BASE_FEE + km * FEE_PER_KM;
-    }
-
-    /** 가게 좌표 조회 + computeDeliveryFee 호출 helper. */
-    private int calcDeliveryFee(Long storeId, OrderAddressInfo addr) {
-        java.util.Map<String, Object> storeCoord = orderMapper.findStoreCoord(storeId);
-        if (storeCoord == null) return DELIVERY_BASE_FEE;
-        Object lat = storeCoord.get("storeLat");
-        Object lng = storeCoord.get("storeLng");
-        Double storeLat = lat instanceof Number ? ((Number) lat).doubleValue() : null;
-        Double storeLng = lng instanceof Number ? ((Number) lng).doubleValue() : null;
-        Double dLat = addr != null ? addr.getLatitude() : null;
-        Double dLng = addr != null ? addr.getLongitude() : null;
-        return computeDeliveryFee(storeLat, storeLng, dLat, dLng);
-    }
+    private static final int DELIVERY_FEE = 1500;
 
     // 주문 화면 초기 데이터 조회
     @Transactional(readOnly = true)
@@ -158,15 +121,13 @@ public class OrderService {
         res.setAddressDetail(addr != null ? addr.getAddressDetail() : "");
         res.setItems(items);
         res.setMenuTotal(menuTotal);
-        // 2026-05-25 9건 트랙 정정 — 거리 기반 동적 배달팁
-        int deliveryFee = calcDeliveryFee(cart.getStoreId(), addr);
-        res.setDeliveryFee(deliveryFee);
-        res.setTotalAmount(menuTotal + deliveryFee);
+        res.setDeliveryFee(DELIVERY_FEE);
+        res.setTotalAmount(menuTotal + DELIVERY_FEE);
         return res;
     }
 
     @Transactional
-    public long placeOrder(Long userNo, OrderReqDto dto) {
+    public OrderCreateRes placeOrder(Long userNo, OrderReqDto dto) {
         Cart cart = cartRepository.findByUserNo(userNo)
                 .orElseThrow(() -> new RuntimeException("장바구니가 비어있습니다."));
 
@@ -178,12 +139,12 @@ public class OrderService {
         int menuTotal = items.stream()
                 .mapToInt(i -> i.getPrice() * i.getQuantity())
                 .sum();
-        // 2026-05-25 9건 트랙 정정 — 거리 기반 동적 배달팁
-        int deliveryFee = calcDeliveryFee(cart.getStoreId(), addr);
-        int totalAmount = menuTotal + deliveryFee;
+        int totalAmount = menuTotal + DELIVERY_FEE;
 
         // 기존 패턴 유지: serverOrderId + timestamp 결합 큰 숫자 ID
         long uniqueId = Long.parseLong("39" + System.currentTimeMillis());
+
+        totalAmount = couponService.applyCouponToOrder(userNo, uniqueId, dto.getCouponId(), totalAmount);
 
         Orders order = new Orders();
         order.setOrderId(uniqueId);
@@ -193,11 +154,12 @@ public class OrderService {
         order.setRiderRequest(dto.getRiderRequest());
         order.setAddress(addr != null ? addr.getAddress() : "");
         order.setAddressDetail(addr != null ? addr.getAddressDetail() : "");
-        order.setDeliveryFee(deliveryFee);
+        order.setDeliveryFee(DELIVERY_FEE);
         order.setAmount(totalAmount);
         order.setPayState(dto.getPayState());
         order.setOrderState(ORDER_STATE_WAITING);
         order.setDeliveryState(1);
+        order.setEcoSelected(Boolean.TRUE.equals(dto.getEcoSelected()));
         orderRepository.saveAndFlush(order);
 
         for (CartItemRes item : items) {
@@ -213,12 +175,8 @@ public class OrderService {
         // 가게 누적 주문 수(store.order_count) 갱신 — 같은 트랜잭션 내 처리
         orderMapper.calSumOrder(cart.getStoreId());
 
-        // 2026-05-25 9건 트랙 정정 — placeOrder 시점 SSE 발송 제거.
-        // 사장은 결제 완료(pay_state=2) 후에만 새 주문 알림 받음 → PaymentService.confirmPayment에서 SSE 발송.
-
-        return uniqueId;
+        return new OrderCreateRes(uniqueId, totalAmount);
     }
-
 
 
     // 주문 취소
@@ -328,7 +286,7 @@ public class OrderService {
             throw new BusinessException("본인 주문 내역만 조회 가능합니다.", HttpStatus.FORBIDDEN);
         }
         // 응답 동결: 기존 OrderMapper.maxHistoryPage가 int 반환 → 동일 타입 유지
-        return (int) orderRepository.countByUserNo(userId);
+        return (int) orderRepository.countByUserNoAndPayState(userId, PAY_STATE_PAID);
     }
 
     // 주문 취소 건 재주문(장바구니 다시 담기)
@@ -407,21 +365,6 @@ public class OrderService {
         Integer previousState = order.getDeliveryState();
         order.setDeliveryState(newState);
 
-        // 자잘 에러 트랙 #7 (2026-05-23) — order_state 자동 동기화 (사장-라이더 정합).
-        // 이전: delivery_state만 변경되어 사장 화면이 "조리 중"(3) 영구 고착 → 사장이 "라이더 배차"(4) 버튼 무용지물.
-        // 이후: delivery 1(배차됨, ASSIGNED/ARRIVED/AWAITING) → order 4(라이더 배차).
-        //       delivery 2(배달중, PICKED_UP/DELIVERING) → order 5(배달 중).
-        // reviewer W-1 정정 — WAITING_ASSIGN은 newState=1이지만 라이더가 reject로 풀 복귀한 경우라 order_state 전진 X.
-        Integer currentOrderState = order.getOrderState();
-        if (currentOrderState != null && currentOrderState >= 3) {
-            Integer targetOrderState = null;
-            if (newState == 1 && !"WAITING_ASSIGN".equals(deliveryStatus)) targetOrderState = 4;
-            else if (newState == 2) targetOrderState = 5;
-            if (targetOrderState != null && targetOrderState > currentOrderState) {
-                order.setOrderState(targetOrderState);
-            }
-        }
-
         OrderDeliveryStatusRes status = new OrderDeliveryStatusRes(
                 order.getOrderId(),
                 order.getOrderState(),
@@ -431,13 +374,6 @@ public class OrderService {
         );
 
         orderDeliverySseService.sendDeliveryStatus(orderId, status);
-
-        // 2026-05-25 9건 트랙 정정 — 사장 OrderList 자동 갱신 (라이더 배차 수락/픽업/배달 완료 등).
-        ownerOrderSseService.sendOrderStateChanged(order.getStoreId(), Map.of(
-                "orderId", orderId,
-                "orderState", order.getOrderState(),
-                "deliveryState", newState
-        ));
 
         if(!Objects.equals(previousState, newState)) {
             sendOrderStatusNotification(order, status);
@@ -451,10 +387,9 @@ public class OrderService {
      * rider → main 배달 완료 처리 (interfaces.md §2.2).
      * delivery_state=3 (DELIVERED 종결, ADR-004) + order_state=6 (배달완료, CLAUDE.md §7).
      * completedAt body 인자는 수신 후 무시 (Q-A8.e-1 (나), orders.completed_at 컬럼 부재 — tech-debt).
-     * deliveredPhotoUrl은 자잘 에러 트랙 #9-B (2026-05-23) — orders.delivered_photo_url 저장.
      */
     @Transactional
-    public DeliveryCompleteRes completeDelivery(Long orderId, LocalDateTime completedAt, String deliveredPhotoUrl) {
+    public DeliveryCompleteRes completeDelivery(Long orderId, LocalDateTime completedAt) {
         Orders order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다: " + orderId, HttpStatus.NOT_FOUND));
 
@@ -464,9 +399,6 @@ public class OrderService {
 
         order.setDeliveryState(3);
         order.setOrderState(6);
-        if (deliveredPhotoUrl != null && !deliveredPhotoUrl.isBlank()) {
-            order.setDeliveredPhotoUrl(deliveredPhotoUrl);
-        }
 
         OrderDeliveryStatusRes status = new OrderDeliveryStatusRes(
                 order.getOrderId(),
@@ -477,40 +409,9 @@ public class OrderService {
         );
 
         orderDeliverySseService.sendDeliveryStatus(orderId, status);
-        // 2026-05-25 9건 트랙 정정 — 배달 완료 시 사장 OrderList 자동 갱신 (state 6 반영).
-        ownerOrderSseService.sendOrderStateChanged(order.getStoreId(), Map.of(
-                "orderId", orderId,
-                "orderState", 6,
-                "deliveryState", 3
-        ));
         sendOrderStatusNotification(order, status);
 
-        grantPetReward(order);
-
         return new DeliveryCompleteRes(orderId, 3);
-    }
-
-    /**
-     * P-6 펫 보상 — best-effort. 실패해도 주문 완료 영향 X.
-     * 1주문 1회 idempotent (PetService.grantOrderReward 내부에서 green_point_log.order_id UNIQUE 검사).
-     */
-    private void grantPetReward(Orders order) {
-        try {
-            Integer amount = order.getAmount();
-            PetRewardRes reward = petService.grantOrderReward(
-                    order.getUserNo(), order.getOrderId(), amount == null ? 0 : amount);
-            if (reward.isLeveledUp()) {
-                notificationService.createNotification(new NotificationCreateReq(
-                        order.getUserNo(),
-                        "PET_LEVEL_UP",
-                        "펫 레벨업!",
-                        "펫이 Lv." + reward.getNewLevel() + "에 도달했어요! 포인트 " + reward.getPointGranted() + "P 적립.",
-                        "/mypage/pet"
-                ));
-            }
-        } catch (Exception e) {
-            log.warn("펫 보상 실패 (best-effort 진행) — orderId={}, cause={}", order.getOrderId(), e.getMessage());
-        }
     }
 
     private void sendOrderStatusNotification(Orders order, OrderDeliveryStatusRes status) {

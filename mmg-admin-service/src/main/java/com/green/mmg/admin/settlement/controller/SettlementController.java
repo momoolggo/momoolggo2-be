@@ -6,6 +6,7 @@ import com.green.mmg.common.dto.ResultResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+
 @RestController
 @RequestMapping("/api/admin/settlement")
 @RequiredArgsConstructor
@@ -41,6 +42,22 @@ public class SettlementController {
             @PathVariable Long settlementId) {
         settlementService.completeSettlement(settlementId);
         return new ResultResponse<>("정산 완료 처리", null);
+    }
+
+    // 보류 해제
+    @PatchMapping("/{settlementId}/release")
+    public ResultResponse<?> releaseHold(@PathVariable Long settlementId) {
+        settlementService.releaseHold(settlementId);
+        return new ResultResponse<>("보류 해제 완료", null);
+    }
+
+    // 계좌 정보 변경
+    @PatchMapping("/{settlementId}/bank-account")
+    public ResultResponse<?> updateBankAccount(
+            @PathVariable Long settlementId,
+            @RequestParam String bankAccount) {
+        settlementService.updateBankAccount(settlementId, bankAccount);
+        return new ResultResponse<>("계좌 정보 변경 완료", null);
     }
 
     // 정산 보류 처리

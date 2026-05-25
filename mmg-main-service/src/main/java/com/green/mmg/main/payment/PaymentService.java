@@ -3,6 +3,8 @@ package com.green.mmg.main.payment;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.cart.CartDetailRepository;
 import com.green.mmg.main.cart.CartRepository;
+import com.green.mmg.main.coupon.CouponService;
+import com.green.mmg.main.greenpoint.GreenPointRewardService;
 import com.green.mmg.main.order.OrderRepository;
 import com.green.mmg.main.order.model.Orders;
 import com.green.mmg.main.owner.OwnerOrderSseService;
@@ -10,8 +12,6 @@ import com.green.mmg.main.payment.model.PaymentConfirmReq;
 import com.green.mmg.main.payment.model.PaymentEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +25,7 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Map;
 
 /**
  * Phase 3-C-3: Cart/Order 외부 호출 정리 — JPA Repository 위임으로 전환.
@@ -54,7 +55,9 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final CartRepository cartRepository;
     private final CartDetailRepository cartDetailRepository;
-    private final OwnerOrderSseService ownerOrderSseService;  // 2026-05-25 9건 트랙 — 결제 완료 시 사장 SSE 발송
+    private final CouponService couponService;
+    private final OwnerOrderSseService ownerOrderSseService;
+    private final GreenPointRewardService greenPointRewardService;
 
     private static final int PAY_STATE_REFUNDED = 3;
 
@@ -91,6 +94,12 @@ public class PaymentService {
         // 4) 주문 상태 = 결제완료 (dirty checking)
         order.setPayState(2);
 
+        // 4-1) 주문 생성 시 예약된 쿠폰 사용
+        couponService.markCouponUsedByOrder(order.getUserNo(), orderId);
+
+        // 4-2) 친환경 선택 주문은 결제 승인 성공 후 친환경(그린포인트) 적립
+        greenPointRewardService.rewardIfEcoSelected(order);
+
         // 5) 장바구니 정리 — 결제 완료 후 비움 (앞 단계 모두 성공한 뒤에만 도달)
         Long userNo = order.getUserNo();
         if (userNo != null) {
@@ -100,10 +109,9 @@ public class PaymentService {
             });
         }
 
-        // 2026-05-25 9건 트랙 정정 — 결제 완료(pay_state=2) 시점에 사장 SSE 발송.
-        // 이전: placeOrder 시점에 SSE 발송했으나, 결제 안 한 주문이 사장 화면에 노출되는 문제 → 결제 완료 시점으로 옮김.
+        // 6) 결제 승인 완료 후에만 사장 신규 주문 SSE 발송
         ownerOrderSseService.sendNewOrder(order.getStoreId(), Map.of(
-                "orderId", order.getOrderId(),
+                "orderId", orderId,
                 "storeId", order.getStoreId()
         ));
     }
@@ -214,4 +222,5 @@ public class PaymentService {
 
         return response;
     }
+
 }

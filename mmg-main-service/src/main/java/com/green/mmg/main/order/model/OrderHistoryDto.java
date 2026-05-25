@@ -19,6 +19,4 @@ public class OrderHistoryDto {
     private int orderState;        // orders.order_state
     private int hasReview;
     private List<OrderItemDto> items;
-    // 자잘 에러 트랙 #9-B (2026-05-23) — 배달 완료 사진 URL (orderState=6 시 노출)
-    private String deliveredPhotoUrl;
 }

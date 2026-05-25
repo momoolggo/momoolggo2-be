@@ -4,6 +4,7 @@ import com.green.mmg.main.order.model.OrderDetail;
 import com.green.mmg.main.order.model.OrderHistoryDto;
 import com.green.mmg.main.order.model.OrderItemDto;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -23,4 +24,7 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, Long> 
             """)
     List<OrderItemDto> findItemsByOrderId(@Param("orderId") Long orderId);
     List<OrderDetail> findAllByOrderId(Long orderId);
+
+    @Modifying
+    void deleteByOrderId(Long orderId);
 }
