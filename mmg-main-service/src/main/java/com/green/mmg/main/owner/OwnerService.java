@@ -55,6 +55,8 @@ public class OwnerService {
     // ORDER_STATE 매핑 (CLAUDE.md §7) — 본 작업 A Group 4에서 3(조리중) 진입 시점만 인용.
     // Q-A9.d (ii) 일관: order_state=4/5 변경 책임 추가 X (admin 시연 수동 변경 가능, ADR-004 박제 범위 좁힘).
     private static final int ORDER_STATE_COOKING = 3;
+    // 2026-05-25 9건 트랙 — 사장 "배차 신청" 명시 클릭 시점에만 라이더 풀 트리거 (이전: 주문 수락=3 시점 자동)
+    private static final int ORDER_STATE_RIDER_REQUESTED = 4;
 
     // ========== 이미지 업로드 (공통) ==========
 
@@ -205,10 +207,10 @@ public class OwnerService {
             sendOrderAcceptedNotification(order);
         }
 
-        // 점주 수락 시점 (order_state=3 진입)에 자동 배차 트리거 (team-handoff §8, Q-A9.a (β+δ)).
-        // 라이더 풀 모델 — req.riderNo=null로 호출 → rider 측 WAITING_ASSIGN 생성 → 라이더가 R6 GET /api/rider/order/waiting 선착순 수락.
-        // best-effort try-catch (D1-bis 일관) — 배차 실패해도 order_state 전환은 성공.
-        if (req.getOrderState() == ORDER_STATE_COOKING) {
+        // 2026-05-25 9건 트랙 정정 — state 3(주문 수락)이 아닌 state 4(배차 신청)에서만 트리거.
+        // 사장이 "배차 신청" 버튼을 명시적으로 눌러야 라이더 풀에 INSERT + 라이더 SSE 발송.
+        // best-effort try-catch — 배차 실패해도 order_state 전환은 성공.
+        if (req.getOrderState() == ORDER_STATE_RIDER_REQUESTED) {
             triggerRiderAssign(req.getOrderId());
         }
     }

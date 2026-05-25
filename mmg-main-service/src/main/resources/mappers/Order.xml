@@ -51,11 +51,19 @@
         s.store_id      AS storeId,
         o.amount        AS totalPrice,
         o.delivery_fee  AS deliveryFee,
-        o.order_state   AS orderState
+        o.order_state   AS orderState,
+        o.delivered_photo_url AS deliveredPhotoUrl
         FROM orders o
             JOIN store s ON s.store_id = o.store_id
         WHERE o.order_id = #{id}
         ]]>
+    </select>
+
+    <!-- 2026-05-25 9건 트랙 — 거리 기반 배달팁용 가게 좌표 조회 -->
+    <select id="findStoreCoord" resultType="java.util.Map">
+        SELECT latitude AS storeLat, longitude AS storeLng
+        FROM store
+        WHERE store_id = #{storeId}
     </select>
 
     <!--

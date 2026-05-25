@@ -90,6 +90,39 @@ public class OrderService {
     private static final int PAY_STATE_REFUNDED = 3;
 
     private static final int DELIVERY_FEE = 1500;
+    // 2026-05-25 9건 트랙 — 거리 기반 동적 배달팁 (rider DeliveryService와 일관: base 1500 + ceil(km)*1000)
+    private static final int DELIVERY_BASE_FEE = 1500;
+    private static final int FEE_PER_KM = 1000;
+    private static final double EARTH_RADIUS_M = 6_371_000.0;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.green.mmg.main.owner.OwnerOrderSseService ownerOrderSseService;
+
+    /** 좌표 기반 배달팁 — 좌표 NULL시 base만(1500). */
+    private int computeDeliveryFee(Double storeLat, Double storeLng, Double dLat, Double dLng) {
+        if (storeLat == null || storeLng == null || dLat == null || dLng == null) return DELIVERY_BASE_FEE;
+        double phi1 = Math.toRadians(storeLat);
+        double phi2 = Math.toRadians(dLat);
+        double dPhi = Math.toRadians(dLat - storeLat);
+        double dLambda = Math.toRadians(dLng - storeLng);
+        double a = Math.sin(dPhi/2)*Math.sin(dPhi/2) + Math.cos(phi1)*Math.cos(phi2)*Math.sin(dLambda/2)*Math.sin(dLambda/2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        double distanceM = EARTH_RADIUS_M * c;
+        if (distanceM <= 0) return DELIVERY_BASE_FEE;
+        int km = (int) Math.ceil(distanceM / 1000.0);
+        return DELIVERY_BASE_FEE + km * FEE_PER_KM;
+    }
+
+    /** 가게 좌표 조회 + computeDeliveryFee 호출 helper. */
+    private int calcDeliveryFee(Long storeId, OrderAddressInfo addr) {
+        java.util.Map<String, Object> sc = orderMapper.findStoreCoord(storeId);
+        if (sc == null) return DELIVERY_BASE_FEE;
+        Object la = sc.get("storeLat"), ln = sc.get("storeLng");
+        Double sLat = la instanceof Number ? ((Number) la).doubleValue() : null;
+        Double sLng = ln instanceof Number ? ((Number) ln).doubleValue() : null;
+        Double dLat = addr != null ? addr.getLatitude() : null;
+        Double dLng = addr != null ? addr.getLongitude() : null;
+        return computeDeliveryFee(sLat, sLng, dLat, dLng);
+    }
 
     // 주문 화면 초기 데이터 조회
     @Transactional(readOnly = true)
@@ -121,8 +154,10 @@ public class OrderService {
         res.setAddressDetail(addr != null ? addr.getAddressDetail() : "");
         res.setItems(items);
         res.setMenuTotal(menuTotal);
-        res.setDeliveryFee(DELIVERY_FEE);
-        res.setTotalAmount(menuTotal + DELIVERY_FEE);
+        // 2026-05-25 9건 트랙 — 거리 기반 동적 배달팁
+        int deliveryFee = calcDeliveryFee(cart.getStoreId(), addr);
+        res.setDeliveryFee(deliveryFee);
+        res.setTotalAmount(menuTotal + deliveryFee);
         return res;
     }
 
@@ -139,7 +174,9 @@ public class OrderService {
         int menuTotal = items.stream()
                 .mapToInt(i -> i.getPrice() * i.getQuantity())
                 .sum();
-        int totalAmount = menuTotal + DELIVERY_FEE;
+        // 2026-05-25 9건 트랙 — 거리 기반 동적 배달팁
+        int deliveryFee = calcDeliveryFee(cart.getStoreId(), addr);
+        int totalAmount = menuTotal + deliveryFee;
 
         // 기존 패턴 유지: serverOrderId + timestamp 결합 큰 숫자 ID
         long uniqueId = Long.parseLong("39" + System.currentTimeMillis());
@@ -154,7 +191,7 @@ public class OrderService {
         order.setRiderRequest(dto.getRiderRequest());
         order.setAddress(addr != null ? addr.getAddress() : "");
         order.setAddressDetail(addr != null ? addr.getAddressDetail() : "");
-        order.setDeliveryFee(DELIVERY_FEE);
+        order.setDeliveryFee(deliveryFee);
         order.setAmount(totalAmount);
         order.setPayState(dto.getPayState());
         order.setOrderState(ORDER_STATE_WAITING);
@@ -375,6 +412,15 @@ public class OrderService {
 
         orderDeliverySseService.sendDeliveryStatus(orderId, status);
 
+        // 2026-05-25 9건 트랙 — 라이더 배차 수락/픽업/배달 완료 시 사장 OrderList 자동 갱신
+        if (ownerOrderSseService != null) {
+            ownerOrderSseService.sendOrderStateChanged(order.getStoreId(), java.util.Map.of(
+                    "orderId", orderId,
+                    "orderState", order.getOrderState(),
+                    "deliveryState", newState
+            ));
+        }
+
         if(!Objects.equals(previousState, newState)) {
             sendOrderStatusNotification(order, status);
         }
@@ -389,16 +435,20 @@ public class OrderService {
      * completedAt body 인자는 수신 후 무시 (Q-A8.e-1 (나), orders.completed_at 컬럼 부재 — tech-debt).
      */
     @Transactional
-    public DeliveryCompleteRes completeDelivery(Long orderId, LocalDateTime completedAt) {
+    public DeliveryCompleteRes completeDelivery(Long orderId, LocalDateTime completedAt, String deliveredPhotoUrl) {
         Orders order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException("주문을 찾을 수 없습니다: " + orderId, HttpStatus.NOT_FOUND));
 
         if (completedAt != null) {
-            log.info("배달 완료 알림 수신 (completedAt={}, orderId={}) — orders.completed_at 컬럼 부재로 무시", completedAt, orderId);
+            log.info("배달 완료 알림 수신 (completedAt={}, orderId={})", completedAt, orderId);
         }
 
         order.setDeliveryState(3);
         order.setOrderState(6);
+        // 2026-05-25 9건 트랙 #7 — 배달 완료 사진 URL 박제 (자잘 에러 트랙 #9-B 일관)
+        if (deliveredPhotoUrl != null && !deliveredPhotoUrl.isBlank()) {
+            order.setDeliveredPhotoUrl(deliveredPhotoUrl);
+        }
 
         OrderDeliveryStatusRes status = new OrderDeliveryStatusRes(
                 order.getOrderId(),
@@ -409,6 +459,14 @@ public class OrderService {
         );
 
         orderDeliverySseService.sendDeliveryStatus(orderId, status);
+        // 2026-05-25 9건 트랙 — 배달 완료 시 사장 OrderList 자동 갱신
+        if (ownerOrderSseService != null) {
+            ownerOrderSseService.sendOrderStateChanged(order.getStoreId(), java.util.Map.of(
+                    "orderId", orderId,
+                    "orderState", 6,
+                    "deliveryState", 3
+            ));
+        }
         sendOrderStatusNotification(order, status);
 
         return new DeliveryCompleteRes(orderId, 3);

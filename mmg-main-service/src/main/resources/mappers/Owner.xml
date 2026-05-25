@@ -406,13 +406,16 @@
             s.longitude                                               AS storeLng,
             s.store_tel                                               AS storePhone,
             CONCAT(o.address, ' ', IFNULL(o.address_detail, ''))      AS deliveryAddress,
-            NULL                                                      AS deliveryLat,
-            NULL                                                      AS deliveryLng,
+            a.latitude                                                AS deliveryLat,
+            a.longitude                                               AS deliveryLng,
             NULL                                                      AS customerPhone,
             o.delivery_fee                                            AS baseFee,
-            0                                                         AS extraFee
+            0                                                         AS extraFee,
+            o.request                                                 AS orderRequest,
+            o.rider_request                                           AS riderRequest
         FROM orders o
         JOIN store s ON o.store_id = s.store_id
+        LEFT JOIN address a ON a.user_no = o.user_no AND a.default_ad = 1
         WHERE o.order_id = #{orderId}
     </select>
 
