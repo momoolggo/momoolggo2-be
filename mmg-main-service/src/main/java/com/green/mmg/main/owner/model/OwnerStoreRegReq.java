@@ -18,6 +18,6 @@ public class OwnerStoreRegReq {
     private Double lat;
     private Double lng;
     private long categoryId;
-    private String addressDetail;
-    // 반드시 @Getter 어노테이션이 있거나, getter 메서드가 존재해야 합니다!
+    private String addressDetail; // 반드시 @Getter 어노테이션이 있거나, getter 메서드가 존재해야 함!
+    private String businessLicenseUrl; // 영업 신고증 url
 }

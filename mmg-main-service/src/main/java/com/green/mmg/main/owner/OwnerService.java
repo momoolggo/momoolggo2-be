@@ -106,6 +106,8 @@ public class OwnerService {
         if (!Objects.equals(dto.getUserId(), callerOwnerNo)) {
             throw new BusinessException("자신의 계정으로만 가게를 등록할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
+
+
         log.info("가게 등록 로직 시작: {}", dto.getStoreName());
         int result = ownerMapper.registerStore(dto);
         if (result == 0) {

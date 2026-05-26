@@ -1,9 +1,6 @@
 package com.green.mmg.admin.user.controller;
 
-import com.green.mmg.admin.dto.feign.AdminUserRes;
-import com.green.mmg.admin.dto.feign.UserAddressRes;
-import com.green.mmg.admin.dto.feign.UserApprovalReq;
-import com.green.mmg.admin.dto.feign.UserSuspensionReq;
+import com.green.mmg.admin.dto.feign.*;
 import com.green.mmg.admin.delivery.RiderApprovalService;
 import com.green.mmg.admin.feign.AuthFeignClient;
 import com.green.mmg.admin.feign.MainFeignClient;  // 추가
@@ -105,5 +102,11 @@ public class AdminUserController {
     public ResultResponse<Void> deleteUser(@PathVariable Long userNo) {
         riderApprovalService.deleteByUserNoIfRider(userNo);
         return authFeignClient.deleteUser(userNo);
+    }
+
+    //사장 회원가입 프로필
+    @GetMapping("/{userNo}/owner-profile")
+    public ResultResponse<OwnerProfileRes> getOwnerProfile(@PathVariable Long userNo) {
+        return mainFeignClient.getOwnerProfile(userNo);
     }
 }

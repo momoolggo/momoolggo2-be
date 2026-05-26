@@ -1,12 +1,14 @@
 package com.green.mmg.main.owner;
 
 
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.owner.model.*;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.model.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,6 +26,8 @@ public class OwnerController {
 
     private final OwnerService ownerService;
     private final OwnerOrderSseService ownerOrderSseService;
+
+    private static final long OWNER_DOC_MAX_FILE_SIZE = 5 * 1024 * 1024;
 
     @Value("${file.upload.menu-path:C:/uploads/menu/}")
     private String menuUploadPath;
@@ -273,6 +277,38 @@ public class OwnerController {
         ownerService.submitSettlementInquiry(
                 principal.getSignedUserNo(), req.get("content"));
         return new ResultResponse<>("문의 접수 완료", null);
+    }
+
+
+    // ==========회원가입 전 사장 서류 업로드 ==========
+    @PostMapping("/signup-doc/upload")
+    public ResultResponse<String> uploadOwnerSignupDoc(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam String docType
+    ) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("파일은 필수입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        if (file.getSize() > OWNER_DOC_MAX_FILE_SIZE) {
+            throw new BusinessException("파일은 5MB 이하만 업로드 가능합니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        String folder;
+        String urlPrefix;
+
+        if ("BUSINESS_LICENSE".equals(docType)) {
+            folder = "owner-doc/business-license/";
+            urlPrefix = "/uploads/store/owner-doc/business-license/";
+        } else if ("MAIL_ORDER_LICENSE".equals(docType)) {
+            folder = "owner-doc/mail-order-license/";
+            urlPrefix = "/uploads/store/owner-doc/mail-order-license/";
+        } else {
+            throw new BusinessException("지원하지 않는 서류 타입입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        String imageUrl = ownerService.uploadImage(file, storeUploadPath + folder, urlPrefix);
+        return new ResultResponse<>("사장 서류 업로드 성공", imageUrl);
     }
 
 

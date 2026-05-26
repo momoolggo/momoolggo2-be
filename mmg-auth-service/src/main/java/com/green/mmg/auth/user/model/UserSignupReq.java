@@ -20,6 +20,13 @@ public class UserSignupReq {
     private Double lat;
     private Double lng;
 
+    private String businessNumber;
+    private String businessLicenseUrl;
+    private String mailOrderLicenseUrl;
+    private String bankName;
+    private String accountNumber;
+    private String accountHolder;
+
     // 작업 C (2026-05-18): 이용약관 동의. true 아니면 가입 차단 (이력 저장 X).
     private Boolean agreedToTerms;
 }

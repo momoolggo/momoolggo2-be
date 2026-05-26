@@ -5,11 +5,9 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public class UserResetPwReq {
+public class UserResetPwCodeReq {
     private String userId;
     private String name;
     private String tel;
     private String email;
-    private String newPassword;
-    private String verificationCode;
 }
