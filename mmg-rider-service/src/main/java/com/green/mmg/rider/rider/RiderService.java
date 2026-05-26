@@ -1,12 +1,14 @@
 package com.green.mmg.rider.rider;
 
 import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.rider.feign.AuthInternalClient;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderProfileReq;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
 import com.green.mmg.rider.rider.model.RiderStatus;
 import com.green.mmg.rider.rider.model.VehicleType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,11 +27,13 @@ import java.util.List;
  * 가입 시점에 Rider 생성자에서 status=ACTIVE 직접 박제 (D11 auto-approve toggle 폐기).
  * RiderStatus.PENDING/SUSPENDED enum 값은 DB 정합 + DeliveryService/WorkSessionService/LocationService 거부 검증 의도로 보존.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RiderService {
 
     private final RiderRepository riderRepository;
+    private final AuthInternalClient authInternalClient;
 
     /**
      * 라이더 가입 프로필 등록 (ADR-001 Q1-C — auth signup 후 별도 endpoint).
@@ -51,6 +55,18 @@ public class RiderService {
         validate(req);
         VehicleType vehicleType = parseVehicleType(req.vehicleType());
 
+        String phone = req.phone();
+        if (phone == null || phone.isBlank()) {
+            try {
+                var res = authInternalClient.getUser(callerUserNo);
+                if (res != null && res.getResultData() != null) {
+                    phone = res.getResultData().getTel();
+                }
+            } catch (Exception e) {
+                log.warn("auth tel 조회 실패 — rider.phone null로 가입 진행 userNo={}: {}", callerUserNo, e.getMessage());
+            }
+        }
+
         Rider rider = new Rider(
                 callerUserNo,
                 req.licenseNo(),
@@ -59,7 +75,7 @@ public class RiderService {
                 req.accountBank(),
                 req.accountNo(),
                 req.accountHolder(),
-                req.phone()
+                phone
         );
         rider = riderRepository.save(rider);
         return RiderProfileRes.from(rider);

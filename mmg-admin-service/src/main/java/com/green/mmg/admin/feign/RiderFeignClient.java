@@ -62,6 +62,10 @@ public interface RiderFeignClient {
     @GetMapping("/internal/rider/settlement/pending")
     List<RiderSettlementRowRes> getRiderSettlementPending();
 
+    /** Admin 모니터 — 전체 정산 목록 (PENDING + CONFIRMED). periodStart 내림차순. */
+    @GetMapping("/internal/rider/settlement/all")
+    List<RiderSettlementRowRes> getRiderSettlementAll();
+
     // ─── §3.1/§3.2 라이더 관리 (Group 8.5 신설, Q-A1 (라+)) ──────
     // SSE 자동화 트랙(2026-05-21) — approveRider/suspendRider 폐기 (auto-approve true 박제로 신원 승인 흐름 단일화).
     // getRiderList는 AdminDeliveryController.getRiderCount에서 사용 중 (라이더 공지 모달).

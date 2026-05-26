@@ -147,6 +147,12 @@ public class RiderInternalController {
         return settlementService.findPending();
     }
 
+    /** Admin 모니터 — 전체 정산 목록 (PENDING + CONFIRMED). */
+    @GetMapping("/settlement/all")
+    public List<SettlementRowRes> allSettlements() {
+        return settlementService.findAll();
+    }
+
     // ─── §3.1/§3.2 라이더 관리 (Group 8.5 신설, Q-A1 (라+)) ──────
 
     /**

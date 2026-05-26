@@ -40,4 +40,10 @@ public class RiderSettlementController {
     public List<RiderSettlementRowRes> pending() {
         return riderFeignClient.getRiderSettlementPending();
     }
+
+    /** 전체 정산 목록 (PENDING + CONFIRMED) — admin 모니터. */
+    @GetMapping("/all")
+    public List<RiderSettlementRowRes> all() {
+        return riderFeignClient.getRiderSettlementAll();
+    }
 }
