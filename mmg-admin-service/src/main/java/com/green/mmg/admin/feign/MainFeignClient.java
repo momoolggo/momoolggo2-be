@@ -16,6 +16,9 @@ import java.util.List;
 @FeignClient(name = "mmg-main-service", url = "${feign.main-service.url}")
 public interface MainFeignClient {
 
+    @GetMapping("/internal/owner-profile/{userNo}")
+    ResultResponse<OwnerProfileRes> getOwnerProfile(@PathVariable("userNo") Long userNo);
+
     @GetMapping("/internal/user/{userNo}/address")
     ResultResponse<List<UserAddressRes>> getUserAddresses(@PathVariable("userNo") Long userNo);
 

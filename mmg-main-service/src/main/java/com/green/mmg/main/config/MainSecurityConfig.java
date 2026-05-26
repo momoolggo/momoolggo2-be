@@ -1,10 +1,12 @@
 package com.green.mmg.main.config;
 
+import com.green.mmg.common.model.UserPrincipal;
 import com.green.mmg.common.security.BaseSecurityConfig;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -30,7 +32,18 @@ public class MainSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/map/**").permitAll()
 
                         // OWNER 전용 (사장 관리)
-                        .requestMatchers("/api/owner/**").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.POST, "/api/owner/signup-doc/upload").permitAll()
+                        .requestMatchers("/api/owner/**").access((authentication, context) -> {
+                            var auth = authentication.get();
+
+                            boolean isOwner = auth.getAuthorities().stream()
+                                    .anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()));
+
+                            boolean isActive = auth.getPrincipal() instanceof UserPrincipal principal
+                                    && "ACTIVE".equals(principal.getStatus());
+
+                            return new AuthorizationDecision(isOwner && isActive);
+                        })
 
                         // 자잘 에러 트랙 #9 (2026-05-23) — 라이더 배달 완료 사진 업로드
                         .requestMatchers("/api/delivery-photo/**").hasRole("RIDER")

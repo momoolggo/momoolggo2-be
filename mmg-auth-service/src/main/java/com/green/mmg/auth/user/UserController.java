@@ -123,9 +123,19 @@ public class UserController {
         return new ResultResponse<>("아이디 찾기 성공", userService.findId(req));
     }
 
+    // 비밀번호 재설정 인증 코드
+    @PostMapping("/reset-pw/code")
+    public ResultResponse<Void> sendResetPasswordCode(@RequestBody UserResetPwCodeReq req) {
+        userService.sendResetPasswordCode(req);
+        return new ResultResponse<>("비밀번호 재설정 인증코드 발송 성공", null);
+    }
+
+    // 비밀번호 재설정
     @PostMapping("/reset-pw")
     public ResultResponse<Void> resetPassword(@RequestBody UserResetPwReq req) {
         userService.resetPassword(req);
         return new ResultResponse<>("비밀번호 재설정 성공", null);
     }
+
+
 }

@@ -1,5 +1,8 @@
 package com.green.mmg.auth.user;
 
+import com.green.mmg.auth.feign.MainOwnerProfileClient;
+import com.green.mmg.auth.feign.dto.OwnerProfileCreateReq;
+import com.green.mmg.auth.mail.EmailService;
 import com.green.mmg.auth.token.RefreshTokenStore;
 import com.green.mmg.auth.user.model.*;
 import com.green.mmg.common.constants.ConstJwt;
@@ -12,11 +15,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.List;
 
@@ -39,6 +44,14 @@ public class UserService {
     private final MyCookieUtil myCookieUtil;
     private final ConstJwt constJwt;
     private final RefreshTokenStore refreshTokenStore;  // Phase 4-C: RT revoke 가능성 보장
+
+    private static final Duration RESET_PW_CODE_TTL = Duration.ofMinutes(5);
+    private static final String RESET_PW_CODE_PREFIX = "auth:reset-pw:";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    private final StringRedisTemplate stringRedisTemplate;
+    private final EmailService emailService;
+    private final MainOwnerProfileClient mainOwnerProfileClient;
 
     // ── 아이디 중복확인
     @Transactional(readOnly = true)
@@ -67,6 +80,9 @@ public class UserService {
         validateRequiredEmail(role, email);
         validateDuplicateEmail(email, null);
 
+        if ("OWNER".equals(role)) {
+            validateOwnerSignupRequired(req);
+        }
         User user = new User();
         user.setUserId(req.getUserId());
         user.setUserPw(passwordEncoder.encode(req.getUserPw()));
@@ -84,11 +100,30 @@ public class UserService {
 
         User saved = userRepository.save(user);
 
-        JwtUser jwtUser = new JwtUser(saved.getUserNo(), saved.getRole(), null, saved.getName());
-        issueAndStoreTokens(res, jwtUser);
+        if ("OWNER".equals(role)) {
+            mainOwnerProfileClient.createOwnerProfile(new OwnerProfileCreateReq(
+                    saved.getUserNo(),
+                    buildStoreAddress(req),
+                    req.getBusinessNumber(),
+                    req.getBusinessLicenseUrl(),
+                    req.getMailOrderLicenseUrl(),
+                    req.getBankName(),
+                    req.getAccountNumber(),
+                    req.getAccountHolder()
+            ));
+        }
 
-        return new UserSigninRes(saved.getUserNo(), saved.getName(), saved.getRole(),
-                System.currentTimeMillis() + constJwt.getAccessTokenValidityMilliseconds(), null);
+        long atExpiresAt = 0L;
+
+        if ("ACTIVE".equals(saved.getStatus())) {
+            JwtUser jwtUser = new JwtUser(saved.getUserNo(), saved.getRole(), saved.getStatus(), saved.getName());
+            issueAndStoreTokens(res, jwtUser);
+            atExpiresAt = System.currentTimeMillis() + constJwt.getAccessTokenValidityMilliseconds();
+        } else {
+            jwtTokenManager.signOut(res);
+        }
+
+        return new UserSigninRes(saved.getUserNo(), saved.getName(), saved.getRole(), atExpiresAt, null);
     }
 
     // ── 로그인 (조회 + JWT 발급, DB 변경 없음)
@@ -96,15 +131,30 @@ public class UserService {
     public UserSigninRes signin(UserSigninReq req, HttpServletResponse res) {
         User user = userRepository.findByUserId(req.getUserId())
                 .orElseThrow(() -> new BusinessException("아이디 또는 비밀번호가 틀렸습니다.", HttpStatus.UNAUTHORIZED));
+
         if (!passwordEncoder.matches(req.getUserPw(), user.getUserPw())) {
             throw new BusinessException("아이디 또는 비밀번호가 틀렸습니다.", HttpStatus.UNAUTHORIZED);
         }
-        JwtUser jwtUser = new JwtUser(user.getUserNo(), user.getRole(), null, user.getName());
+
+        if (!"ACTIVE".equals(user.getStatus())) {
+            if ("PENDING".equals(user.getStatus())) {
+                throw new BusinessException("관리자 승인 후 이용 가능합니다.", HttpStatus.FORBIDDEN);
+            }
+            if ("REJECTED".equals(user.getStatus())) {
+                throw new BusinessException("가입 신청이 반려되었습니다.", HttpStatus.FORBIDDEN);
+            }
+            if ("SUSPENDED".equals(user.getStatus())) {
+                throw new BusinessException("정지된 계정입니다.", HttpStatus.FORBIDDEN);
+            }
+            throw new BusinessException("이용할 수 없는 계정 상태입니다.", HttpStatus.FORBIDDEN);
+        }
+
+        JwtUser jwtUser = new JwtUser(user.getUserNo(), user.getRole(), user.getStatus(), user.getName());
         issueAndStoreTokens(res, jwtUser);
+
         return new UserSigninRes(user.getUserNo(), user.getName(), user.getRole(),
                 System.currentTimeMillis() + constJwt.getAccessTokenValidityMilliseconds(), null);
     }
-
     /**
      * Phase 4-C: AT/RT 발급 + RT를 Redis에 저장. signup/signin 공통.
      *
@@ -153,7 +203,15 @@ public class UserService {
                     "리프레시 토큰이 유효하지 않습니다. 재로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
         }
 
-        jwtTokenManager.setAccessTokenInCookie(res, jwtUser);
+        User user = userRepository.findById(jwtUser.getSignedUserNo())
+                .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.UNAUTHORIZED));
+
+        if (!"ACTIVE".equals(user.getStatus())) {
+            throw new BusinessException("관리자 승인 후 이용 가능합니다.", HttpStatus.UNAUTHORIZED);
+        }
+
+        JwtUser activeJwtUser = new JwtUser(user.getUserNo(), user.getRole(), user.getStatus(), user.getName());
+        jwtTokenManager.setAccessTokenInCookie(res, activeJwtUser);
     }
 
     // 내 정보 조회
@@ -199,21 +257,58 @@ public class UserService {
     }
 
     @Transactional
+    public void sendResetPasswordCode(UserResetPwCodeReq req) {
+        validateRequired(req.getUserId(), "아이디는 필수입니다.");
+        validateRequired(req.getName(), "이름은 필수입니다.");
+        validateRequired(req.getTel(), "연락처는 필수입니다.");
+        validateRequired(req.getEmail(), "이메일은 필수입니다.");
+
+        User user = findResetPasswordTarget(req.getUserId(), req.getName(), req.getTel(), req.getEmail());
+
+        String code = generateResetPasswordCode();
+        stringRedisTemplate.opsForValue()
+                .set(resetPasswordCodeKey(user.getUserNo()), code, RESET_PW_CODE_TTL);
+
+        emailService.sendPasswordResetCode(user.getEmail(), user.getName(), code);
+    }
+
+    @Transactional
     public void resetPassword(UserResetPwReq req) {
         validateRequired(req.getUserId(), "아이디는 필수입니다.");
         validateRequired(req.getName(), "이름은 필수입니다.");
         validateRequired(req.getTel(), "연락처는 필수입니다.");
         validateRequired(req.getEmail(), "이메일은 필수입니다.");
+        validateRequired(req.getVerificationCode(), "인증코드는 필수입니다.");
         validateRequired(req.getNewPassword(), "새 비밀번호는 필수입니다.");
 
-        String email = normalizeEmail(req.getEmail());
-        User user = userRepository.findByUserIdAndNameAndTelAndEmailAndRoleIn(
-                        req.getUserId(), req.getName(), req.getTel(), email, FIND_AUTH_ROLES)
-                .orElseThrow(() -> new BusinessException("일치하는 회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        User user = findResetPasswordTarget(req.getUserId(), req.getName(), req.getTel(), req.getEmail());
+
+        String key = resetPasswordCodeKey(user.getUserNo());
+        String savedCode = stringRedisTemplate.opsForValue().get(key);
+
+        if (savedCode == null || !savedCode.equals(req.getVerificationCode())) {
+            throw new BusinessException("인증코드가 일치하지 않거나 만료되었습니다.", HttpStatus.BAD_REQUEST);
+        }
 
         user.setUserPw(passwordEncoder.encode(req.getNewPassword()));
+        stringRedisTemplate.delete(key);
     }
 
+    private User findResetPasswordTarget(String userId, String name, String tel, String email) {
+        String normalizedEmail = normalizeEmail(email);
+
+        return userRepository.findByUserIdAndNameAndTelAndEmailAndRoleIn(
+                        userId, name, tel, normalizedEmail, FIND_AUTH_ROLES)
+                .orElseThrow(() -> new BusinessException("일치하는 회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+    }
+
+    private String generateResetPasswordCode() {
+        return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
+    }
+
+    private String resetPasswordCodeKey(Long userNo) {
+        return RESET_PW_CODE_PREFIX + userNo;
+    }
     private void validateRequiredEmail(String role, String email) {
         if (FIND_AUTH_ROLES.contains(role) && email == null) {
             throw new BusinessException("이메일은 필수입니다.", HttpStatus.BAD_REQUEST);
@@ -235,6 +330,23 @@ public class UserService {
         if (value == null || value.isBlank()) {
             throw new BusinessException(message, HttpStatus.BAD_REQUEST);
         }
+    }
+
+    private void validateOwnerSignupRequired(UserSignupReq req) {
+        validateRequired(req.getAddress(), "주소는 필수입니다.");
+        validateRequired(req.getBusinessNumber(), "사업자 등록 번호는 필수입니다.");
+        validateRequired(req.getBusinessLicenseUrl(), "영업 신고증은 필수입니다.");
+        validateRequired(req.getMailOrderLicenseUrl(), "통신판매업 신고증은 필수입니다.");
+        validateRequired(req.getBankName(), "정산 은행은 필수입니다.");
+        validateRequired(req.getAccountNumber(), "정산 계좌번호는 필수입니다.");
+        validateRequired(req.getAccountHolder(), "예금주는 필수입니다.");
+    }
+
+    private String buildStoreAddress(UserSignupReq req) {
+        if (req.getAddressDetail() == null || req.getAddressDetail().isBlank()) {
+            return req.getAddress();
+        }
+        return req.getAddress() + " " + req.getAddressDetail();
     }
 
     private String normalizeEmail(String email) {

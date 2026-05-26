@@ -4,7 +4,7 @@
 
 <mapper namespace="com.green.mmg.main.owner.OwnerMapper">
 
-    <!-- 媛寃??깅줉 -->
+    <!-- 가게 등록 -->
     <insert id="registerStore">
         INSERT INTO store(
             owner_id,
@@ -33,7 +33,7 @@
                  )
     </insert>
 
-    <!-- 媛寃?湲곕낯 ?뺣낫 ?섏젙 -->
+    <!-- 가게 수정 -->
     <update id="updateStore">
         UPDATE store
         SET store_name = #{storeName},
@@ -45,7 +45,7 @@
         WHERE store_id = #{storeId}
     </update>
 
-    <!-- 媛寃??댁쁺?뺣낫 ?섏젙 -->
+    <!-- 가게 상태 수정 -->
     <update id="updateStoreStatus">
         UPDATE store
         SET holiday = #{holiday},
@@ -73,7 +73,7 @@
         WHERE store_id = #{storeId}
     </select>
 
-    <!-- 媛寃???젣 -->
+    <!-- 가게 삭제 -->
     <delete id="deleteStore">
         DELETE FROM store
         WHERE store_id = #{storeId}

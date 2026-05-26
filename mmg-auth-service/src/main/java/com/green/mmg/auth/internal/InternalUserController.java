@@ -1,6 +1,7 @@
 package com.green.mmg.auth.internal;
 
 import com.green.mmg.auth.internal.dto.*;
+import com.green.mmg.auth.mail.EmailService;
 import com.green.mmg.auth.user.UserRepository;
 import com.green.mmg.auth.user.model.User;
 import com.green.mmg.common.dto.ResultResponse;
@@ -8,6 +9,7 @@ import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -32,11 +34,13 @@ import java.util.List;
  * 응답 형식: 모든 endpoint는 공통 래퍼 ResultResponse<T>로 통일.
  */
 @RestController
+@Slf4j
 @RequestMapping("/internal/auth")
 @RequiredArgsConstructor
 public class InternalUserController {
 
     private final UserRepository userRepository;
+    private final EmailService emailService;
 
     /** 단건 조회 — 가게 상세에 사장 이름 등 1명에 대한 fetch */
     @Transactional(readOnly = true)
@@ -163,8 +167,31 @@ public class InternalUserController {
 
             user.setStatus(req.getStatus());
             user.setProcessMemo(req.getReason());
+            sendRejectionEmailIfNeeded(user, req);
+
 
             return new ResultResponse<>("승인상태 변경 완료", null);
+
+    }
+
+    private void sendRejectionEmailIfNeeded(User user, InternalUserApprovalReq req) {
+        if (!"REJECTED".equals(req.getStatus())) {
+            return;
+        }
+
+        if (!"OWNER".equals(user.getRole()) && !"RIDER".equals(user.getRole())) {
+            return;
+        }
+
+        log.info("반려 메일 발송 시도: userNo={}, role={}, email={}, reason={}",
+                user.getUserNo(), user.getRole(), user.getEmail(), req.getReason());
+
+        emailService.sendApprovalRejected(
+                user.getEmail(),
+                user.getName(),
+                user.getRole(),
+                req.getReason()
+        );
     }
 
     /**
