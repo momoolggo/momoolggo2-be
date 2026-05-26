@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
  * Main이 어떤 라이더가 변경했는지 추적 가능.</p>
  */
 public record DeliveryTransitionResult(
-        String orderId,
+        Long orderId,
         DeliveryStatus newStatus,
         Long riderNo,
         LocalDateTime changedAt

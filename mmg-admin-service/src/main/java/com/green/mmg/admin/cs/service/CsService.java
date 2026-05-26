@@ -2,6 +2,7 @@ package com.green.mmg.admin.cs.service;
 
 import com.green.mmg.admin.common.enums.InquiryStatus;
 import com.green.mmg.admin.common.enums.InquiryUserType;
+import com.green.mmg.admin.cs.dto.EscalationPayload;
 import com.green.mmg.admin.cs.dto.InquiryReq;
 import com.green.mmg.admin.cs.dto.InquirySummaryRes;
 import com.green.mmg.admin.cs.entity.ChatbotInquiry;
@@ -18,6 +19,7 @@ import java.util.List;
 public class CsService {
 
     private final ChatbotInquiryRepository chatbotInquiryRepository;
+    private final AdminEscalationSseService escalationSseService;
 
     // 문의 현황 카드
     public InquirySummaryRes getSummary() {
@@ -51,5 +53,27 @@ public class CsService {
         ChatbotInquiry inquiry = chatbotInquiryRepository.findById(inquiryId)
                 .orElseThrow(() -> new ResourceNotFoundException("문의를 찾을 수 없습니다."));
         inquiry.reply(req.getReply());
+    }
+
+    @Transactional
+    public void createInquiry(Long userNo, String content) {
+        ChatbotInquiry inquiry = new ChatbotInquiry(
+                userNo, InquiryUserType.OWNER, content);
+        chatbotInquiryRepository.save(inquiry);
+    }
+
+    /**
+     * P-7 main 챗봇 에스컬레이션 수신 — chatbot_inquiry INSERT (CUSTOMER, PENDING) + SSE 푸시.
+     * case-#40 정정 일관: chatbot_inquiry state enum은 PENDING/PROCESSING/RESOLVED 유지.
+     */
+    @Transactional
+    public void receiveChatbotEscalation(Long userNo, Long sessionId, String lastUserMessage) {
+        String content = (lastUserMessage == null || lastUserMessage.isBlank())
+                ? "[에스컬레이션] 챗봇 세션에서 상담원 연결 요청"
+                : lastUserMessage;
+        ChatbotInquiry inquiry = new ChatbotInquiry(userNo, InquiryUserType.CUSTOMER, content);
+        chatbotInquiryRepository.save(inquiry);
+        escalationSseService.broadcast(new EscalationPayload(
+                inquiry.getInquiryId(), userNo, sessionId, content));
     }
 }

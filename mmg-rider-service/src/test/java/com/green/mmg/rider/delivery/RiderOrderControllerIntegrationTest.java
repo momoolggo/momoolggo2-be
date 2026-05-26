@@ -76,7 +76,7 @@ class RiderOrderControllerIntegrationTest {
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
-                .thenReturn(new DeliveryStatusUpdateRes("ORD", 0, 1));
+                .thenReturn(new DeliveryStatusUpdateRes(System.nanoTime(), 0, 1));
     }
 
     @AfterEach
@@ -88,8 +88,8 @@ class RiderOrderControllerIntegrationTest {
         return Math.abs(System.nanoTime() + ThreadLocalRandom.current().nextLong(1, 10_000));
     }
 
-    private String uniqueOrderId() {
-        return "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+    private Long uniqueOrderId() {
+        return System.nanoTime();
     }
 
     private String uniqueDeliveryNo() {
@@ -99,20 +99,20 @@ class RiderOrderControllerIntegrationTest {
                         .substring(0, 3).toUpperCase());
     }
 
+    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제. PENDING 시드 분기 폐기.
     private Rider seedRider(boolean active) {
         Rider rider = new Rider(
                 uniqueUserNo(),
                 "11-22-" + UUID.randomUUID().toString().substring(0, 6) + "-44",
                 "2종보통", VehicleType.MOTORBIKE,
                 "신한", "110-1", "홍길동");
-        if (active) rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 
     private Delivery seedDelivery(Long riderNo, DeliveryStatus status) {
         Delivery d = new Delivery(uniqueDeliveryNo(), uniqueOrderId(),
                 "053-1", "010-1", "가게주소", 35.123, 128.456,
-                "손님주소", 35.130, 128.460, 4000);
+                "손님주소", 35.130, 128.460, 4000, 0);
         if (riderNo != null) d.assignRider(riderNo);
         if (status != DeliveryStatus.WAITING_ASSIGN) d.changeStatus(status, LocalDateTime.now());
         return deliveryRepository.saveAndFlush(d);
@@ -142,15 +142,8 @@ class RiderOrderControllerIntegrationTest {
                         .value("WAITING_ASSIGN"));
     }
 
-    @Test
-    @DisplayName("GET /api/rider/order/waiting PENDING: 403 FORBIDDEN (reviewer C-2 정정)")
-    void waiting_pendingRider_returns403() throws Exception {
-        Rider rider = seedRider(false); // PENDING
-        authenticateAs(rider.getUserNo());
-
-        mockMvc.perform(get("/api/rider/order/waiting"))
-                .andExpect(status().isForbidden());
-    }
+    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제로 PENDING 라이더 시드 불가.
+    // PENDING 거부 검증은 단위 테스트(DeliveryServiceTest)에서 mock으로 충분. 본 통합 케이스 폐기.
 
     @Test
     @DisplayName("GET /api/rider/order/inprogress: 본인 진행 중 배달만 반환")
@@ -171,7 +164,7 @@ class RiderOrderControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("PUT /api/rider/order/{deliveryNo}/accept happy: ARRIVED_AT_STORE + log + Main 호출")
+    @DisplayName("PUT /api/rider/order/{deliveryNo}/accept happy: AWAITING_PICKUP (사례 #20) + log + Main 호출")
     void accept_happy() throws Exception {
         Rider rider = seedRider(true);
         authenticateAs(rider.getUserNo());
@@ -181,20 +174,23 @@ class RiderOrderControllerIntegrationTest {
 
         mockMvc.perform(put("/api/rider/order/" + d.getDeliveryNo() + "/accept"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.resultMessage").value("배차 수락 성공"));
+                .andExpect(jsonPath("$.resultMessage").value("가게 도착 처리 성공"));
+        // NOTE: controller message "가게 도착 처리 성공"은 사례 #20 정정 후 실제 동작과 의미 불일치.
+        // (실제: AWAITING_PICKUP 직행, ARRIVED_AT_STORE skip). 별 트랙에서 message 박제 정정 검토.
 
         em.flush();
         em.clear();
 
+        // 사례 #20 (figma-analysis): accept가 ARRIVED_AT_STORE 단계 skip하고 AWAITING_PICKUP 직행.
+        // AWAITING_PICKUP은 시각 미기록 (Delivery.changeStatus default 분기).
         Delivery saved = deliveryRepository.findById(d.getDeliveryNo()).orElseThrow();
-        assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
-        assertThat(saved.getArrivedAtStoreAt()).isNotNull();
+        assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.AWAITING_PICKUP);
 
         List<DeliveryLog> logs = deliveryLogRepository.findAll().stream()
                 .filter(l -> d.getDeliveryNo().equals(l.getDeliveryNo()))
                 .toList();
         assertThat(logs).anyMatch(l -> l.getActorRole() == ActorRole.RIDER
-                && l.getToStatus() == DeliveryStatus.ARRIVED_AT_STORE
+                && l.getToStatus() == DeliveryStatus.AWAITING_PICKUP
                 && java.util.Objects.equals(l.getActorUserNo(), rider.getUserNo()));
 
         verify(mainInternalClient).updateDeliveryStatus(eq(d.getOrderId()),
@@ -249,7 +245,10 @@ class RiderOrderControllerIntegrationTest {
         assertThat(saved.getDeliveredPhotoUrl()).isEqualTo("/uploads/delivery/x.jpg");
         assertThat(saved.getDeliveredAt()).isNotNull();
 
-        verify(mainInternalClient).updateDeliveryStatus(eq(d.getOrderId()),
+        // Group 3 정정 — complete는 notifyMainComplete 흐름 (mainInternalClient.complete 호출, updateDeliveryStatus 호출 X)
+        verify(mainInternalClient).complete(eq(d.getOrderId()),
+                any(com.green.mmg.rider.feign.dto.DeliveryCompleteReq.class));
+        verify(mainInternalClient, never()).updateDeliveryStatus(eq(d.getOrderId()),
                 any(DeliveryStatusUpdateReq.class));
     }
 

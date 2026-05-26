@@ -21,9 +21,11 @@ public class AuthSecurityConfig {
                                 "/api/user/login",
                                 "/api/user/join",
                                 "/api/user/check-id",
+                                "/api/user/check-email",
                                 "/api/user/find-id",
                                 "/api/user/reissue",
                                 "/api/user/reset-pw",
+                                "/api/user/reset-pw/code",
                                 "/api/policy/**",
                                 "/actuator/health",
                                 "/internal/**"   // Phase 4-A 임시 — Phase 4-B Gateway가 외부 /internal/** 차단 예정

@@ -57,13 +57,15 @@ import static org.mockito.Mockito.*;
 class DeliveryServiceTest {
 
     private static final String DELIVERY_NO = "00001ABC";
-    private static final String ORDER_ID = "0000001A";
+    private static final Long ORDER_ID = 1L;
     private static final long CALLER_USER_NO = 42L;
     private static final Long CALLER_RIDER_NO = 5L;
 
     @Mock private DeliveryRepository deliveryRepository;
     @Mock private DeliveryLogRepository deliveryLogRepository;
     @Mock private RiderRepository riderRepository;
+    @Mock private com.green.mmg.rider.settlement.SettlementService settlementService;
+    @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private DeliveryService deliveryService;
 
@@ -79,7 +81,7 @@ class DeliveryServiceTest {
         Delivery delivery = spy(new Delivery(
                 DELIVERY_NO, ORDER_ID,
                 null, null, null, null, null, null, null, null,
-                3000));
+                3000, 0));
         if (status != DeliveryStatus.WAITING_ASSIGN) {
             delivery.changeStatus(status, LocalDateTime.now());
         }
@@ -221,9 +223,8 @@ class DeliveryServiceTest {
         @DisplayName("WAITING_ASSIGN → DELIVERED (terminal 직행)")
         void waitingAssign_to_delivered() { assertIllegal(DeliveryStatus.WAITING_ASSIGN, DeliveryStatus.DELIVERED); }
 
-        @Test
-        @DisplayName("ASSIGNED → AWAITING_PICKUP (단계 건너뜀)")
-        void assigned_to_awaitingPickup() { assertIllegal(DeliveryStatus.ASSIGNED, DeliveryStatus.AWAITING_PICKUP); }
+        // ASSIGNED → AWAITING_PICKUP 비합법 케이스 제거 (사례 #20, 2026-05-19):
+        // ARRIVED_AT_STORE 단계 라이더 흐름에서 제외 → ASSIGNED → AWAITING_PICKUP 합법화.
 
         @Test
         @DisplayName("ASSIGNED → PICKED_UP (단계 건너뜀)")
@@ -341,7 +342,7 @@ class DeliveryServiceTest {
 
         private RiderInternalAssignReq sampleReq() {
             return new RiderInternalAssignReq(
-                    "ORD0001", 7L, "맛있는집",
+                    1L, CALLER_RIDER_NO, 7L, "맛있는집",
                     "가게 주소", 35.123, 128.456,
                     "053-111-2222",
                     "손님 주소", 35.130, 128.460,
@@ -363,7 +364,7 @@ class DeliveryServiceTest {
             when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
             when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            RiderInternalAssignRes res = deliveryService.assignDelivery(CALLER_RIDER_NO, sampleReq());
+            RiderInternalAssignRes res = deliveryService.assignDelivery(sampleReq());
 
             assertThat(res.assigned()).isTrue();
             assertThat(res.riderNo()).isEqualTo(CALLER_RIDER_NO);
@@ -375,9 +376,11 @@ class DeliveryServiceTest {
             Delivery saved = deliveryCaptor.getValue();
             assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
             assertThat(saved.getRiderNo()).isEqualTo(CALLER_RIDER_NO);
-            assertThat(saved.getOrderId()).isEqualTo("ORD0001");
+            assertThat(saved.getOrderId()).isEqualTo(1L);
             assertThat(saved.getAssignedAt()).isNotNull();
-            assertThat(saved.getBaseFee()).isEqualTo(4000);
+            // 사례 #21 (2026-05-19): main 4000/1500 무시, base=1500 고정 + extra=ceil(0.86km)*1000=1000
+            assertThat(saved.getBaseFee()).isEqualTo(1500);
+            assertThat(saved.getExtraFee()).isEqualTo(1000);
 
             ArgumentCaptor<DeliveryLog> logCaptor = ArgumentCaptor.forClass(DeliveryLog.class);
             verify(deliveryLogRepository).save(logCaptor.capture());
@@ -393,7 +396,7 @@ class DeliveryServiceTest {
         void riderNotFound_throwsNotFound() {
             when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> deliveryService.assignDelivery(CALLER_RIDER_NO, sampleReq()))
+            assertThatThrownBy(() -> deliveryService.assignDelivery(sampleReq()))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage("라이더를 찾을 수 없습니다.")
                     .extracting(e -> ((BusinessException) e).getStatus())
@@ -410,7 +413,7 @@ class DeliveryServiceTest {
             when(pendingRider.getStatus()).thenReturn(RiderStatus.PENDING);
             when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(pendingRider));
 
-            assertThatThrownBy(() -> deliveryService.assignDelivery(CALLER_RIDER_NO, sampleReq()))
+            assertThatThrownBy(() -> deliveryService.assignDelivery(sampleReq()))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("배차 가능 상태가 아닙니다")
                     .hasMessageContaining("PENDING")
@@ -429,7 +432,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.saveAndFlush(any(Delivery.class)))
                     .thenThrow(new ObjectOptimisticLockingFailureException(Delivery.class, "any"));
 
-            assertThatThrownBy(() -> deliveryService.assignDelivery(CALLER_RIDER_NO, sampleReq()))
+            assertThatThrownBy(() -> deliveryService.assignDelivery(sampleReq()))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("동시 배차 충돌")
                     .extracting(e -> ((BusinessException) e).getStatus())
@@ -445,9 +448,129 @@ class DeliveryServiceTest {
             when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
             when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            RiderInternalAssignRes res = deliveryService.assignDelivery(CALLER_RIDER_NO, sampleReq());
+            RiderInternalAssignRes res = deliveryService.assignDelivery(sampleReq());
 
             assertThat(res.deliveryNo()).hasSize(8).matches("^[0-9]{5}[A-Z]{3}$");
+        }
+
+        @Test
+        @DisplayName("라이더 풀 (riderNo=null) → WAITING_ASSIGN 생성 + rider 조회 미호출 + res.riderNo=null (Q-A9.a (β+δ), code-reviewer W-2 정정)")
+        void pool_riderNoNull_createsWaitingAssign() {
+            when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            // riderNo=null로 sampleReq 보강 (라이더 풀 모델)
+            RiderInternalAssignReq poolReq = new RiderInternalAssignReq(
+                    1L, null, 7L, "맛있는집",
+                    "가게 주소", 35.123, 128.456,
+                    "053-111-2222",
+                    "손님 주소", 35.130, 128.460,
+                    "010-1234-5678",
+                    4000, 1500);
+
+            RiderInternalAssignRes res = deliveryService.assignDelivery(poolReq);
+
+            assertThat(res.assigned()).isTrue();
+            assertThat(res.riderNo()).isNull();  // 풀 모델 — riderNo 미할당
+            assertThat(res.deliveryNo()).isNotNull().matches("^[0-9]{5}[A-Z]{3}$");
+            assertThat(res.assignedAt()).isNotNull();
+
+            // riderRepository 호출 0 — 라이더 검증 skip (case-#34 영역 분리 일관)
+            verify(riderRepository, never()).findById(anyLong());
+
+            ArgumentCaptor<Delivery> deliveryCaptor = ArgumentCaptor.forClass(Delivery.class);
+            verify(deliveryRepository).saveAndFlush(deliveryCaptor.capture());
+            Delivery saved = deliveryCaptor.getValue();
+            assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+            assertThat(saved.getRiderNo()).isNull();
+            assertThat(saved.getOrderId()).isEqualTo(1L);
+            assertThat(saved.getAssignedAt()).isNull();  // ASSIGNED 전환 X → 시각 박제 X
+
+            ArgumentCaptor<DeliveryLog> logCaptor = ArgumentCaptor.forClass(DeliveryLog.class);
+            verify(deliveryLogRepository).save(logCaptor.capture());
+            DeliveryLog log = logCaptor.getValue();
+            assertThat(log.getFromStatus()).isNull();
+            assertThat(log.getToStatus()).isEqualTo(DeliveryStatus.WAITING_ASSIGN);
+            assertThat(log.getActorRole()).isEqualTo(ActorRole.SYSTEM);
+            assertThat(log.getActorUserNo()).isNull();
+
+            // 자잘 에러 트랙(2026-05-23) — 풀 모델 진입 시 OrderAssignEvent(ASSIGNED) publish 검증.
+            ArgumentCaptor<com.green.mmg.rider.delivery.sse.OrderAssignEvent> eventCaptor =
+                    ArgumentCaptor.forClass(com.green.mmg.rider.delivery.sse.OrderAssignEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            assertThat(eventCaptor.getValue().type())
+                    .isEqualTo(com.green.mmg.rider.delivery.sse.OrderAssignEvent.Type.ASSIGNED);
+        }
+
+        @Test
+        @DisplayName("강제 배차 (riderNo 명시) → OrderAssignEvent publish 없음 (broadcast 대상 X)")
+        void strict_riderNoExplicit_noPublish() {
+            Rider rider = activeRider();
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            deliveryService.assignDelivery(sampleReq());
+
+            verify(eventPublisher, never()).publishEvent(any(com.green.mmg.rider.delivery.sse.OrderAssignEvent.class));
+        }
+
+        // ─── 사례 #21 (2026-05-19) computeExtraFee 단위 검증 ──────────────────
+        // base=DELIVERY_BASE_FEE(1500) 고정 + extra=ceil(km)*1000 (Haversine).
+        // main이 보낸 baseFee/extraFee 무시. assignDelivery 통한 간접 검증 (private 메서드).
+
+        private RiderInternalAssignReq reqWithCoord(Double sLat, Double sLng, Double dLat, Double dLng) {
+            return new RiderInternalAssignReq(
+                    1L, CALLER_RIDER_NO, 7L, "맛있는집",
+                    "가게 주소", sLat, sLng, "053-111-2222",
+                    "손님 주소", dLat, dLng, "010-1234-5678",
+                    9999, 9999); // main 입력값은 의도적으로 큰 값 — rider override 검증용
+        }
+
+        private Delivery captureSavedAfterAssign(RiderInternalAssignReq req) {
+            Rider rider = activeRider();
+            when(riderRepository.findById(CALLER_RIDER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+            deliveryService.assignDelivery(req);
+            ArgumentCaptor<Delivery> captor = ArgumentCaptor.forClass(Delivery.class);
+            verify(deliveryRepository).saveAndFlush(captor.capture());
+            return captor.getValue();
+        }
+
+        @Test
+        @DisplayName("extraFee: 1~2km 구간(위도 0.014° ≈ 1556m) → ceil(1.556)=2 → 2000 + base 1500 override")
+        void extraFee_between1and2km_ceiledToTwo() {
+            // 위도 1° = 6371km * π/180 = 111.195km. Δlat=0.014° → ~1556m → ceil(1.556km)=2km → 2000원.
+            // 1km 초과 ceil 경계 검증 (under500m 케이스와 짝, 가짜 테스트 회피).
+            Delivery saved = captureSavedAfterAssign(reqWithCoord(35.000, 128.000, 35.014, 128.000));
+
+            assertThat(saved.getBaseFee()).isEqualTo(1500);   // main 9999 무시, 1500 고정
+            assertThat(saved.getExtraFee()).isEqualTo(2000);  // ceil(1.556) * 1000
+        }
+
+        @Test
+        @DisplayName("extraFee: 좌표 중 하나라도 null → 0 fallback (운영 무음 손실 방지용 W-3 log.warn)")
+        void extraFee_coordNull_returnsZero() {
+            Delivery saved = captureSavedAfterAssign(reqWithCoord(35.000, 128.000, null, 128.009));
+
+            assertThat(saved.getBaseFee()).isEqualTo(1500);
+            assertThat(saved.getExtraFee()).isZero();
+        }
+
+        @Test
+        @DisplayName("extraFee: 가게=손님 동일 좌표 (거리 0) → 0")
+        void extraFee_sameCoord_returnsZero() {
+            Delivery saved = captureSavedAfterAssign(reqWithCoord(35.123, 128.456, 35.123, 128.456));
+
+            assertThat(saved.getBaseFee()).isEqualTo(1500);
+            assertThat(saved.getExtraFee()).isZero();
+        }
+
+        @Test
+        @DisplayName("extraFee: 500m 미만(위도 0.001° ≈ 111m) → ceil(0.111)=1 → 1000 (km 1 미만도 1km로 올림)")
+        void extraFee_under500m_ceiledToOne() {
+            Delivery saved = captureSavedAfterAssign(reqWithCoord(35.000, 128.000, 35.001, 128.000));
+
+            assertThat(saved.getBaseFee()).isEqualTo(1500);
+            assertThat(saved.getExtraFee()).isEqualTo(1000);  // 111m도 ceil → 1km → 1000원
         }
     }
 
@@ -616,6 +739,46 @@ class DeliveryServiceTest {
             assertThat(captured.getSort().getOrderFor("assignedAt").getDirection())
                     .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
         }
+
+        @Test
+        @DisplayName("riderPhone 매핑 (W-1 fix): riderNo 있는 행 → riderRepository.findAllById 호출 + phone 반환")
+        void monitor_assignedDeliveries_mapsRiderPhone() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+            Delivery d1 = deliveryWith(DeliveryStatus.ASSIGNED, 5L);
+            Delivery d2 = deliveryWith(DeliveryStatus.DELIVERING, 6L);
+            when(deliveryRepository.findAll(any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(d1, d2)));
+            Rider r5 = mock(Rider.class);
+            Rider r6 = mock(Rider.class);
+            when(r5.getRiderNo()).thenReturn(5L);
+            when(r5.getPhone()).thenReturn("010-1111-2222");
+            when(r6.getRiderNo()).thenReturn(6L);
+            when(r6.getPhone()).thenReturn("010-3333-4444");
+            ArgumentCaptor<Iterable<Long>> idsCaptor = ArgumentCaptor.forClass(Iterable.class);
+            when(riderRepository.findAllById(idsCaptor.capture())).thenReturn(List.of(r5, r6));
+
+            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0);
+
+            assertThat(idsCaptor.getValue()).containsExactlyInAnyOrder(5L, 6L);
+            assertThat(res.deliveries().get(0).riderPhone()).isEqualTo("010-1111-2222");
+            assertThat(res.deliveries().get(1).riderPhone()).isEqualTo("010-3333-4444");
+        }
+
+        @Test
+        @DisplayName("riderPhone 빈 Set (W-1 fix): 모든 행 riderNo=null → findAllById 미호출")
+        void monitor_allRiderNull_skipsRiderLookup() {
+            when(deliveryRepository.countByStatus(any(DeliveryStatus.class))).thenReturn(0L);
+            Delivery d1 = deliveryWith(DeliveryStatus.WAITING_ASSIGN, null);
+            Delivery d2 = deliveryWith(DeliveryStatus.WAITING_ASSIGN, null);
+            when(deliveryRepository.findAll(any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(d1, d2)));
+
+            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0);
+
+            verify(riderRepository, never()).findAllById(any());
+            assertThat(res.deliveries().get(0).riderPhone()).isNull();
+            assertThat(res.deliveries().get(1).riderPhone()).isNull();
+        }
     }
 
     // ========================================================================
@@ -717,16 +880,16 @@ class DeliveryServiceTest {
         }
 
         @Test
-        @DisplayName("acceptDelivery happy: ASSIGNED → ARRIVED_AT_STORE + RIDER actor log")
+        @DisplayName("acceptDelivery happy: ASSIGNED → AWAITING_PICKUP (사례 #20) + RIDER actor log")
         void accept_happy_transitionsAndLogs() {
             Delivery delivery = deliveryAssignedToCaller();
             stubFindAndOwn(delivery);
 
             DeliveryTransitionResult result = deliveryService.acceptDelivery(DELIVERY_NO, CALLER_USER_NO);
 
-            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
+            assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.AWAITING_PICKUP);
             assertThat(result.orderId()).isEqualTo(ORDER_ID);
-            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.ARRIVED_AT_STORE);
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.AWAITING_PICKUP);
             assertThat(result.riderNo()).isEqualTo(CALLER_RIDER_NO);
             verify(deliveryRepository).saveAndFlush(delivery);
 
@@ -772,7 +935,7 @@ class DeliveryServiceTest {
             Delivery delivery = new Delivery(
                     DELIVERY_NO, ORDER_ID,
                     null, null, null, null, null, null, null, null,
-                    3000);
+                    3000, 0);
             delivery.assignRider(CALLER_RIDER_NO);
             delivery.changeStatus(DeliveryStatus.ASSIGNED, LocalDateTime.now());
 
@@ -843,6 +1006,8 @@ class DeliveryServiceTest {
             assertThat(delivery.getDeliveredMethod()).isEqualTo("DIRECT");
             assertThat(delivery.getDeliveredPhotoUrl()).isEqualTo("/uploads/delivery/x.jpg");
             assertThat(result.newStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+            // SSE 자동화 트랙 (2026-05-21) — DELIVERED 직후 이번 주 settlement 자동 UPSERT 호출 검증
+            verify(settlementService).recalculateThisWeek(CALLER_RIDER_NO);
         }
 
         @Test
@@ -878,7 +1043,7 @@ class DeliveryServiceTest {
             Delivery delivery = new Delivery(
                     DELIVERY_NO, ORDER_ID,
                     null, null, null, null, null, null, null, null,
-                    3000);
+                    3000, 0);
             delivery.assignRider(CALLER_RIDER_NO);
             delivery.changeStatus(DeliveryStatus.PICKED_UP, LocalDateTime.now());
 
@@ -908,7 +1073,7 @@ class DeliveryServiceTest {
             Delivery delivery = new Delivery(
                     DELIVERY_NO, ORDER_ID,
                     null, null, null, null, null, null, null, null,
-                    3000);
+                    3000, 0);
             delivery.assignRider(CALLER_RIDER_NO);
             delivery.changeStatus(DeliveryStatus.DELIVERING, LocalDateTime.now());
 
@@ -990,14 +1155,14 @@ class DeliveryServiceTest {
             com.green.mmg.rider.delivery.model.Delivery d1 = mock(com.green.mmg.rider.delivery.model.Delivery.class);
             com.green.mmg.rider.delivery.model.Delivery d2 = mock(com.green.mmg.rider.delivery.model.Delivery.class);
             when(d1.getDeliveryNo()).thenReturn("D1");
-            when(d1.getOrderId()).thenReturn("O1");
+            when(d1.getOrderId()).thenReturn(101L);
             when(d1.getPickupAddress()).thenReturn("가게1");
             when(d1.getDeliveryAddress()).thenReturn("손님1");
             when(d1.getBaseFee()).thenReturn(3000);
             when(d1.getExtraFee()).thenReturn(500);
             when(d1.getDeliveredAt()).thenReturn(LocalDateTime.now().minusHours(1));
             when(d2.getDeliveryNo()).thenReturn("D2");
-            when(d2.getOrderId()).thenReturn("O2");
+            when(d2.getOrderId()).thenReturn(102L);
             when(d2.getPickupAddress()).thenReturn("가게2");
             when(d2.getDeliveryAddress()).thenReturn("손님2");
             when(d2.getBaseFee()).thenReturn(4000);
@@ -1052,6 +1217,57 @@ class DeliveryServiceTest {
                     .isEqualTo(HttpStatus.NOT_FOUND);
             verify(deliveryRepository, never()).findByRiderNoAndStatusAndDeliveredAtBetweenOrderByDeliveredAtDesc(
                     any(), any(), any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("claimDelivery (자잘 에러 트랙 2026-05-23, broadcast 검증)")
+    class ClaimDelivery {
+
+        private Rider activeRider() {
+            Rider rider = mock(Rider.class);
+            lenient().when(rider.getRiderNo()).thenReturn(CALLER_RIDER_NO);
+            lenient().when(rider.getStatus()).thenReturn(RiderStatus.ACTIVE);
+            return rider;
+        }
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("WAITING_ASSIGN + riderNo=null → ASSIGNED + OrderAssignEvent(CLAIMED) publish")
+        void claim_happy_publishesClaimed() {
+            Delivery delivery = deliveryWith(DeliveryStatus.WAITING_ASSIGN, null);
+            Rider rider = activeRider();
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
+            when(deliveryRepository.saveAndFlush(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            DeliveryTransitionResult result = deliveryService.claimDelivery(DELIVERY_NO, CALLER_USER_NO);
+
+            assertThat(result.newStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+            assertThat(result.riderNo()).isEqualTo(CALLER_RIDER_NO);
+
+            ArgumentCaptor<com.green.mmg.rider.delivery.sse.OrderAssignEvent> eventCaptor =
+                    ArgumentCaptor.forClass(com.green.mmg.rider.delivery.sse.OrderAssignEvent.class);
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            com.green.mmg.rider.delivery.sse.OrderAssignEvent event = eventCaptor.getValue();
+            assertThat(event.type())
+                    .isEqualTo(com.green.mmg.rider.delivery.sse.OrderAssignEvent.Type.CLAIMED);
+            assertThat(event.payload()).isEqualTo(DELIVERY_NO);
+        }
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("이미 다른 라이더가 잡은 배차 (rider_no 비어있지 않음) → CONFLICT + publish 없음")
+        void claim_alreadyTaken_noPublish() {
+            Delivery delivery = deliveryWith(DeliveryStatus.WAITING_ASSIGN, 99L);  // 다른 라이더
+            Rider rider = activeRider();
+            when(deliveryRepository.findById(DELIVERY_NO)).thenReturn(Optional.of(delivery));
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
+
+            assertThatThrownBy(() -> deliveryService.claimDelivery(DELIVERY_NO, CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.CONFLICT);
+
+            verify(eventPublisher, never()).publishEvent(any(com.green.mmg.rider.delivery.sse.OrderAssignEvent.class));
         }
     }
 }

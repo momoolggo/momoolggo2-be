@@ -1,6 +1,7 @@
 package com.green.mmg.main.store;
 
 
+import com.green.mmg.main.internal.dto.InternalCategoryOrderStatsRes;
 import com.green.mmg.main.internal.dto.InternalOwnerApprovalDetailRes;
 import com.green.mmg.main.internal.dto.InternalStoreListRes;
 import com.green.mmg.main.store.model.*;
@@ -38,9 +39,27 @@ public interface StoreMapper {
 
     //관리자 가게관리 목록
     List<InternalStoreListRes> findInternalStoreList(@Param("startIdx") int startIdx,
-                                                     @Param("size") int  size);
+                                                     @Param("size") int size,
+                                                     @Param("storeName") String storeName,
+                                                     @Param("businessNo") String businessNo,
+                                                     @Param("date") String date,
+                                                     @Param("ownerIds") List<Long> ownerIds,
+                                                     @Param("category") String category);
+
+    long countInternalStoreList(@Param("storeName") String storeName,
+                                @Param("businessNo") String businessNo,
+                                @Param("date") String date,
+                                @Param("ownerIds") List<Long> ownerIds,
+                                @Param("category") String category);
 
     //관리자 회원관리 가게 주소
     String findStoreLocationByOwnerNo(@Param("ownerNo") long ownerNo);
+
+    //기간별 가게 수
+    long countStoresByCreatedAtBetween(@Param("start") LocalDateTime start,
+                                      @Param("end") LocalDateTime end);
+
+    //카테고리별 주문 수 통계
+    List<InternalCategoryOrderStatsRes> countCategoryOrders();
 
 }

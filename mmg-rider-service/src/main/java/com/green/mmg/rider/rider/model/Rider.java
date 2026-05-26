@@ -14,8 +14,9 @@ import lombok.NoArgsConstructor;
  *
  * <p>BaseEntity 상속: created_at / updated_at 컬럼 자동 매핑 (Auditing).</p>
  *
- * <p>setter 미공개 — 상태 전환은 명시 메서드(approve/changeStatus 등)로만 변경 (ADR-004 화이트리스트 R3에서 도입).
- * R1 시점은 D11 auto-approve로 PENDING → ACTIVE 1회 전환만 사용.</p>
+ * <p>setter 미공개 — 상태 전환은 명시 메서드(toggleEating/resumeActive 등)로만 변경 (ADR-004 화이트리스트 R3에서 도입).
+ * SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 흐름 영구 폐기. 가입 시 status=ACTIVE 직접 박제.
+ * RiderStatus.PENDING/SUSPENDED enum 값은 DB 정합 + DeliveryService/WorkSessionService/LocationService의 거부 검증 의도로 보존.</p>
  */
 @Entity
 @Table(name = "rider")
@@ -54,11 +55,25 @@ public class Rider extends BaseEntity {
     @Column(name = "account_holder", length = 50)
     private String accountHolder;
 
+    @Column(name = "phone", length = 20)
+    private String phone;
+
     /**
-     * 생성자 — 가입 시점 PENDING 고정 (D11 auto-approve로 ACTIVE 전환은 Service에서).
+     * 7 파라미터 생성자 — phone 미입력(NULL) 허용. 기존 테스트 호환 박제.
+     * 신규 가입 흐름은 8 파라미터 생성자 사용 (joinProfile 박제 일관).
      */
     public Rider(Long userNo, String licenseNo, String licenseType, VehicleType vehicleType,
                  String accountBank, String accountNo, String accountHolder) {
+        this(userNo, licenseNo, licenseType, vehicleType,
+                accountBank, accountNo, accountHolder, null);
+    }
+
+    /**
+     * 정산 시연 UX 트랙 #9 (2026-05-21, 옵션 A) — phone 스냅샷 박제용 8 파라미터.
+     * SSE 자동화 트랙(2026-05-21) — 가입 시점 status=ACTIVE 직접 박제 (라이더 신원 승인 흐름 영구 폐기).
+     */
+    public Rider(Long userNo, String licenseNo, String licenseType, VehicleType vehicleType,
+                 String accountBank, String accountNo, String accountHolder, String phone) {
         this.userNo = userNo;
         this.licenseNo = licenseNo;
         this.licenseType = licenseType;
@@ -66,14 +81,7 @@ public class Rider extends BaseEntity {
         this.accountBank = accountBank;
         this.accountNo = accountNo;
         this.accountHolder = accountHolder;
-        this.status = RiderStatus.PENDING;
-    }
-
-    /**
-     * D11 auto-approve 임시 처리 — admin-service approve endpoint 도입 후 제거 대상.
-     * 관련 ADR: docs/adr/rider/ADR-001-service-boundary.md "임시 운영" 섹션.
-     */
-    public void approve() {
+        this.phone = phone;
         this.status = RiderStatus.ACTIVE;
     }
 

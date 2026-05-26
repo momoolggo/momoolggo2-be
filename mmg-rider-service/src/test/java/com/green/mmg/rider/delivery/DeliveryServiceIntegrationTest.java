@@ -68,7 +68,6 @@ class DeliveryServiceIntegrationTest {
                 "신한은행",
                 "110-123-456789",
                 "홍길동");
-        rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 
@@ -107,13 +106,13 @@ class DeliveryServiceIntegrationTest {
 
     private Delivery seedDelivery(DeliveryStatus initialStatus, Long riderNo) {
         String deliveryNo = "IT" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-        String orderId = "OR" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        Long orderId = System.nanoTime();
         Delivery delivery = new Delivery(
                 deliveryNo, orderId,
                 "010-1111-1111", "010-2222-2222",
                 "가게 주소", 35.1234567890123, 128.4567890123456,
                 "손님 주소", 35.1300000000001, 128.4600000000001,
-                3000);
+                3000, 0);
         if (initialStatus != DeliveryStatus.WAITING_ASSIGN) {
             delivery.changeStatus(initialStatus, LocalDateTime.now());
         }

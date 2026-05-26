@@ -1,7 +1,9 @@
 package com.green.mmg.rider.rider;
 
+import com.green.mmg.common.dto.ResultResponse;
+import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
-import com.green.mmg.rider.config.RiderProperties;
+import com.green.mmg.rider.feign.AuthInternalClient;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderProfileReq;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
@@ -27,8 +29,8 @@ import static org.mockito.Mockito.*;
 /**
  * RiderService 단위 테스트 — 가짜 테스트 0건 원칙 (NAJACKS 재발 방지, CLAUDE.md §6.5).
  *
- * <p>커버리지: joinProfile (auto-approve true/false, 중복, vehicle 화이트리스트, blank 검증) +
- * findProfile (happy + NOT_FOUND).</p>
+ * <p>SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 흐름 영구 폐기.
+ * 가입 즉시 ACTIVE 박제 (Rider 생성자), autoApprove toggle / approveRider / suspendRider 테스트 삭제.</p>
  */
 @ExtendWith(MockitoExtension.class)
 class RiderServiceTest {
@@ -36,7 +38,7 @@ class RiderServiceTest {
     private static final long CALLER_USER_NO = 42L;
 
     @Mock private RiderRepository riderRepository;
-    @Mock private RiderProperties riderProperties;
+    @Mock private AuthInternalClient authInternalClient;
 
     @InjectMocks private RiderService riderService;
 
@@ -47,7 +49,8 @@ class RiderServiceTest {
                 "MOTORBIKE",
                 "신한은행",
                 "110-123-456789",
-                "홍길동"
+                "홍길동",
+                "010-1234-5678"
         );
     }
 
@@ -56,48 +59,23 @@ class RiderServiceTest {
     class JoinProfile {
 
         @Test
-        @DisplayName("auto-approve true: 신규 Rider INSERT 후 ACTIVE 전환 + save 2회 호출 (D11 임시 블록)")
-        void autoApproveTrue_savesAsActive() {
+        @DisplayName("happy: 신규 Rider INSERT — Rider 생성자에서 status=ACTIVE 직접 박제 (SSE 자동화 트랙)")
+        void happy_savesAsActive() {
             when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
-            when(riderProperties.autoApprove()).thenReturn(true);
-
-            // save가 호출되면 들어온 Rider를 그대로 반환 — riderNo는 미설정 (mock entity)
-            // 그러나 JPA 흐름 상 첫 save는 PENDING 상태, approve() 호출 후 두번째 save는 ACTIVE
             ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
             when(riderRepository.save(riderCaptor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
 
             RiderProfileRes res = riderService.joinProfile(CALLER_USER_NO, validReq());
 
-            // save 호출은 1회 (rider = repo.save(rider) — approve()는 dirty checking)
-            // 다만 본 코드는 명시적으로 두 번째 save를 호출하지 않음 (approve로 상태만 변경)
             verify(riderRepository, times(1)).save(any(Rider.class));
 
             Rider captured = riderCaptor.getValue();
             assertThat(captured.getUserNo()).isEqualTo(CALLER_USER_NO);
             assertThat(captured.getLicenseNo()).isEqualTo("11-22-333333-44");
             assertThat(captured.getVehicleType()).isEqualTo(VehicleType.MOTORBIKE);
-
-            // approve() 적용 후 status ACTIVE
             assertThat(captured.getStatus()).isEqualTo(RiderStatus.ACTIVE);
-
-            // 응답 dto status도 ACTIVE
             assertThat(res.status()).isEqualTo("ACTIVE");
             assertThat(res.userNo()).isEqualTo(CALLER_USER_NO);
-        }
-
-        @Test
-        @DisplayName("auto-approve false: PENDING 유지 — D11 임시 블록 미적용 (admin approve 흐름 정상 운영)")
-        void autoApproveFalse_savesAsPending() {
-            when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
-            when(riderProperties.autoApprove()).thenReturn(false);
-
-            ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
-            when(riderRepository.save(riderCaptor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
-
-            RiderProfileRes res = riderService.joinProfile(CALLER_USER_NO, validReq());
-
-            assertThat(riderCaptor.getValue().getStatus()).isEqualTo(RiderStatus.PENDING);
-            assertThat(res.status()).isEqualTo("PENDING");
         }
 
         @Test
@@ -121,7 +99,8 @@ class RiderServiceTest {
 
             RiderProfileReq req = new RiderProfileReq(
                     "11-22-333333-44", "1종보통", "HELICOPTER",
-                    "신한은행", "110-123-456789", "홍길동"
+                    "신한은행", "110-123-456789", "홍길동",
+                    "010-1234-5678"
             );
 
             assertThatThrownBy(() -> riderService.joinProfile(CALLER_USER_NO, req))
@@ -137,7 +116,6 @@ class RiderServiceTest {
         @DisplayName("vehicleType 4종(WALK/BICYCLE/MOTORBIKE/CAR) 모두 valueOf 변환 성공 + Rider 필드 enum 박제 (R3-a 마이그레이션)")
         void allVehicleTypes_valueOfSuccess() {
             when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
-            when(riderProperties.autoApprove()).thenReturn(false);
 
             ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
             when(riderRepository.save(riderCaptor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -145,7 +123,8 @@ class RiderServiceTest {
             for (VehicleType type : VehicleType.values()) {
                 RiderProfileReq req = new RiderProfileReq(
                         "11-22-333333-44", "1종보통", type.name(),
-                        "신한은행", "110-123-456789", "홍길동");
+                        "신한은행", "110-123-456789", "홍길동",
+                        "010-1234-5678");
                 riderService.joinProfile(CALLER_USER_NO, req);
             }
 
@@ -156,13 +135,51 @@ class RiderServiceTest {
         }
 
         @Test
+        @DisplayName("phone 미입력 시 auth tel 자동 조회 — rider.phone에 auth tel 저장")
+        void noPhone_fetchesFromAuth() {
+            when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
+            ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
+            when(riderRepository.save(riderCaptor.capture())).thenAnswer(i -> i.getArgument(0));
+
+            UserBriefDto brief = new UserBriefDto(CALLER_USER_NO, "홍길동", "010-9999-8888", "");
+            when(authInternalClient.getUser(CALLER_USER_NO))
+                    .thenReturn(new ResultResponse<>("유저 조회 완료", brief));
+
+            RiderProfileReq req = new RiderProfileReq(
+                    "11-22-333333-44", "2종보통", "MOTORBIKE",
+                    "신한은행", "110-123-456789", "홍길동", null);
+            riderService.joinProfile(CALLER_USER_NO, req);
+
+            assertThat(riderCaptor.getValue().getPhone()).isEqualTo("010-9999-8888");
+            verify(authInternalClient, times(1)).getUser(CALLER_USER_NO);
+        }
+
+        @Test
+        @DisplayName("phone 미입력 + auth 호출 실패 시 — phone null로 가입 정상 완료 (auth 장애 격리)")
+        void noPhone_authFails_registersWithNullPhone() {
+            when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
+            ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
+            when(riderRepository.save(riderCaptor.capture())).thenAnswer(i -> i.getArgument(0));
+            when(authInternalClient.getUser(CALLER_USER_NO)).thenThrow(new RuntimeException("auth down"));
+
+            RiderProfileReq req = new RiderProfileReq(
+                    "11-22-333333-44", "2종보통", "MOTORBIKE",
+                    "신한은행", "110-123-456789", "홍길동", null);
+            riderService.joinProfile(CALLER_USER_NO, req);
+
+            assertThat(riderCaptor.getValue().getPhone()).isNull();
+            verify(riderRepository, times(1)).save(any(Rider.class));
+        }
+
+        @Test
         @DisplayName("필수 필드 blank (licenseNo 빈 문자열): BusinessException BAD_REQUEST + save 미호출")
         void blankLicenseNo_throwsBadRequest() {
             when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
 
             RiderProfileReq req = new RiderProfileReq(
                     "  ", "1종보통", "CAR",
-                    "신한은행", "110-123-456789", "홍길동"
+                    "신한은행", "110-123-456789", "홍길동",
+                    "010-1234-5678"
             );
 
             assertThatThrownBy(() -> riderService.joinProfile(CALLER_USER_NO, req))
@@ -175,18 +192,15 @@ class RiderServiceTest {
         }
     }
 
-    // R5 진입(2026-05-11)으로 GetInternalLocation Nested 제거 — LocationServiceTest로 이전.
-
     @Nested
     @DisplayName("FindProfile")
     class FindProfile {
 
         @Test
-        @DisplayName("happy: 본인 rider 조회 → RiderProfileRes 반환")
+        @DisplayName("happy: 본인 rider 조회 → RiderProfileRes 반환 (가입 즉시 ACTIVE)")
         void happy_returnsDto() {
             Rider rider = new Rider(CALLER_USER_NO, "11-22-333333-44", "2종보통", VehicleType.MOTORBIKE,
                     "신한은행", "110-123-456789", "홍길동");
-            rider.approve();  // ACTIVE
 
             when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
 

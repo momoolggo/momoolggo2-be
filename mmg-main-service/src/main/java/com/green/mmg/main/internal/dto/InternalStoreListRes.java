@@ -16,4 +16,5 @@ public class InternalStoreListRes {
     private String storeTel;
     private LocalDateTime createdAt;
     private Integer state;
+    private String categoryName;
 }

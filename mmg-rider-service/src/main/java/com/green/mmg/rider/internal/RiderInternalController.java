@@ -14,8 +14,10 @@ import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
 import com.green.mmg.rider.location.LocationService;
 import com.green.mmg.rider.notice.NoticeService;
 import com.green.mmg.rider.notice.model.Notice;
+import com.green.mmg.rider.rider.RiderService;
+import com.green.mmg.rider.rider.model.RiderProfileRes;
+import com.green.mmg.rider.rider.model.RiderStatus;
 import com.green.mmg.rider.settlement.SettlementService;
-import com.green.mmg.rider.settlement.dto.CalculateReq;
 import com.green.mmg.rider.settlement.dto.ConfirmReq;
 import com.green.mmg.rider.settlement.dto.SettlementRowRes;
 import lombok.RequiredArgsConstructor;
@@ -43,22 +45,28 @@ public class RiderInternalController {
     private final NoticeService noticeService;
     private final MainInternalClient mainInternalClient;
     private final SettlementService settlementService;
+    private final RiderService riderService;  // Group 8.5 §3.1/§3.2 신설
 
-    @PostMapping("/{riderNo}/assign")
-    public RiderInternalAssignRes assign(
-            @PathVariable Long riderNo,
-            @RequestBody RiderInternalAssignReq req) {
-        RiderInternalAssignRes res = deliveryService.assignDelivery(riderNo, req);
+    /**
+     * 배차 요청 — interfaces.md §1.1 (case-#33-후속 정정, Q-A9.a (β+δ)).
+     * req.riderNo null/0 = 라이더 풀 (WAITING_ASSIGN), 명시 = 강제 배차 (ASSIGNED).
+     * Main 동기화는 ASSIGNED 시점만 (라이더 풀은 main이 호출자라 자동 인지, 라이더 수락 시점에 R6 흐름이 동기화).
+     */
+    @PostMapping("/assign")
+    public RiderInternalAssignRes assign(@RequestBody RiderInternalAssignReq req) {
+        RiderInternalAssignRes res = deliveryService.assignDelivery(req);
 
-        try {
-            mainInternalClient.updateDeliveryStatus(req.orderId(),
-                    new DeliveryStatusUpdateReq(
-                            DeliveryStatus.ASSIGNED.name(),
-                            riderNo,
-                            res.assignedAt()));
-        } catch (Exception e) {
-            log.warn("Main 동기화 실패 (배차는 성공): orderId={}, deliveryNo={}, ex={}",
-                    req.orderId(), res.deliveryNo(), e.getMessage());
+        if (res.riderNo() != null) {
+            try {
+                mainInternalClient.updateDeliveryStatus(req.orderId(),
+                        new DeliveryStatusUpdateReq(
+                                DeliveryStatus.ASSIGNED.name(),
+                                res.riderNo(),
+                                res.assignedAt()));
+            } catch (Exception e) {
+                log.warn("Main 동기화 실패 (배차는 성공): orderId={}, deliveryNo={}, ex={}",
+                        req.orderId(), res.deliveryNo(), e.getMessage());
+            }
         }
 
         return res;
@@ -69,17 +77,27 @@ public class RiderInternalController {
         return locationService.getInternalLocation(riderNo);
     }
 
+    /**
+     * Admin 배달 관제 — TTL 살아있는 모든 라이더 위치 다건 조회 (Group 10, 2026-05-17).
+     * 결정 (가) Redis TTL 기준. 빈 결과는 빈 List 반환.
+     */
+    @GetMapping("/locations/active")
+    public List<RiderInternalLocationRes> activeLocations() {
+        return locationService.getActiveLocations();
+    }
+
     @GetMapping("/{riderNo}/status")
     public RiderInternalStatusRes status(@PathVariable Long riderNo) {
         return deliveryService.getRiderInternalStatus(riderNo);
     }
 
-    /** Admin 모니터 — summary 4그룹 카운트 + status 필터 + page 목록. */
+    /** Admin 모니터 — summary 4그룹 카운트 + status 필터 + keyword(storeName) + page 목록. */
     @GetMapping("/monitor")
     public RiderInternalMonitorRes monitor(
             @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "0") int page) {
-        return deliveryService.getMonitor(status, page);
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String keyword) {
+        return deliveryService.getMonitor(status, page, keyword);
     }
 
     /** Admin 공지 작성 — 즉시(NOW) 또는 예약(RESERVED) 발송. */
@@ -112,12 +130,8 @@ public class RiderInternalController {
     }
 
     // ─── R7 정산 (admin Feign 호출용) ──────────────────────────
-
-    /** Admin 주간 정산 집계 트리거 (D10-b). 멱등 처리. */
-    @PostMapping("/settlement/calculate")
-    public List<SettlementRowRes> calculateSettlement(@RequestBody CalculateReq req) {
-        return settlementService.calculate(req.periodStart(), req.periodEnd());
-    }
+    // SSE 자동화 트랙(2026-05-21) — admin 수동 calculate 트리거 폐기.
+    // DeliveryService.completeDelivery에서 SettlementService.recalculateThisWeek 자동 호출.
 
     /** Admin PENDING → CONFIRMED. */
     @PostMapping("/settlement/{settlementNo}/confirm")
@@ -131,5 +145,40 @@ public class RiderInternalController {
     @GetMapping("/settlement/pending")
     public List<SettlementRowRes> pendingSettlements() {
         return settlementService.findPending();
+    }
+
+    /** Admin 모니터 — 전체 정산 목록 (PENDING + CONFIRMED). */
+    @GetMapping("/settlement/all")
+    public List<SettlementRowRes> allSettlements() {
+        return settlementService.findAll();
+    }
+
+    // ─── §3.1/§3.2 라이더 관리 (Group 8.5 신설, Q-A1 (라+)) ──────
+
+    /**
+     * 라이더 승인 — interfaces.md §3.1. PENDING → ACTIVE 전이 (Q-A20 (가) entity 검증).
+     * {@code req.approvedByAdminNo}는 audit log 별 영역 (Q-A18 (b) Phase 6+ outbox 위임) — 본 단계 미사용.
+     * Phase 6+ audit log 도입 시 req 인자 service 메서드로 전달 연결.
+     */
+    // SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 endpoint 영구 폐기.
+    // 가입 즉시 ACTIVE 박제 (Rider 생성자) + 회원 정지는 user 도메인으로 단일화.
+
+    /**
+     * 라이더 목록 조회 — interfaces.md §3.5 (Q-A1 (라++) Group 8 신설 2026-05-17).
+     * {@code status} null이면 전체, 명시되면 4값 enum 필터. 학원 발표 MVP List 반환 (case-#36 자가 정정).
+     */
+    @GetMapping("/list")
+    public List<RiderProfileRes> list(@RequestParam(required = false) RiderStatus status) {
+        return riderService.listRiders(status);
+    }
+
+    /**
+     * user_no 매칭 rider 행 삭제 (admin cascade 보완, ADR-001 (D) 박제 일관, 2026-05-19 신설).
+     * MSA 박제: rider.rider는 별 schema라 DB 자동 cascade X. admin이 본 endpoint 호출 후 auth 삭제.
+     * 행 없으면 0 반환 (일반 회원이라 skip). 다른 endpoint 패턴 일관 — 직접 반환 (ResultResponse X).
+     */
+    @DeleteMapping("/by-user/{userNo}")
+    public Long deleteByUserNo(@PathVariable Long userNo) {
+        return riderService.deleteByUserNoIfExists(userNo);
     }
 }

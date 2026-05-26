@@ -8,7 +8,6 @@ import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.VehicleType;
 import com.green.mmg.rider.settlement.dto.AccountReq;
 import com.green.mmg.rider.settlement.dto.AccountRes;
-import com.green.mmg.rider.settlement.dto.SettlementRowRes;
 import com.green.mmg.rider.settlement.model.Settlement;
 import com.green.mmg.rider.settlement.model.SettlementStatus;
 import jakarta.persistence.EntityManager;
@@ -19,9 +18,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -33,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>R3-c / R9 패턴 일관 ({@code @SpringBootTest + @Transactional + @Rollback + fixture INSERT +
  * native query 박제}).</p>
  *
- * <p>2건: calculate 산출 공식 end-to-end + 계좌 변경 영속.</p>
+ * <p>2건: recalculateThisWeek 산출 공식 end-to-end (SSE 자동화 트랙, 2026-05-21) + 계좌 변경 영속.</p>
  */
 @SpringBootTest
 @Transactional
@@ -57,19 +56,18 @@ class SettlementIntegrationTest {
                 "12-34-" + UUID.randomUUID().toString().substring(0, 6) + "-12",
                 "2종보통", VehicleType.MOTORBIKE,
                 "국민", "110-987-654321", "홍길동");
-        rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 
     private Delivery seedDeliveredOf(Long riderNo, int baseFee, LocalDateTime deliveredAt) {
         String deliveryNo = "ST" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-        String orderId = "OR" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        Long orderId = System.nanoTime();
         Delivery delivery = new Delivery(
                 deliveryNo, orderId,
                 "010-1111-1111", "010-2222-2222",
                 "가게", 37.5665, 126.9780,        // 서울
                 "손님", 37.5700, 126.9800,        // 약 400m
-                baseFee);
+                baseFee, 0);
         delivery.changeStatus(DeliveryStatus.DELIVERED, deliveredAt);
         Delivery saved = deliveryRepository.saveAndFlush(delivery);
         // rider_no + delivered_at 박제 (R3-c 패턴)
@@ -84,42 +82,42 @@ class SettlementIntegrationTest {
     }
 
     @Test
-    @DisplayName("calculate end-to-end: 50000원 × 2건 → payout 82030원 + DELIVERED 박제 행 합산")
-    void calculate_endToEnd_realDb() {
+    @DisplayName("recalculateThisWeek end-to-end: 50000원 × 2건 → payout 82030원 + PENDING 재집계 검증")
+    void recalculateThisWeek_endToEnd_realDb() {
         Rider rider = seedRider();
-        LocalDate periodStart = LocalDate.of(2026, 5, 4);
-        LocalDate periodEnd = LocalDate.of(2026, 5, 10);
-        LocalDateTime withinPeriod = LocalDateTime.of(2026, 5, 7, 12, 0);
+        LocalDate periodStart = LocalDate.now().with(DayOfWeek.MONDAY);
+        LocalDate periodEnd = periodStart.plusDays(6);
+        LocalDateTime withinPeriod = periodStart.plusDays(3).atTime(12, 0);
         seedDeliveredOf(rider.getRiderNo(), 50000, withinPeriod);
         seedDeliveredOf(rider.getRiderNo(), 50000, withinPeriod);
         em.flush();
         em.clear();
 
-        List<SettlementRowRes> result = settlementService.calculate(periodStart, periodEnd);
+        Settlement saved = settlementService.recalculateThisWeek(rider.getRiderNo());
 
-        SettlementRowRes mine = result.stream()
-                .filter(r -> {
-                    Settlement s = settlementRepository.findById(r.settlementNo()).orElseThrow();
-                    return s.getRiderNo().equals(rider.getRiderNo());
-                })
-                .findFirst().orElseThrow();
-
-        assertThat(mine.deliveryCount()).isEqualTo(2);
-        assertThat(mine.totalBaseFee()).isEqualTo(100000);
-        assertThat(mine.commission()).isEqualTo(10000);
-        assertThat(mine.tax()).isEqualTo(2970);
-        assertThat(mine.insurance()).isEqualTo(5000);
-        assertThat(mine.payout()).isEqualTo(82030);
-        assertThat(mine.status()).isEqualTo(SettlementStatus.PENDING);
+        assertThat(saved.getRiderNo()).isEqualTo(rider.getRiderNo());
+        assertThat(saved.getPeriodStart()).isEqualTo(periodStart);
+        assertThat(saved.getPeriodEnd()).isEqualTo(periodEnd);
+        assertThat(saved.getDeliveryCount()).isEqualTo(2);
+        assertThat(saved.getTotalBaseFee()).isEqualTo(100000);
+        assertThat(saved.getCommission()).isEqualTo(10000);
+        assertThat(saved.getTax()).isEqualTo(2970);
+        assertThat(saved.getInsurance()).isEqualTo(5000);
+        assertThat(saved.getPayout()).isEqualTo(82030);
+        assertThat(saved.getStatus()).isEqualTo(SettlementStatus.PENDING);
         // 거리 = 서울 좌표 약 400m × 2건 (Haversine)
-        assertThat(mine.totalDistanceM()).isBetween(700, 900);
+        assertThat(saved.getTotalDistanceM()).isBetween(700, 900);
 
-        // 멱등 재호출: 동일 주 다시 calculate → 동일 settlementNo 반환
-        List<SettlementRowRes> repeat = settlementService.calculate(periodStart, periodEnd);
-        SettlementRowRes mineRepeat = repeat.stream()
-                .filter(r -> r.settlementNo().equals(mine.settlementNo()))
-                .findFirst().orElseThrow();
-        assertThat(mineRepeat.payout()).isEqualTo(82030);  // 새 INSERT X
+        // PENDING 재집계: 배달 1건 추가 → 재호출 시 동일 settlementNo (UPDATE) + deliveryCount 반영
+        seedDeliveredOf(rider.getRiderNo(), 30000, withinPeriod);
+        em.flush();
+        em.clear();
+        Settlement repeat = settlementService.recalculateThisWeek(rider.getRiderNo());
+        assertThat(repeat.getSettlementNo()).isEqualTo(saved.getSettlementNo());
+        assertThat(repeat.getDeliveryCount()).isEqualTo(3);  // PENDING UPSERT (recalculate)
+        // gross=50000+50000+30000=130000 / commission=13000 / tax=(130000-13000)*0.033=3861 / payout=130000-13000-3861-5000=108139
+        assertThat(repeat.getTotalBaseFee()).isEqualTo(130000);
+        assertThat(repeat.getPayout()).isEqualTo(108139);
     }
 
     @Test

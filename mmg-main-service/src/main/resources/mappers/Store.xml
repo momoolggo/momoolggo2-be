@@ -29,9 +29,17 @@
             s.holiday, s.state, s.location, s.detail_location, s.created_at, s.notice,
             s.business_number AS businessNumber, s.bank_name AS bankName,
             s.account_number AS accountNumber, s.account_holder AS accountHolder,
-            s.store_tel, s.rating_avg, s.rating_count, s.order_count
+            s.store_tel, s.rating_avg, s.rating_count, s.order_count,
+            GROUP_CONCAT(DISTINCT c.category_name ORDER BY c.category_name SEPARATOR ', ') AS category
         FROM store s
+        LEFT JOIN store_category sc ON sc.store_id = s.store_id
+        LEFT JOIN category c ON c.category_id = sc.category_id
         WHERE s.store_id = #{id}
+        GROUP BY
+            s.store_id, s.store_name, s.owner_id, s.business_hours, s.min_price, s.store_pic,
+            s.holiday, s.state, s.location, s.detail_location, s.created_at, s.notice,
+            s.business_number, s.bank_name, s.account_number, s.account_holder,
+            s.store_tel, s.rating_avg, s.rating_count, s.order_count
     </select>
 
     <select id="findOwnerApprovalDetail"
@@ -188,13 +196,18 @@
             r.contents,
             r.photo,
             o.user_no    AS userNo,
-            DATE_FORMAT(r.write_at, '%Y.%m.%d') AS date,
+            DATE_FORMAT(r.written_at, '%Y.%m.%d') AS date,
+            rr.reply_id AS replyId,
+            rr.content AS replyContent,
+            rr.written_at AS replyWrittenAt,
         (SELECT GROUP_CONCAT(od.menu_name SEPARATOR ', ')
          FROM order_detail od
          WHERE od.order_id = r.order_id) AS menuName
         FROM review r
             JOIN orders o ON o.order_id = r.order_id
+            LEFT JOIN review_reply rr ON rr.review_id = r.review_id
         WHERE o.store_id = #{storeId}
+        AND r.blinded = false
         ORDER BY r.written_at DESC
         <!-- Phase 4-A: user JOIN 제거. userName은 StoreService에서 AuthFeignClient.getUsers() batch로 합성 -->
     </select>
@@ -202,17 +215,49 @@
     <!-- 가게 목록 -->
     <select id="findInternalStoreList" resultType="com.green.mmg.main.internal.dto.InternalStoreListRes">
         SELECT
-            s.store_id AS storeId,
-            s.store_name AS storeName,
-            s.owner_id AS ownerId,
-            s.location AS location,
-            s.store_tel AS storeTel,
-            s.created_at AS createdAt,
-            s.state AS state
+        s.store_id AS storeId,
+        s.store_name AS storeName,
+        s.owner_id AS ownerId,
+        s.location AS location,
+        s.store_tel AS storeTel,
+        s.created_at AS createdAt,
+        s.state AS state,
+        GROUP_CONCAT(DISTINCT c.category_name ORDER BY c.category_name SEPARATOR ', ') AS categoryName
         FROM store s
+        LEFT JOIN store_category sc ON sc.store_id = s.store_id
+        LEFT JOIN category c ON c.category_id = sc.category_id
+        <where>
+            <if test="storeName != null and storeName != ''">
+                AND s.store_name LIKE CONCAT('%', #{storeName}, '%')
+            </if>
+            <if test="businessNo != null and businessNo != ''">
+                AND s.business_number LIKE CONCAT('%', #{businessNo}, '%')
+            </if>
+            <if test="date != null and date != ''">
+                AND DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+            </if>
+            <if test="ownerIds != null and ownerIds.size() > 0">
+                AND s.owner_id IN
+                <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                    #{ownerId}
+                </foreach>
+            </if>
+            <if test="category != null and category != ''">
+                AND c.category_name LIKE CONCAT('%', #{category}, '%')
+            </if>
+        </where>
+        GROUP BY
+        s.store_id,
+        s.store_name,
+        s.owner_id,
+        s.location,
+        s.store_tel,
+        s.created_at,
+        s.state
         ORDER BY s.created_at DESC
         LIMIT #{startIdx}, #{size}
     </select>
+
 
     <select id="findStoreLocationByOwnerNo" resultType="string">
         SELECT s.location
@@ -221,4 +266,43 @@
         ORDER BY s.store_id DESC
         LIMIT 1
     </select>
+
+    <select id="countInternalStoreList" resultType="long">
+        SELECT COUNT(DISTINCT s.store_id)
+        FROM store s
+        LEFT JOIN store_category sc ON sc.store_id = s.store_id
+        LEFT JOIN category c ON c.category_id = sc.category_id
+        <where>
+            <if test="storeName != null and storeName != ''">
+                AND s.store_name LIKE CONCAT('%', #{storeName}, '%')
+            </if>
+            <if test="businessNo != null and businessNo != ''">
+                AND s.business_number LIKE CONCAT('%', #{businessNo}, '%')
+            </if>
+            <if test="date != null and date != ''">
+                AND DATE_FORMAT(s.created_at, '%Y.%m.%d') = #{date}
+            </if>
+            <if test="ownerIds != null and ownerIds.size() > 0">
+                AND s.owner_id IN
+                <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                    #{ownerId}
+                </foreach>
+            </if>
+            <if test="category != null and category != ''">
+                AND c.category_name LIKE CONCAT('%', #{category}, '%')
+            </if>
+        </where>
+    </select>
+
+    <!-- 카테고리별 주문 수 통계 -->
+    <select id="countCategoryOrders" resultType="com.green.mmg.main.internal.dto.InternalCategoryOrderStatsRes">
+        SELECT c.category_name AS categoryName, COUNT(o.order_id) AS count
+        FROM orders o
+        JOIN store s ON s.store_id = o.store_id
+        JOIN store_category sc ON sc.store_id = s.store_id
+        JOIN category c ON c.category_id = sc.category_id
+        GROUP BY c.category_id, c.category_name
+        ORDER BY count DESC
+    </select>
+
 </mapper>

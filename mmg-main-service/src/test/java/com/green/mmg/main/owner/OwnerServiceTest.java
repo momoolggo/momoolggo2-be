@@ -3,6 +3,7 @@ package com.green.mmg.main.owner;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.feign.RiderFeignClient;
 import com.green.mmg.main.owner.model.OwnerMenuRegReq;
 import com.green.mmg.main.owner.model.OwnerMenuRes;
 import com.green.mmg.main.owner.model.OwnerMenuUpdateReq;
@@ -59,6 +60,7 @@ class OwnerServiceTest {
 
     @Mock private OwnerMapper ownerMapper;
     @Mock private AuthFeignClient authFeignClient;
+    @Mock private RiderFeignClient riderFeignClient;  // Group 4 의존성 추가 (case-#38 mock 동시 갱신 강제)
 
     @InjectMocks
     private OwnerService ownerService;

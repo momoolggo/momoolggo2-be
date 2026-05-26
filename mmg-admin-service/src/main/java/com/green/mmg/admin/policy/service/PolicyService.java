@@ -16,6 +16,7 @@ public class PolicyService {
 
     private final PolicyRepository policyRepository;
 
+
     // 정책 목록 조회
     public List<Policy> getPolicyList(String type, Boolean isActive) {
         if (type != null && isActive != null) {
@@ -33,7 +34,7 @@ public class PolicyService {
     // 정책 등록
     @Transactional
     public void createPolicy(PolicyReq req) {
-        policyRepository.save(new Policy(req));
+        Policy policy = policyRepository.save(new Policy(req));
     }
 
     // 정책 수정
@@ -50,5 +51,6 @@ public class PolicyService {
         Policy policy = policyRepository.findById(policyId)
                 .orElseThrow(() -> new ResourceNotFoundException("정책을 찾을 수 없습니다."));
         policy.deactivate();
+
     }
 }

@@ -10,7 +10,28 @@
 
 ## 진행 중
 
-(현재 통보 중인 부채)
+### Q-DataIntegrity — `DataIntegrityViolationException` raw 메시지 노출 (2026-05-19 발견)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-common` ❌ 팀원 |
+| **위치** | `mmg-common/.../exception/GlobalExceptionHandler.java:71-76` (`handleRuntime`) |
+| **경위** | 라이더 가입 시 user_id 중복 시도 → DB Unique 위반 → 화면에 SQL raw 노출 `"could not execute statement [Duplicate entry 'rider2' for key 'uq_user_id']"` |
+| **현재 동작** | `DataIntegrityViolationException extends RuntimeException` → `handleRuntime` catch → `e.getMessage()` 그대로 500 응답 → FE httpRequester 인터셉터 모달로 raw 표시 |
+| **권장 처리** | `@ExceptionHandler(DataIntegrityViolationException.class)` 별 핸들러 추가 — Unique 제약 위반 시 `"이미 등록된 정보입니다."` 409 응답 (BusinessException 패턴 일관). raw 메시지는 log.warn만, 응답 body는 마스킹. |
+| **임시 대응** | FE rider 영역에서 `RiderSignupView.mapSignupError` 매퍼 함수로 raw 메시지 패턴 감지 + 친화 메시지 변환 (시연 보호). BE 정정 시 본 매퍼 단순화 가능. |
+| **참조 사례** | `docs/adr/rider/figma-analysis.md` 사례 #13 |
+
+### Q-SignupDupCheck — `UserService.signup` ID 중복 사전 검증 부재 (2026-05-19 발견)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-auth-service` ❌ 팀원 |
+| **위치** | `mmg-auth-service/.../user/UserService.java:49` (`signup` 진입부) |
+| **경위** | 위 Q-DataIntegrity와 짝. FE checkId 호출과 실제 INSERT 사이 race condition 가능. BE 사전 검증 없으면 항상 SQL Unique 위반 의존. |
+| **현재 동작** | `userRepository.save(user)` 직행 → DB Unique 제약 위반 시 DataIntegrityViolationException throw |
+| **권장 처리** | `signup` 진입부에 `existsByUserId(req.getUserId())` if-throw 패턴 추가 — `BusinessException("이미 사용 중인 아이디입니다.", HttpStatus.CONFLICT)`. Q-DataIntegrity 핸들러와 이중 안전망. |
+| **R1-A 패턴 인용** | `mmg-rider-service/.../rider/RiderService.java:54-56` (`existsByUserNo` 중복 가입 방지 패턴) |
 
 ---
 
@@ -133,6 +154,78 @@
 
 ---
 
+## 10. admin `ddl-auto=update` (W-1, 작업 A Group 5 code-reviewer 발견, 2026-05-17 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-admin-service` ❌ 팀원 |
+| **위치** | `mmg-admin-service/src/main/resources/application.yml:12` |
+| **경위** | 작업 A Group 5 code-reviewer 빡센 검증 W-1 발견 |
+| **현재 동작** | `ddl-auto: update` — 엔티티 변경 시 학원 공유 DB 자동 ALTER. prod는 `none`으로 보호. dev 환경에서 팀원이 엔티티 추가하면 스키마 silent 변경. |
+| **권장 처리** | `ddl-auto: validate` (rider/main/auth 일관). CLAUDE.md §6 절대 규칙 일관. |
+| **참조** | code-reviewer agent agentId `a54e3c0939eaa31f4` Warning 1 |
+
+---
+
+## 11. admin OkHttp timeout 미설정 (W-3, 작업 A Group 5 code-reviewer 발견, 2026-05-17 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-admin-service` ❌ 팀원 |
+| **위치** | `mmg-admin-service/.../configuration/FeignConfiguration.java` `return new OkHttpClient()` (기본 10s connect / 10s read) |
+| **경위** | 작업 A Group 5 code-reviewer 빡센 검증 W-3 발견. Phase 4-A 패턴 (connect 3s / read 5s)과 불일치. |
+| **현재 동작** | OkHttp 기본 timeout 10s. Group 5에서 settlement 3 endpoint 추가됐고 calculate는 전체 라이더 순회 + DB INSERT — 처리 시간 risk 증가. |
+| **권장 처리** | OkHttpClient.Builder().connectTimeout(3, SECONDS).readTimeout(5, SECONDS) 명시 (Phase 4-A 일관) |
+| **참조** | code-reviewer agent agentId `a54e3c0939eaa31f4` Warning 3 |
+
+---
+
+## 12. admin FE `AdminSettlementView.vue` 라이더 정산 연결 (W-4 Suggestion, 작업 A Group 5.5 code-reviewer 발견, 2026-05-17 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `momoolggo2-fe` (FE) ❌ 팀원 (admin/customer/owner FE 영역) |
+| **위치** | `momoolggo2-fe/src/views/admin/AdminSettlementView.vue` (현재 admin 자체 DB settlement만 표시) |
+| **경위** | 작업 A Group 5.5 code-reviewer 빡센 검증 Suggestion. BE는 `/api/admin/rider-settlement/pending` 가동 완료, 응답 JSON에 `riderNo` 노출 (Group 5.5 정정). FE 연결 시 학원 발표 시연 완성도 ↑ |
+| **권장 처리** | admin FE에 별 라이더 정산 화면 추가 (또는 AdminSettlementView.vue에 탭 추가) + `/api/admin/rider-settlement/pending` 호출 + riderNo 컬럼 표시 + confirm 버튼 (`PATCH /{settlementNo}/confirm` 호출) |
+| **참조** | code-reviewer agent agentId `a7b4040531272da8f` Suggestion |
+
+---
+
+## 13. main `Owner.xml` 배달료 필드 무의미화 (figma-analysis #21, 2026-05-21 신규)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-main-service` ❌ 팀원 |
+| **위치** | `mmg-main-service/src/main/resources/mappers/Owner.xml:407-408` (배차 요청 SELECT 절 `o.delivery_fee AS baseFee, 0 AS extraFee`) + `RiderAssignReq.java:29-30` 전달 필드 |
+| **경위** | 사용자 보고 "배달비 1500원 고정 표시" 진단 → figma-analysis #21 박제. rider-service에서 좌표 기반 Haversine 동적 산출 도입 (base=1500 고정 + extra=ceil(km)*1000). |
+| **현재 동작** | main이 `o.delivery_fee` (점주가 가게마다 설정한 배달비)를 baseFee로 보내고 있으나 **rider 측에서 silently 무시**. extraFee는 이미 0 고정 박제라 추가 영향 없음. |
+| **권장 처리 (선택사항)** | 1. main 측 `Owner.xml:407-408`을 `0 AS baseFee, 0 AS extraFee`로 단순화 — 불필요한 컬럼 SELECT 제거. 2. 또는 그대로 둬도 작동상 무해 (rider가 무시할 뿐). 3. `o.delivery_fee` 컬럼 자체 용도가 main의 다른 화면(점주 가격 설정 등)에 남아있는지 확인 후 결정. |
+| **참조 (rider 측)** | `DeliveryService.java:171-174` (override 위치) / `DeliveryService.computeExtraFee:524-541` / `RiderInternalAssignReq.java:10-15` javadoc / `docs/adr/rider/figma-analysis.md` 사례 #21 |
+
+---
+
+## ~~14. admin `GET /api/admin/rider-settlement/all` 라이더 전체 정산 내역 relay 미구현~~ ✅ 본인 직접 처리 완료 (2026-05-26)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-admin-service` ❌ 팀원 |
+| **위치** | `mmg-admin-service/.../rider/RiderFeignClient.java` (메서드 추가) + admin 라이더 정산 컨트롤러 (endpoint 추가) |
+| **경위** | admin FE `AdminSettlementView.vue`에서 PENDING 목록만 표시되던 문제 수정 — CONFIRMED 포함 전체 내역이 필요. rider-service BE 및 admin FE는 완료됨. admin-service relay만 남음. |
+| **rider-service 준비 완료** | `GET /internal/rider/settlement/all` — `SettlementService.findAll()` (periodStart DESC), `RiderInternalController.allSettlements()` |
+| **admin FE 준비 완료** | `adminService.getRiderSettlementAll()` → `GET /api/admin/rider-settlement/all` 호출 준비됨. `AdminSettlementView.vue`에서 `fetchRiderSettlements()`가 이 메서드 호출. |
+| **필요 처리 (admin 측)** | 1. `RiderFeignClient.java`에 `getRiderSettlementAll()` 메서드 추가 — `@GetMapping("/internal/rider/settlement/all") List<SettlementRowRes> getRiderSettlementAll()`. 2. admin 라이더 정산 컨트롤러에 `GET /api/admin/rider-settlement/all` endpoint 추가 — `riderFeignClient.getRiderSettlementAll()` 호출 후 반환. 3. 응답 타입: `List<SettlementRowRes>` (기존 pending과 동일 DTO). |
+| **참조** | `RiderInternalController.java:150-154` / `SettlementService.findAll()` / `adminService.js:getRiderSettlementAll` |
+
+---
+
 ## 처리 완료
 
 (팀원 처리 완료 시 이력 박제 — 항목 / 처리 커밋 / 처리일)
+
+### 작업 A 본인 처리 완료 (2026-05-17)
+
+| 항목 | 처리 결과 |
+|---|---|
+| **§8 main → rider 자동 배차 트리거** | ✅ Group 4 처리 완료. `OwnerService.updateOrderState` ORDER_STATE_COOKING(=3) 진입 시점에 `triggerRiderAssign(orderId)` 호출 추가 (Q-A9.a (β+δ) 라이더 풀 모델 — riderNo=null 전달, rider 측 WAITING_ASSIGN 생성, R6 선착순 수락 흐름). interfaces.md §1.1 path 정정 (case-#33-후속 통합). RiderAssignReq 14 필드 보강 (interfaces.md 박제 일관). OwnerMapper `findStoreInfoByOrderId` 신설 (Phase 3-D MyBatis 박제 일관, NULL/0 패스 Q-A9.e (나)). |
+| **§9 R7 정산 admin 측 호출처** | ✅ Group 5 처리 완료. admin `RiderSettlementController` 신설 (Q-A10.b (iii) admin Settlement과 결 분리). 기존 `RiderFeignClient`에 settlement 3 메서드 추가 (Q-A10.c (a) 재사용). admin 측 별도 `Settlement` 도메인은 라이더 외 정산 (target_type enum, Q-A10.a (옵션 1)). Group 5.5 W-2 정정 — `SettlementRowRes`에 `riderNo` 필드 추가 (admin 모니터 식별 가능). 본인 처리 완료라 팀원 위임 자리 아님. |

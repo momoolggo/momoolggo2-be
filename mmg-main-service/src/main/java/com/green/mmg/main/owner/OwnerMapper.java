@@ -86,4 +86,15 @@ public interface OwnerMapper {
 
     /** category_id → menu_category.store_id → store.owner_id (없으면 null) */
     Long findStoreOwnerByCategoryId(@Param("categoryId") long categoryId);
+
+    // ========== Phase 5+ 작업 A Group 4: 라이더 배차 정보 조회 ==========
+    // Q-A9.c MyBatis 박제 일관 (Phase 3-D "Store/Owner MyBatis 영구 유지").
+    // 분류 B 자율: RiderAssignReq 직접 매핑 (StoreInfoDto 신설 X — DTO 중복 회피, case-#34 영역 분리 별 결).
+    // case-#34-후속 일관: orders.delivery_lat/lng + customer_phone + extra_fee 부재 → NULL/0 패스 (Q-A9.e (나)).
+
+    /**
+     * 점주 수락 시점 라이더 배차 정보 조회 — interfaces.md §1.1 박제 14 필드 매핑.
+     * riderNo = NULL (라이더 풀 모델, Q-A9.a (β+δ)).
+     */
+    com.green.mmg.main.feign.model.RiderAssignReq findStoreInfoByOrderId(@Param("orderId") long orderId);
 }

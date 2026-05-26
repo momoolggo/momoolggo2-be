@@ -51,11 +51,19 @@
         s.store_id      AS storeId,
         o.amount        AS totalPrice,
         o.delivery_fee  AS deliveryFee,
-        o.order_state   AS orderState
+        o.order_state   AS orderState,
+        o.delivered_photo_url AS deliveredPhotoUrl
         FROM orders o
             JOIN store s ON s.store_id = o.store_id
         WHERE o.order_id = #{id}
         ]]>
+    </select>
+
+    <!-- 2026-05-25 9건 트랙 — 거리 기반 배달팁용 가게 좌표 조회 -->
+    <select id="findStoreCoord" resultType="java.util.Map">
+        SELECT latitude AS storeLat, longitude AS storeLng
+        FROM store
+        WHERE store_id = #{storeId}
     </select>
 
     <!--
@@ -69,4 +77,34 @@
            set order_count = (select count(*) from orders where store_id = #{storeId})
          where store_id = #{storeId}
     </update>
+
+    <!-- 관리자 정산 상세 주문 내역 -->
+    <select id="findSettlementOrderDetails"
+            resultType="com.green.mmg.main.internal.dto.InternalSettlementOrderRes">
+        SELECT
+            o.order_id AS orderId,
+            o.order_time AS orderTime,
+            od.menu_name AS menuName,
+            od.menu_price * od.quantity AS orderAmount
+        FROM orders o
+                 JOIN order_detail od ON od.order_id = o.order_id
+        WHERE o.store_id = #{storeId}
+          AND o.order_time >= #{start}
+          AND o.order_time &lt; #{end}
+          AND o.order_state != 2
+        ORDER BY o.order_time DESC, od.detail_id ASC
+    </select>
+
+    <!-- 관리자 정산 상세 총 메뉴 매출 -->
+    <select id="sumSettlementSales" resultType="long">
+        SELECT COALESCE(SUM(od.menu_price * od.quantity), 0)
+        FROM orders o
+                 JOIN order_detail od ON od.order_id = o.order_id
+        WHERE o.store_id = #{storeId}
+          AND o.order_time >= #{start}
+          AND o.order_time &lt; #{end}
+          AND o.order_state != 2
+    </select>
+
+
 </mapper>

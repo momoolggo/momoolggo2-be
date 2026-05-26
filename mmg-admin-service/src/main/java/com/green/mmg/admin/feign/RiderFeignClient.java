@@ -3,7 +3,11 @@ package com.green.mmg.admin.feign;
 import com.green.mmg.admin.dto.feign.RiderInternalMonitorRes;
 import com.green.mmg.admin.dto.feign.RiderInternalNoticeReq;
 import com.green.mmg.admin.dto.feign.RiderInternalNoticeRes;
+import com.green.mmg.admin.dto.feign.RiderLocationRes;
 import com.green.mmg.admin.dto.feign.RiderNoticeRes;
+import com.green.mmg.admin.dto.feign.RiderProfileRes;
+import com.green.mmg.admin.dto.feign.RiderSettlementConfirmReq;
+import com.green.mmg.admin.dto.feign.RiderSettlementRowRes;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
+import java.util.Map;
 
 @FeignClient(name = "mmg-rider-service",
         url = "${feign.rider-service.url:http://localhost:8082}")
@@ -23,7 +28,8 @@ public interface RiderFeignClient {
     @GetMapping("/internal/rider/monitor")
     RiderInternalMonitorRes getMonitor(
             @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "0") int page
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String keyword
     );
 
     /** 라이더 전체 공지 발송 — POST /internal/rider/notice */
@@ -42,4 +48,43 @@ public interface RiderFeignClient {
     /** 공지 삭제 */
     @DeleteMapping("/internal/rider/notice/{noticeId}")
     RiderInternalNoticeRes deleteNotice(@PathVariable("noticeId") Long noticeId);
+
+    // ─── R7 정산 (Group 5 신설, team-handoff §9 부채 해소) ──────────────────────
+    // SSE 자동화 트랙(2026-05-21) — calculate 트리거 폐기. rider DeliveryService.completeDelivery에서
+    // SettlementService.recalculateThisWeek 자동 호출 (single source of truth).
+
+    /** PENDING → CONFIRMED. rider Provider {@code SettlementRowRes} 반환 일관 (분류 B 자율 정정 — void X). */
+    @PostMapping("/internal/rider/settlement/{settlementNo}/confirm")
+    RiderSettlementRowRes confirmRiderSettlement(@PathVariable("settlementNo") Long settlementNo,
+                                                 @RequestBody RiderSettlementConfirmReq req);
+
+    /** Admin 모니터 — PENDING 목록 조회. */
+    @GetMapping("/internal/rider/settlement/pending")
+    List<RiderSettlementRowRes> getRiderSettlementPending();
+
+    /** Admin 모니터 — 전체 정산 목록 (PENDING + CONFIRMED). periodStart 내림차순. */
+    @GetMapping("/internal/rider/settlement/all")
+    List<RiderSettlementRowRes> getRiderSettlementAll();
+
+    // ─── §3.1/§3.2 라이더 관리 (Group 8.5 신설, Q-A1 (라+)) ──────
+    // SSE 자동화 트랙(2026-05-21) — approveRider/suspendRider 폐기 (auto-approve true 박제로 신원 승인 흐름 단일화).
+    // getRiderList는 AdminDeliveryController.getRiderCount에서 사용 중 (라이더 공지 모달).
+
+    /** 라이더 목록 조회 — interfaces.md §3.5. status null=전체. AdminDeliveryController.getRiderCount 잔존 사용처. */
+    @GetMapping("/internal/rider/list")
+    List<RiderProfileRes> getRiderList(@RequestParam(value = "status", required = false) String status);
+
+    // ─── §1.3 라이더 위치 다건 조회 (Group 10 신설, 2026-05-17) ──────
+    // 결정 (가) Redis TTL 기준 — 위치 송신 fresh 라이더만. 빈 결과는 빈 List.
+    // case-#34 일관: rider Provider RiderInternalLocationRes 1:1.
+
+    /** Admin 배달 관제 지도용 — TTL 살아있는 모든 라이더 위치. */
+    @GetMapping("/internal/rider/locations/active")
+    List<RiderLocationRes> getActiveRiderLocations();
+
+    // ─── ADR-001 (D) cascade 보완 — user 삭제 시 rider 동기 삭제 (2026-05-19 신설) ──
+    /** user_no 매칭 rider 행 삭제. 행 없으면 0 반환 (일반 회원이라 skip). */
+    @DeleteMapping("/internal/rider/by-user/{userNo}")
+    Long deleteRiderByUserNo(@PathVariable("userNo") Long userNo);
+
 }

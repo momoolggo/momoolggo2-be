@@ -5,16 +5,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import java.time.LocalDateTime;
 
-/**
- * review 테이블 엔티티 (my_mmg_main.review).
- *
- * <p>Phase 3-C-2: BaseEntity 첫 검증 도메인.
- * write_at/amended_at은 BaseEntity의 createdAt/updatedAt에 매핑 (@AttributeOverride).</p>
- *
- * <p>BaseEntity의 @CreatedDate/@LastModifiedDate가 자동 채움 — DB DEFAULT current_timestamp()
- * 대신 JPA Auditing이 LocalDateTime.now() 셋팅. 응답 노출은 ReviewRes에 없음 (영향 0).</p>
- */
 @Entity
 @Table(name = "review")
 @Getter
@@ -42,4 +34,37 @@ public class Review extends BaseEntity {
 
     @Column(name = "photo", length = 1000)
     private String photo;
+
+    // 블라인드 필드
+    @Column(name = "blinded", nullable = false)
+    private boolean blinded = false;
+
+    @Column(name = "blinded_at")
+    private LocalDateTime blindedAt;
+
+    @Column(name = "blind_source", length = 20)
+    private String blindSource;
+
+    @Column(name = "blind_reason", length = 200)
+    private String blindReason;
+
+    @Column(name = "blind_report_id")
+    private Long blindReportId;
+
+    public void applyBlind(String source, String reason, Long reportId) {
+        this.blinded = true;
+        this.blindedAt = LocalDateTime.now();
+        this.blindSource = source;
+        this.blindReason = reason;
+        this.blindReportId = reportId;
+    }
+
+    public void releaseBlind() {
+        this.blinded = false;
+        this.blindedAt = null;
+        this.blindSource = null;
+        this.blindReason = null;
+        this.blindReportId = null;
+    }
 }
+

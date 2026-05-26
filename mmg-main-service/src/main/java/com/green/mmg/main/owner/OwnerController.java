@@ -1,15 +1,18 @@
 package com.green.mmg.main.owner;
 
 
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.owner.model.*;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.model.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.List;
@@ -22,6 +25,9 @@ import java.util.Map;
 public class OwnerController {
 
     private final OwnerService ownerService;
+    private final OwnerOrderSseService ownerOrderSseService;
+
+    private static final long OWNER_DOC_MAX_FILE_SIZE = 5 * 1024 * 1024;
 
     @Value("${file.upload.menu-path:C:/uploads/menu/}")
     private String menuUploadPath;
@@ -107,6 +113,14 @@ public class OwnerController {
         ownerService.deleteOrder(principal.getSignedUserNo(), order_id);
         return new ResultResponse<>("주문 삭제 성공", null);
     }
+
+    @GetMapping("/order/subscribe")
+    public SseEmitter subscribeOrder(@AuthenticationPrincipal UserPrincipal principal,
+                                     @RequestParam Long storeId) {
+        ownerService.validateStoreOwner(principal.getSignedUserNo(), storeId);
+        return ownerOrderSseService.subscribe(storeId);
+    }
+
 
     // ========== 메뉴 관련 ==========
 
@@ -237,6 +251,15 @@ public class OwnerController {
         return new ResultResponse<>("매출 통계 조회 성공", stats);
     }
 
+    // ========== 정산 관련 ==========
+    @GetMapping("/settlement")
+    public ResultResponse<?> getMySettlements(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam Long storeId) {
+        return new ResultResponse<>("정산 내역 조회 성공",
+                ownerService.getMySettlements(principal.getSignedUserNo(), storeId));
+    }
+
     // ranking도 동일하게
     @GetMapping("/sales/ranking")
     public ResultResponse<List<OwnerSalesRankingRes>> getSalesRanking(
@@ -246,4 +269,47 @@ public class OwnerController {
         List<OwnerSalesRankingRes> ranking = ownerService.getSalesRanking(principal.getSignedUserNo(), storeId, period);
         return new ResultResponse<>("매출 순위 조회 성공", ranking);
     }
+
+    @PostMapping("/settlement/inquiry")
+    public ResultResponse<?> submitInquiry(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody Map<String, String> req) {
+        ownerService.submitSettlementInquiry(
+                principal.getSignedUserNo(), req.get("content"));
+        return new ResultResponse<>("문의 접수 완료", null);
+    }
+
+
+    // ==========회원가입 전 사장 서류 업로드 ==========
+    @PostMapping("/signup-doc/upload")
+    public ResultResponse<String> uploadOwnerSignupDoc(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam String docType
+    ) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("파일은 필수입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        if (file.getSize() > OWNER_DOC_MAX_FILE_SIZE) {
+            throw new BusinessException("파일은 5MB 이하만 업로드 가능합니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        String folder;
+        String urlPrefix;
+
+        if ("BUSINESS_LICENSE".equals(docType)) {
+            folder = "owner-doc/business-license/";
+            urlPrefix = "/uploads/store/owner-doc/business-license/";
+        } else if ("MAIL_ORDER_LICENSE".equals(docType)) {
+            folder = "owner-doc/mail-order-license/";
+            urlPrefix = "/uploads/store/owner-doc/mail-order-license/";
+        } else {
+            throw new BusinessException("지원하지 않는 서류 타입입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        String imageUrl = ownerService.uploadImage(file, storeUploadPath + folder, urlPrefix);
+        return new ResultResponse<>("사장 서류 업로드 성공", imageUrl);
+    }
+
+
 }

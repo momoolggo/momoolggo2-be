@@ -12,6 +12,7 @@ import com.green.mmg.rider.delivery.dto.DeliveryHistoryRowRes;
 import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
 import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
 import com.green.mmg.rider.delivery.model.DeliveryCancelReason;
+import com.green.mmg.rider.delivery.sse.OrderAssignEvent;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignReq;
 import com.green.mmg.rider.internal.dto.RiderInternalAssignRes;
 import com.green.mmg.rider.internal.dto.RiderInternalMonitorRes;
@@ -19,8 +20,10 @@ import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
 import com.green.mmg.rider.rider.RiderRepository;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderStatus;
+import com.green.mmg.rider.settlement.SettlementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -34,12 +37,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 배달 도메인 서비스 — Phase 5-R3-b 범위 (상태 머신 + 낙관적 락 + delivery_log INSERT).
@@ -65,14 +70,21 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DeliveryService {
 
+    /** 배달비 — 2026-05-19 거리 기반 동적 산출 박제 (사용자 결정). */
+    private static final int DELIVERY_BASE_FEE = 1500;        // 모든 배달 고정 기본
+    private static final int FEE_PER_KM = 1000;               // 1km당 추가 (ceil 단위)
+    private static final double EARTH_RADIUS_M = 6_371_000.0; // Haversine 표준
+
     /** ADR-004 line 76-82 화이트리스트 — 7 합법 전이 (사례 #20 정정 일관) */
     private static final Map<DeliveryStatus, Set<DeliveryStatus>> ALLOWED_TRANSITIONS;
 
     static {
         EnumMap<DeliveryStatus, Set<DeliveryStatus>> map = new EnumMap<>(DeliveryStatus.class);
         map.put(DeliveryStatus.WAITING_ASSIGN, EnumSet.of(DeliveryStatus.ASSIGNED));
+        // ARRIVED_AT_STORE 단계 라이더 흐름 제거 (2026-05-19) — accept가 AWAITING_PICKUP 직행.
+        // ARRIVED_AT_STORE 상태 enum은 유지 (외부 호출/admin 경로 보존).
         map.put(DeliveryStatus.ASSIGNED,
-                EnumSet.of(DeliveryStatus.ARRIVED_AT_STORE, DeliveryStatus.WAITING_ASSIGN));
+                EnumSet.of(DeliveryStatus.ARRIVED_AT_STORE, DeliveryStatus.AWAITING_PICKUP, DeliveryStatus.WAITING_ASSIGN));
         // R6-cancel: ARRIVED/AWAITING/PICKED/DELIVERING → WAITING_ASSIGN 4 전이 추가 (cancel 사유 박제)
         map.put(DeliveryStatus.ARRIVED_AT_STORE,
                 EnumSet.of(DeliveryStatus.AWAITING_PICKUP, DeliveryStatus.WAITING_ASSIGN));
@@ -89,6 +101,8 @@ public class DeliveryService {
     private final DeliveryRepository deliveryRepository;
     private final DeliveryLogRepository deliveryLogRepository;
     private final RiderRepository riderRepository;
+    private final SettlementService settlementService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 배달 상태 전환 (화이트리스트 + 권한 + 낙관적 락 + delivery_log INSERT).
@@ -139,30 +153,51 @@ public class DeliveryService {
     }
 
     /**
-     * 배차 요청 처리 — interfaces.md §1.1 (Main → Rider).
-     * Rider ACTIVE 검증 + Delivery 생성(WAITING_ASSIGN → ASSIGNED 즉시 전환) + delivery_log INSERT.
-     * actorRole = SYSTEM (자동 처리, actorUserNo = null).
+     * 배차 요청 처리 — interfaces.md §1.1 (Main → Rider, case-#33-후속 정정, Q-A9.a (β+δ)).
+     *
+     * <p>req.riderNo null/0 = 라이더 풀 모델 (status=WAITING_ASSIGN, riderNo 미할당, rider 검증 X).
+     * 명시 = 강제 배차 (rider ACTIVE 검증 + status=ASSIGNED). admin 시연 호환 박제.</p>
+     *
+     * <p>delivery_log INSERT: status (WAITING_ASSIGN 또는 ASSIGNED) 동일 박제. actorRole=SYSTEM.</p>
      */
     @Transactional
-    public RiderInternalAssignRes assignDelivery(Long riderNo, RiderInternalAssignReq req) {
-        Rider rider = riderRepository.findById(riderNo)
-                .orElseThrow(() -> new BusinessException("라이더를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (rider.getStatus() != RiderStatus.ACTIVE) {
-            throw new BusinessException(
-                    "라이더가 배차 가능 상태가 아닙니다 (현재: " + rider.getStatus() + ").",
-                    HttpStatus.BAD_REQUEST);
+    public RiderInternalAssignRes assignDelivery(RiderInternalAssignReq req) {
+        Long reqRiderNo = req.riderNo();
+        boolean isPool = (reqRiderNo == null || reqRiderNo == 0L);
+
+        if (!isPool) {
+            Rider rider = riderRepository.findById(reqRiderNo)
+                    .orElseThrow(() -> new BusinessException("라이더를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+            if (rider.getStatus() != RiderStatus.ACTIVE) {
+                throw new BusinessException(
+                        "라이더가 배차 가능 상태가 아닙니다 (현재: " + rider.getStatus() + ").",
+                        HttpStatus.BAD_REQUEST);
+            }
         }
+
+        // 배달비 거리 기반 동적 산출 (2026-05-19 정정) — main의 req.baseFee/extraFee 무시.
+        // base = 1500 고정, extra = ceil(거리_km) * 1000 (Haversine 직선).
+        int baseFee = DELIVERY_BASE_FEE;
+        int extraFee = computeExtraFee(req.orderId(),
+                req.storeLat(), req.storeLng(), req.deliveryLat(), req.deliveryLng());
 
         String deliveryNo = generateDeliveryNo();
         Delivery delivery = new Delivery(
                 deliveryNo, req.orderId(),
-                req.storePhone(), req.customerPhone(),
+                req.storePhone(), req.customerPhone(), req.storeName(),
                 req.storeAddress(), req.storeLat(), req.storeLng(),
                 req.deliveryAddress(), req.deliveryLat(), req.deliveryLng(),
-                req.baseFee());
-        delivery.assignRider(riderNo);
+                baseFee, extraFee,
+                req.orderRequest(), req.riderRequest());
         LocalDateTime now = LocalDateTime.now();
-        delivery.changeStatus(DeliveryStatus.ASSIGNED, now);
+        DeliveryStatus initialStatus;
+        if (!isPool) {
+            delivery.assignRider(reqRiderNo);
+            delivery.changeStatus(DeliveryStatus.ASSIGNED, now);
+            initialStatus = DeliveryStatus.ASSIGNED;
+        } else {
+            initialStatus = DeliveryStatus.WAITING_ASSIGN;
+        }
 
         try {
             deliveryRepository.saveAndFlush(delivery);
@@ -173,9 +208,16 @@ public class DeliveryService {
         }
 
         deliveryLogRepository.save(new DeliveryLog(
-                deliveryNo, null, DeliveryStatus.ASSIGNED, ActorRole.SYSTEM, null));
+                deliveryNo, null, initialStatus, ActorRole.SYSTEM, null));
 
-        return new RiderInternalAssignRes(true, deliveryNo, riderNo, now);
+        // 자잘 에러 트랙(2026-05-23) — WAITING_ASSIGN 풀 진입 시 모든 활성 라이더에게 SSE broadcast.
+        // strict 강제 배차(ASSIGNED 직행)는 특정 라이더 1명만 받으므로 broadcast 대상 X.
+        if (isPool) {
+            eventPublisher.publishEvent(new OrderAssignEvent(
+                    OrderAssignEvent.Type.ASSIGNED, toWaitingRow(delivery)));
+        }
+
+        return new RiderInternalAssignRes(true, deliveryNo, isPool ? null : reqRiderNo, now);
     }
 
     /**
@@ -219,10 +261,10 @@ public class DeliveryService {
 
     /**
      * Admin 모니터 — GET /internal/rider/monitor.
-     * summary 4그룹 카운트 + status 필터 + page 목록.
+     * summary 4그룹 카운트 + status 필터 + keyword(storeName LIKE) + page 목록.
      */
     @Transactional(readOnly = true)
-    public RiderInternalMonitorRes getMonitor(String status, int page) {
+    public RiderInternalMonitorRes getMonitor(String status, int page, String keyword) {
         if (page < 0) {
             throw new BusinessException("page는 0 이상이어야 합니다.", HttpStatus.BAD_REQUEST);
         }
@@ -249,9 +291,28 @@ public class DeliveryService {
         Pageable pageable = PageRequest.of(page, MONITOR_PAGE_SIZE,
                 Sort.by(Sort.Direction.DESC, "assignedAt"));
 
-        Page<Delivery> result = (group == null)
-                ? deliveryRepository.findAll(pageable)
-                : deliveryRepository.findByStatusIn(group, pageable);
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
+        Page<Delivery> result;
+        if (hasKeyword) {
+            result = (group == null)
+                    ? deliveryRepository.findByStoreNameContainingIgnoreCase(keyword, pageable)
+                    : deliveryRepository.findByStatusInAndStoreNameContainingIgnoreCase(group, keyword, pageable);
+        } else {
+            result = (group == null)
+                    ? deliveryRepository.findAll(pageable)
+                    : deliveryRepository.findByStatusIn(group, pageable);
+        }
+
+        // 정산 시연 UX 트랙 #9 (2026-05-21) — rider phone 일괄 조회 (N+1 회피)
+        Set<Long> riderNos = result.getContent().stream()
+                .map(Delivery::getRiderNo)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> riderPhones = new HashMap<>();
+        if (!riderNos.isEmpty()) {
+            riderRepository.findAllById(riderNos)
+                    .forEach(r -> riderPhones.put(r.getRiderNo(), r.getPhone()));
+        }
 
         List<RiderInternalMonitorRes.DeliveryRow> rows = result.getContent().stream()
                 .map(d -> {
@@ -271,15 +332,18 @@ public class DeliveryService {
                             d.getExtraFee(),
                             d.getAssignedAt(),
                             d.getDeliveredAt(),
-                            null,            // storeName — 추후 메인연동후에  연동
+                            d.getStoreName(),
                             elapsedMinutes,
-                            null);           // distanceKm — 추후 메인 연동후에 연동
+                            computeDistanceKm(d),
+                            d.getRiderNo() != null ? riderPhones.get(d.getRiderNo()) : null);
                 })
                 .toList();
 
         return new RiderInternalMonitorRes(
                 new RiderInternalMonitorRes.Summary(waiting, assigned, delivering, completed),
-                rows);
+                rows,
+                result.getTotalPages(),
+                result.getTotalElements());
     }
 
     // ========================================================================
@@ -357,10 +421,71 @@ public class DeliveryService {
         return new DeliveryHistoryRes(fromDate, toDate, rowDtos.size(), totalFee, rowDtos);
     }
 
-    /** ASSIGNED → ARRIVED_AT_STORE. R6 §6.2 PUT /accept */
+    /**
+     * 라이더 풀에서 본인 잡기 — WAITING_ASSIGN → ASSIGNED + assignRider (2026-05-19 신설).
+     *
+     * <p>본 메서드는 {@link #performRiderTransition}과 별 흐름. 권한 검증이 정반대:
+     * performRiderTransition은 "delivery.riderNo == caller.riderNo" 검증(본인 배달만), 본 메서드는 "delivery.riderNo == null" 검증(풀의 미배차만).</p>
+     *
+     * <p>흐름: ACTIVE 라이더 검증(D8-a) → delivery.rider_no=NULL 검증 → WAITING_ASSIGN 화이트리스트 → assignRider(caller) → changeStatus(ASSIGNED) → log INSERT.
+     * code-reviewer FAIL 진단 결함 1번(claim endpoint 부재) 정정 (2026-05-19).</p>
+     */
+    @Transactional
+    public DeliveryTransitionResult claimDelivery(String deliveryNo, long callerUserNo) {
+        Delivery delivery = deliveryRepository.findById(deliveryNo)
+                .orElseThrow(() -> new BusinessException("배달을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        Rider caller = riderRepository.findByUserNo(callerUserNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        // D8-a 박제 일관 — ACTIVE 라이더만 풀 잡기 허용 (EATING/PENDING/SUSPENDED 차단)
+        if (caller.getStatus() != RiderStatus.ACTIVE) {
+            throw new BusinessException(
+                    "ACTIVE 상태에서만 배차를 잡을 수 있습니다 (현재: " + caller.getStatus() + ").",
+                    HttpStatus.BAD_REQUEST);
+        }
+        // 풀 상태 검증 — 이미 다른 라이더가 잡았으면 거부
+        if (delivery.getRiderNo() != null) {
+            throw new BusinessException(
+                    "이미 다른 라이더가 잡은 배차입니다.", HttpStatus.CONFLICT);
+        }
+        // 화이트리스트 검증 — WAITING_ASSIGN → ASSIGNED만 허용
+        DeliveryStatus from = delivery.getStatus();
+        if (!ALLOWED_TRANSITIONS.get(from).contains(DeliveryStatus.ASSIGNED)) {
+            throw new BusinessException(
+                    "invalid state transition: " + from + " -> ASSIGNED",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        delivery.assignRider(caller.getRiderNo());
+        LocalDateTime now = LocalDateTime.now();
+        delivery.changeStatus(DeliveryStatus.ASSIGNED, now);
+
+        try {
+            deliveryRepository.saveAndFlush(delivery);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            throw new BusinessException(
+                    "동시 변경 충돌이 발생했습니다. 새로고침 후 다시 시도하세요.",
+                    HttpStatus.CONFLICT);
+        }
+
+        deliveryLogRepository.save(new DeliveryLog(
+                deliveryNo, from, DeliveryStatus.ASSIGNED, ActorRole.RIDER, callerUserNo, null));
+
+        // 자잘 에러 트랙(2026-05-23) — 풀 잡힘을 모든 활성 라이더에게 broadcast (FE 자동 close).
+        eventPublisher.publishEvent(new OrderAssignEvent(
+                OrderAssignEvent.Type.CLAIMED, deliveryNo));
+
+        return new DeliveryTransitionResult(delivery.getOrderId(), DeliveryStatus.ASSIGNED, caller.getRiderNo(), now);
+    }
+
+    /**
+     * ASSIGNED → AWAITING_PICKUP (가게 도착, 픽업 대기 직행) — R6 §6.2 PUT /accept.
+     * 2026-05-19 정정: ARRIVED_AT_STORE 단계 라이더 흐름 제거 (사용자 결정). 가게 도착 = 즉시 픽업 대기 상태.
+     */
     @Transactional
     public DeliveryTransitionResult acceptDelivery(String deliveryNo, long callerUserNo) {
-        return performRiderTransition(deliveryNo, DeliveryStatus.ARRIVED_AT_STORE, callerUserNo, null);
+        return performRiderTransition(deliveryNo, DeliveryStatus.AWAITING_PICKUP, callerUserNo, null);
     }
 
     /**
@@ -393,13 +518,20 @@ public class DeliveryService {
         return performRiderTransition(deliveryNo, DeliveryStatus.DELIVERING, callerUserNo, null);
     }
 
-    /** DELIVERING → DELIVERED + markDelivered(method, photoUrl). R6 §6.2 PUT /complete */
+    /**
+     * DELIVERING → DELIVERED + markDelivered(method, photoUrl). R6 §6.2 PUT /complete.
+     *
+     * <p>SSE 자동화 트랙(2026-05-21) — DELIVERED transition 직후 이번 주 settlement 자동 UPSERT.
+     * 같은 트랜잭션 안에서 호출 (실패 시 transition도 롤백 = 데이터 정합 유지).</p>
+     */
     @Transactional
     public DeliveryTransitionResult completeDelivery(
             String deliveryNo, long callerUserNo, DeliveryCompleteReq req) {
         validateDeliveredMethod(req.deliveredMethod()); // reviewer W-4 정정 — 화이트리스트 검증
-        return performRiderTransition(deliveryNo, DeliveryStatus.DELIVERED, callerUserNo,
+        DeliveryTransitionResult result = performRiderTransition(deliveryNo, DeliveryStatus.DELIVERED, callerUserNo,
                 d -> d.markDelivered(req.deliveredMethod(), req.deliveredPhotoUrl()));
+        settlementService.recalculateThisWeek(result.riderNo());
+        return result;
     }
 
     /**
@@ -431,6 +563,48 @@ public class DeliveryService {
                     "deliveredMethod는 DIRECT/CUSTOMER_REQUEST/CUSTOMER_ABSENT 중 하나입니다.",
                     HttpStatus.BAD_REQUEST);
         }
+    }
+
+    /**
+     * 좌표 기반 추가 배달료 산출 (2026-05-19 박제).
+     * extra_fee = ceil(거리_km) * FEE_PER_KM. Haversine 직선 거리, SettlementService.distanceM 패턴 일관.
+     * 좌표 NULL시 0 fallback + log.warn (운영 무음 손실 추적, W-3).
+     */
+    private int computeExtraFee(Long orderId, Double pickupLat, Double pickupLng, Double deliveryLat, Double deliveryLng) {
+        if (pickupLat == null || pickupLng == null || deliveryLat == null || deliveryLng == null) {
+            log.warn("extraFee=0 fallback: orderId={} 좌표 누락 (pickup=({},{}), delivery=({},{}))",
+                    orderId, pickupLat, pickupLng, deliveryLat, deliveryLng);
+            return 0;
+        }
+        double phi1 = Math.toRadians(pickupLat);
+        double phi2 = Math.toRadians(deliveryLat);
+        double dPhi = Math.toRadians(deliveryLat - pickupLat);
+        double dLambda = Math.toRadians(deliveryLng - pickupLng);
+        double a = Math.sin(dPhi / 2) * Math.sin(dPhi / 2)
+                + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        double distanceM = EARTH_RADIUS_M * c;
+        if (distanceM <= 0) return 0;
+        int km = (int) Math.ceil(distanceM / 1000.0);
+        return km * FEE_PER_KM;
+    }
+
+    /**
+     * Admin 모니터용 표시 거리 (km, 소수 1자리). Haversine 직선, computeExtraFee 공식 인용.
+     * 좌표 NULL시 null 반환 (FE "-" 표시 — log 없음, 화면 정보성 박제).
+     */
+    private Double computeDistanceKm(Delivery d) {
+        Double lat1 = d.getPickupLat(), lng1 = d.getPickupLng();
+        Double lat2 = d.getDeliveryLat(), lng2 = d.getDeliveryLng();
+        if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return null;
+        double phi1 = Math.toRadians(lat1);
+        double phi2 = Math.toRadians(lat2);
+        double dPhi = Math.toRadians(lat2 - lat1);
+        double dLambda = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dPhi / 2) * Math.sin(dPhi / 2)
+                + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return Math.round(EARTH_RADIUS_M * c / 100.0) / 10.0;  // 100m 단위 반올림 → km 소수 1자리
     }
 
     /**
@@ -492,7 +666,8 @@ public class DeliveryService {
                 d.getDeliveryNo(), d.getOrderId(), d.getStatus().name(),
                 d.getPickupAddress(), d.getPickupLat(), d.getPickupLng(), d.getPickupPhone(),
                 d.getDeliveryAddress(), d.getDeliveryLat(), d.getDeliveryLng(), d.getCustomerPhone(),
-                d.getBaseFee(), d.getExtraFee(), d.getAssignedAt());
+                d.getBaseFee(), d.getExtraFee(), d.getAssignedAt(),
+                d.getOrderRequest(), d.getRiderRequest());
     }
 
     /** delivery_no 자동 생성 — 5자리 timestamp + 3자리 영문 (interfaces.md §1.1 박제 형식 예시 일관). */

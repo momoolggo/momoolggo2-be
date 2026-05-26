@@ -13,6 +13,10 @@ import org.springframework.web.bind.annotation.*;
 )
 public interface RiderFeignClient {
 
+    /**
+     * 배차 요청 — interfaces.md §1.1 (case-#33-후속 정정 2026-05-17, Q-A9.a (β+δ)).
+     * req.riderNo null/0 = 라이더 풀 (WAITING_ASSIGN), 명시 = 강제 배차. team-handoff §8 박제 우선.
+     */
     @PostMapping("/internal/rider/assign")
     RiderAssignRes assignRider(@RequestBody RiderAssignReq req);
 

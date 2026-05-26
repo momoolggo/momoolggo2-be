@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.green.mmg.main.chatbot.stats.ChatbotStatsMapper">
+
+    <!-- Lv.5~9 트렌드: 오늘 인기 카테고리 (확정 주문) TOP N -->
+    <select id="findTodayTopCategories" resultType="map">
+        SELECT c.category_name AS categoryName, COUNT(*) AS cnt
+        FROM orders o
+        JOIN store_category sc ON sc.store_id = o.store_id
+        JOIN category c       ON c.category_id = sc.category_id
+        WHERE DATE(o.order_time) = CURDATE()
+          AND o.order_state &gt;= 3
+        GROUP BY c.category_name
+        ORDER BY cnt DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- Lv.10+ 개인화: 최근 30일 사용자 빈도 카테고리 TOP N -->
+    <select id="findUserRecentTopCategories" resultType="map">
+        SELECT c.category_name AS categoryName, COUNT(*) AS cnt
+        FROM orders o
+        JOIN store_category sc ON sc.store_id = o.store_id
+        JOIN category c       ON c.category_id = sc.category_id
+        WHERE o.user_no = #{userNo}
+          AND o.order_time &gt;= #{since}
+          AND o.order_state &gt;= 3
+        GROUP BY c.category_name
+        ORDER BY cnt DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

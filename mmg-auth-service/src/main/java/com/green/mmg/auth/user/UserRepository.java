@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -15,7 +16,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByUserId(String userId);
 
+    Optional<User> findByEmail(String email);
+
     boolean existsByUserId(String userId);
+
+    boolean existsByEmail(String email);
+
+    Optional<User> findFirstByNameAndTelAndRoleIn(String name, String tel, Collection<String> roles);
+
+    Optional<User> findFirstByNameAndTelAndEmailAndRoleIn(String name, String tel, String email, Collection<String> roles);
+
+    Optional<User> findByUserIdAndNameAndTelAndEmailAndRoleIn(String userId, String name, String tel, String email, Collection<String> roles);
 
     /** Internal API 단건 — UserBriefDto.address는 항상 "" (main이 자체 채움) */
     @Query("""
@@ -49,6 +60,25 @@ public interface UserRepository extends JpaRepository<User, Long> {
 """)
     Page<User> findAllByRole(@Param("role") String role, Pageable pageable);
 
+    // 관리자 회원 검색 (userId, name, 날짜 범위 포함)
+    @Query("""
+        SELECT u FROM User u
+        WHERE (:role IS NULL OR u.role = :role)
+        AND (:userId IS NULL OR u.userId LIKE CONCAT('%', :userId, '%'))
+        AND (:name IS NULL OR u.name LIKE CONCAT('%', :name, '%'))
+        AND (:startDate IS NULL OR u.createdAt >= :startDate)
+        AND (:endDate IS NULL OR u.createdAt < :endDate)
+        ORDER BY u.createdAt DESC
+        """)
+    Page<User> findAllByFilters(
+        @Param("role") String role,
+        @Param("userId") String userId,
+        @Param("name") String name,
+        @Param("startDate") Date startDate,
+        @Param("endDate") Date endDate,
+        Pageable pageable
+    );
+
     @Query("""
         SELECT u
         FROM User u
@@ -64,5 +94,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("SELECT u.userNo FROM User u WHERE u.role = :role")
     List<Long> findAllUserNosByRole(@Param("role") String role);
+
+    @Query("""
+    SELECT u.userNo
+    FROM User u 
+    WHERE u.role = 'OWNER'
+     AND (:userId IS NULL OR :userId = '' OR u.userId LIKE CONCAT('%', :userId, '%'))
+     AND (:name IS NULL OR :name = '' OR u.name LIKE CONCAT('%', :name, '%'))
+""")
+
+    List<Long> findOwnerUserNosBySearch(@Param("userId") String userId, @Param("name") String name);
 
 }

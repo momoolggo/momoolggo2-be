@@ -1,9 +1,7 @@
 package com.green.mmg.auth.internal;
 
-import com.green.mmg.auth.internal.dto.InternalAdminUserRes;
-import com.green.mmg.auth.internal.dto.InternalUserApprovalReq;
-import com.green.mmg.auth.internal.dto.InternalUserDetailRes;
-import com.green.mmg.auth.internal.dto.InternalUserSuspensionReq;
+import com.green.mmg.auth.internal.dto.*;
+import com.green.mmg.auth.mail.EmailService;
 import com.green.mmg.auth.user.UserRepository;
 import com.green.mmg.auth.user.model.User;
 import com.green.mmg.common.dto.ResultResponse;
@@ -11,6 +9,7 @@ import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -35,11 +34,13 @@ import java.util.List;
  * 응답 형식: 모든 endpoint는 공통 래퍼 ResultResponse<T>로 통일.
  */
 @RestController
+@Slf4j
 @RequestMapping("/internal/auth")
 @RequiredArgsConstructor
 public class InternalUserController {
 
     private final UserRepository userRepository;
+    private final EmailService emailService;
 
     /** 단건 조회 — 가게 상세에 사장 이름 등 1명에 대한 fetch */
     @Transactional(readOnly = true)
@@ -48,6 +49,14 @@ public class InternalUserController {
         UserBriefDto user = userRepository.findBriefByUserNo(userNo)
                 .orElseThrow(() -> new ResourceNotFoundException("user not found: " + userNo));
         return new ResultResponse<>("유저 조회 완료", user);
+    }
+
+    /** 가게 검색 API */
+    @Transactional(readOnly = true)
+    @GetMapping("/owners/search")
+    public ResultResponse<List<Long>> searchOwnerNos(@RequestParam(required = false) String userId,
+                                                     @RequestParam(required = false) String name) {
+        return new ResultResponse<>("검색 완료", userRepository.findOwnerUserNosBySearch(userId, name));
     }
 
     /** Batch 조회 — N+1 회피용 (1회 호출 최대 100개 권장) */
@@ -97,17 +106,39 @@ public class InternalUserController {
                 user.getName(),
                 user.getTel(),
                 user.getGreen(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getStatus()
         ));
     }
-    /** 회원 목록 조회 */
+    /** 회원 목록 조회 (검색 조건 포함) */
     @Transactional(readOnly = true)
     @GetMapping("/users/list")
     public ResultResponse<Page<InternalAdminUserRes>> getUserList(
             @RequestParam(required = false) String role,
-            @RequestParam(defaultValue =  "0") int page) {
-        Page<User> users = userRepository.findAllByRole(role, PageRequest.of(page,10));
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        boolean hasSearch = notBlank(userId) || notBlank(name) || notBlank(startDate) || notBlank(endDate);
+        Page<User> users = hasSearch
+                ? userRepository.findAllByFilters(
+                        role, blank2null(userId), blank2null(name),
+                        parseDateStart(startDate), parseDateEnd(endDate),
+                        PageRequest.of(page, 10))
+                : userRepository.findAllByRole(role, PageRequest.of(page, 10));
         return new ResultResponse<>("회원 목록 조회완료", users.map(InternalAdminUserRes::from));
+    }
+
+    private boolean notBlank(String s) { return s != null && !s.isBlank(); }
+    private String blank2null(String s) { return notBlank(s) ? s : null; }
+    private Date parseDateStart(String dateStr) {
+        if (!notBlank(dateStr)) return null;
+        return Date.from(LocalDate.parse(dateStr).atStartOfDay(ZoneId.systemDefault()).toInstant());
+    }
+    private Date parseDateEnd(String dateStr) {
+        if (!notBlank(dateStr)) return null;
+        return Date.from(LocalDate.parse(dateStr).plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant());
     }
 
     /** 승인대기 회원 조회 */
@@ -128,15 +159,53 @@ public class InternalUserController {
         User user = userRepository.findById(userNo)
                 .orElseThrow(() -> new ResourceNotFoundException("user not found: " + userNo));
 
-            if (!"ACTIVE".equals(req.getStatus()) && !"REJECTED".equals(req.getStatus())) {
-                throw new BusinessException("status는 ACTIVE 또는 REJECTED만 가능합니다.", HttpStatus.BAD_REQUEST);
+            // PENDING은 ADR-001 (D) 라이더 통합 승인 보상용 (admin-service RiderApprovalService 호출). 일반 회원 승인 흐름에서는 사용 X.
+            if (!"ACTIVE".equals(req.getStatus()) && !"REJECTED".equals(req.getStatus()) && !"PENDING".equals(req.getStatus())) {
+                throw new BusinessException("status는 ACTIVE/REJECTED/PENDING(보상용)만 가능합니다.", HttpStatus.BAD_REQUEST);
 
             }
 
             user.setStatus(req.getStatus());
             user.setProcessMemo(req.getReason());
+            sendRejectionEmailIfNeeded(user, req);
+
 
             return new ResultResponse<>("승인상태 변경 완료", null);
+
+    }
+
+    private void sendRejectionEmailIfNeeded(User user, InternalUserApprovalReq req) {
+        if (!"REJECTED".equals(req.getStatus())) {
+            return;
+        }
+
+        if (!"OWNER".equals(user.getRole()) && !"RIDER".equals(user.getRole())) {
+            return;
+        }
+
+        log.info("반려 메일 발송 시도: userNo={}, role={}, email={}, reason={}",
+                user.getUserNo(), user.getRole(), user.getEmail(), req.getReason());
+
+        emailService.sendApprovalRejected(
+                user.getEmail(),
+                user.getName(),
+                user.getRole(),
+                req.getReason()
+        );
+    }
+
+    /**
+     * 회원 삭제 — admin cascade 흐름 (admin-service AdminUserController.deleteUser 호출 체인).
+     * MSA 박제: rider.rider는 별 schema라 DB 자동 cascade X. admin이 rider 먼저 삭제 후 본 endpoint 호출.
+     */
+    @Transactional
+    @DeleteMapping("/user/{userNo}")
+    public ResultResponse<Void> deleteUser(@PathVariable long userNo) {
+        if (!userRepository.existsById(userNo)) {
+            throw new ResourceNotFoundException("user not found: " + userNo);
+        }
+        userRepository.deleteById(userNo);
+        return new ResultResponse<>("회원 삭제 완료", null);
     }
 
     /** 계정 정지 완료 */
@@ -186,4 +255,41 @@ public class InternalUserController {
         return new ResultResponse<>("일별 신규 가입자 조회 완료",
                 userRepository.countByCreatedAtBetween(start, end));
     }
+
+    @Transactional(readOnly = true)
+    @GetMapping("/stats/new-users/range")
+    public ResultResponse<Long> getNewUsersByRange(@RequestParam String start,
+                                                   @RequestParam String end) {
+        LocalDate startDate = LocalDate.parse(start);
+        LocalDate endDate = LocalDate.parse(end);
+
+        Date from = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+        Date to = Date.from(endDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+        return new ResultResponse<>("기간별 신규 가입자 조회 완료",
+                userRepository.countByCreatedAtBetween(from, to));
     }
+
+    /**  친환경(그린포인트)  */
+    @Transactional
+    @PostMapping("/user/{userNo}/greenpoint")
+    public  ResultResponse<Integer> addGreenPoint(@PathVariable long userNo,
+                                                  @RequestBody InternalGreenPointAddReq req){
+        User user = userRepository.findById(userNo)
+                .orElseThrow(() -> new BusinessException("user not found:" + userNo));
+
+        if (!"CUSTOMER".equals(user.getRole())) {
+            throw new BusinessException("친환경 점수는 고객만 적립할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        int point = req.point() == null ? 0 : req.point();
+        if (point <= 0) {
+            throw new BusinessException("적립 포인트는 1 이상이어야 합니다", HttpStatus.BAD_REQUEST);
+        }
+
+        int currentGreen = user.getGreen() == null ? 0 : user.getGreen();
+        user.setGreen(currentGreen + point);
+
+        return new ResultResponse<>("그린포인트 적립 완료", user.getGreen());
+    }
+}

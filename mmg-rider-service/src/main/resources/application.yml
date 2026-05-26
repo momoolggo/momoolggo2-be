@@ -34,14 +34,6 @@ spring.cloud.openfeign.client.config.default:
   connectTimeout: 3000
   readTimeout: 5000
 
-# === D11 임시 운영 (admin-service 도입 전) ===
-# auto-approve: 가입 직후 자동 ACTIVE 전환
-# - local / dev / 학원 발표: true
-# - prod (admin 도입 후): false
-# 관련 ADR: docs/adr/rider/ADR-001-service-boundary.md "임시 운영" 섹션
-rider:
-  auto-approve: true
-
 # mmg-common ConstJwt 바인딩용 — JWT secret만 .env에서 (시크릿)
 constants:
   jwt:

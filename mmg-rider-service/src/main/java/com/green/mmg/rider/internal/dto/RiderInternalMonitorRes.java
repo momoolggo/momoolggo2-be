@@ -18,21 +18,24 @@ import java.util.List;
  */
 public record RiderInternalMonitorRes(
         Summary summary,
-        List<DeliveryRow> deliveries
+        List<DeliveryRow> deliveries,
+        int totalPages,
+        long totalElements
 ) {
     public record Summary(long waiting, long assigned, long delivering, long completed) {}
 
     public record DeliveryRow(
             String deliveryNo,
-            String orderId,
+            Long orderId,
             Long riderNo,
             String status,
             Integer baseFee,
             Integer extraFee,
             LocalDateTime assignedAt,
             LocalDateTime deliveredAt,
-            String storeName,        // 관리자 배달관리 추가
-            Integer elapsedMinutes,  // 추가
-            Double distanceKm // 추가
+            String storeName,        // 정산 시연 UX 트랙 #6 (2026-05-21) — delivery.store_name 스냅샷
+            Integer elapsedMinutes,
+            Double distanceKm,       // 정산 시연 UX 트랙 #7 (2026-05-21) — Haversine 직선 km
+            String riderPhone        // 정산 시연 UX 트랙 #9 (2026-05-21, 옵션 A) — rider.phone 스냅샷
     ) {}
 }

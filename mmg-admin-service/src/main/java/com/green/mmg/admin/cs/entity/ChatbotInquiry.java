@@ -48,4 +48,11 @@ public class ChatbotInquiry extends BaseEntity {
         this.answeredAt = LocalDateTime.now();
         this.state = InquiryStatus.RESOLVED;
     }
+
+    public ChatbotInquiry(Long userNo, InquiryUserType category, String content) {
+        this.userNo = userNo;
+        this.category = category;
+        this.content = content;
+        this.state = InquiryStatus.PENDING;
+    }
 }

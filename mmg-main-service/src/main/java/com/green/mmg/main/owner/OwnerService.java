@@ -1,9 +1,17 @@
 package com.green.mmg.main.owner;
 
 
+import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.feign.AuthFeignClient;
+import com.green.mmg.main.feign.RiderFeignClient;
+import com.green.mmg.main.feign.model.RiderAssignReq;
+import com.green.mmg.main.notification.NotificationService;
+import com.green.mmg.main.notification.model.NotificationCreateReq;
+import com.green.mmg.main.order.OrderRepository;
+import com.green.mmg.main.order.model.Orders;
 import com.green.mmg.main.owner.entity.MenuOption;
 import com.green.mmg.main.owner.entity.MenuOptionCategory;
 import com.green.mmg.main.owner.model.*;
@@ -15,13 +23,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.awt.*;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,8 +39,24 @@ public class OwnerService {
 
     private final OwnerMapper ownerMapper;
     private final AuthFeignClient authFeignClient;   // Phase 4-A: cross-schema customerName/tel 합성
+    private final RiderFeignClient riderFeignClient; // Phase 5+ Group 4: 점주 수락 시점 자동 배차 트리거 (team-handoff §8)
     private final MenuOptionRepository menuOptionRepository;
     private final MenuOptionCategoryRepository menuOptionCategoryRepository;
+    private final AdminFeignClient adminFeignClient;
+    private final OwnerOrderSseService ownerOrderSseService;
+    private final OrderRepository orderRepository;
+    private final NotificationService notificationService;
+
+    private static final int IMAGE_MAX_WIDTH = 1200;
+    private static final int IMAGE_MAX_HEIGHT = 1200;
+    private static final double IMAGE_QUALITY = 0.82;
+    private static final String OPTIMIZED_IMAGE_EXTENSION = ".jpg";
+
+    // ORDER_STATE 매핑 (CLAUDE.md §7) — 본 작업 A Group 4에서 3(조리중) 진입 시점만 인용.
+    // Q-A9.d (ii) 일관: order_state=4/5 변경 책임 추가 X (admin 시연 수동 변경 가능, ADR-004 박제 범위 좁힘).
+    private static final int ORDER_STATE_COOKING = 3;
+    // 2026-05-25 9건 트랙 — 사장 "배차 신청" 명시 클릭 시점에만 라이더 풀 트리거 (이전: 주문 수락=3 시점 자동)
+    private static final int ORDER_STATE_RIDER_REQUESTED = 4;
 
     // ========== 이미지 업로드 (공통) ==========
 
@@ -48,15 +72,22 @@ public class OwnerService {
             }
 
             File dir = new File(uploadPath);
-            if (!dir.exists()) dir.mkdirs();
+            if (!dir.exists() && !dir.mkdirs()) {
+                throw new UncheckedIOException(new IOException("upload directory creation failed"));
+            }
 
-            String originalName = file.getOriginalFilename();
-            String fileName = UUID.randomUUID() + "_" + originalName;
-            File savedFile = new File(uploadPath + fileName);
+            BufferedImage image = ImageIO.read(file.getInputStream());
+            if (image == null) {
+                throw new IllegalArgumentException("이미지 파일만 업로드 가능합니다.");
+            }
 
-            Thumbnails.of(file.getInputStream())
-                    .size(800, 600)
-                    .outputQuality(0.8)
+            String fileName = UUID.randomUUID() + OPTIMIZED_IMAGE_EXTENSION;
+            File savedFile = new File(dir, fileName);
+
+            Thumbnails.of(image)
+                    .size(IMAGE_MAX_WIDTH, IMAGE_MAX_HEIGHT)
+                    .outputFormat("jpg")
+                    .outputQuality(IMAGE_QUALITY)
                     .toFile(savedFile);
 
             log.info("이미지 저장 완료: {}", savedFile.getAbsolutePath());
@@ -75,6 +106,8 @@ public class OwnerService {
         if (!Objects.equals(dto.getUserId(), callerOwnerNo)) {
             throw new BusinessException("자신의 계정으로만 가게를 등록할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
+
+
         log.info("가게 등록 로직 시작: {}", dto.getStoreName());
         int result = ownerMapper.registerStore(dto);
         if (result == 0) {
@@ -160,9 +193,55 @@ public class OwnerService {
     @Transactional
     public void updateOrderState(long callerOwnerNo, OwnerOrderStateReq req){
         verifyOrderOwner(callerOwnerNo, req.getOrderId());
+        Orders order = orderRepository.findById(req.getOrderId())
+                .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다."));
+        Integer previousOrderState = order.getOrderState();
+
         int result = ownerMapper.updateOrderState(req);
         if (result == 0){
             throw new RuntimeException("주문 상태 변경 실패: 주문을 찾을 수 없습니다.");
+        }
+
+        // 점주가 주문을 수락해 조리중으로 처음 진입한 시점에 고객 내부 알림을 저장한다.
+        // SSE 실시간 수신을 놓치거나 재로그인하더라도 알림 목록 조회로 다시 확인할 수 있다.
+        if (!Objects.equals(previousOrderState, ORDER_STATE_COOKING)
+                && req.getOrderState() == ORDER_STATE_COOKING) {
+            sendOrderAcceptedNotification(order);
+        }
+
+        // 2026-05-25 9건 트랙 정정 — state 3(주문 수락)이 아닌 state 4(배차 신청)에서만 트리거.
+        // 사장이 "배차 신청" 버튼을 명시적으로 눌러야 라이더 풀에 INSERT + 라이더 SSE 발송.
+        // best-effort try-catch — 배차 실패해도 order_state 전환은 성공.
+        if (req.getOrderState() == ORDER_STATE_RIDER_REQUESTED) {
+            triggerRiderAssign(req.getOrderId());
+        }
+    }
+
+    private void sendOrderAcceptedNotification(Orders order) {
+        notificationService.createNotification(new NotificationCreateReq(
+                order.getUserNo(),
+                "ORDER_STATUS",
+                "주문이 수락되었습니다.",
+                "가게에서 주문을 확인하고 조리를 시작했습니다.",
+                "/order/history/" + order.getOrderId()
+        ));
+    }
+
+    /**
+     * 점주 수락 시점 라이더 배차 트리거 — interfaces.md §1.1 박제 + team-handoff §8.
+     * OwnerMapper.findStoreInfoByOrderId가 RiderAssignReq 14 필드 매핑 (Q-A9.e (나) NULL/0 패스 일관).
+     * Phase 6 outbox 검토 (보상 트랜잭션) — 현재는 best-effort.
+     */
+    private void triggerRiderAssign(long orderId) {
+        try {
+            RiderAssignReq req = ownerMapper.findStoreInfoByOrderId(orderId);
+            if (req == null) {
+                log.warn("배차 트리거 skip: orderId={} — store/orders 조회 결과 부재", orderId);
+                return;
+            }
+            riderFeignClient.assignRider(req);
+        } catch (Exception e) {
+            log.warn("배차 트리거 실패 (order_state=3 전환은 성공): orderId={}, ex={}", orderId, e.getMessage());
         }
     }
 
@@ -171,6 +250,11 @@ public class OwnerService {
         verifyOrderOwner(callerOwnerNo, orderId);
         ownerMapper.deleteOrderDetail(orderId);
         ownerMapper.deleteOrder(orderId);
+    }
+
+    @Transactional(readOnly = true)
+    public void validateStoreOwner(long ownerNo, Long storeId) {
+        verifyStoreOwner(ownerNo, storeId);
     }
 
     // ========== 메뉴 관련 (D-bis 그룹 ㄷ: 권한 분기 추가) ==========
@@ -286,7 +370,22 @@ public class OwnerService {
     @Transactional(readOnly = true)
     public List<OwnerMenuRes> getMenusByStoreId(long callerOwnerNo, Long storeId) {
         verifyStoreOwner(callerOwnerNo, storeId);
-        return ownerMapper.getMenusByStoreId(storeId);
+
+        List<OwnerMenuRes> menus = ownerMapper.getMenusByStoreId(storeId);
+
+        for (OwnerMenuRes menu : menus) {
+            List<MenuOptionCategory> categories = menuOptionCategoryRepository.findByMenuId(menu.getMenuId());
+
+            List<OwnerMenuOptionCategoryRes> optionCategories = categories.stream()
+                    .map(category -> {
+                        List<MenuOption> options = menuOptionRepository.findByOptionCategoryNo(category.getOptionCategoryNo());
+                        return OwnerMenuOptionCategoryRes.from(category, options);
+                    })
+                    .toList();
+            menu.setOptionCategories(optionCategories);
+        }
+
+        return menus;
     }
 
     // ========== 매출 관련 (D-bis 그룹 ㄹ: 권한 분기 추가) ==========
@@ -393,4 +492,18 @@ public class OwnerService {
         verifyCategoryOwner(callerOwnerNo, categoryId);
         ownerMapper.deleteCategory(categoryId);
     }
+    // 사장님 정산 내역 조회
+    public List<Object> getMySettlements(Long userNo, Long storeId) {
+        verifyStoreOwner(userNo, storeId);
+        ResultResponse<List<Object>> res = adminFeignClient.getSettlementsByStore(storeId);
+        return res.getResultData() != null ? res.getResultData() : new ArrayList<>();
+    }
+
+    public void submitSettlementInquiry(Long userNo, String content) {
+        adminFeignClient.createInquiry(Map.of(
+                "userNo", userNo,
+                "content", content
+        ));
+    }
+
 }

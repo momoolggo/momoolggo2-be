@@ -74,9 +74,7 @@ class WorkSessionServiceIntegrationTest {
                 "국민은행",
                 "110-987-654321",
                 "홍길동");
-        if (initial == RiderStatus.ACTIVE || initial == RiderStatus.EATING) {
-            rider.approve();
-        }
+        // SSE 자동화 트랙(2026-05-21) — 가입 시 ACTIVE 직접 박제. PENDING 시드 분기 폐기.
         if (initial == RiderStatus.EATING) {
             rider.toggleEating();
         }
@@ -85,13 +83,13 @@ class WorkSessionServiceIntegrationTest {
 
     private Delivery seedDelivery(Long riderNo, DeliveryStatus status) {
         String deliveryNo = "IT" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-        String orderId = "OR" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        Long orderId = System.nanoTime();
         Delivery delivery = new Delivery(
                 deliveryNo, orderId,
                 "010-1111-1111", "010-2222-2222",
                 "가게 주소", 37.5665, 126.978,
                 "손님 주소", 37.5670, 126.979,
-                3000);
+                3000, 0);
         delivery.assignRider(riderNo);
         delivery.changeStatus(status, LocalDateTime.now());
         return deliveryRepository.saveAndFlush(delivery);
@@ -105,7 +103,8 @@ class WorkSessionServiceIntegrationTest {
         em.clear();
 
         RiderInternalAssignReq req = new RiderInternalAssignReq(
-                "OR" + UUID.randomUUID().toString().substring(0, 6).toUpperCase(),
+                System.nanoTime(),
+                eating.getRiderNo(),
                 1L, "가게이름", "가게 주소",
                 37.5665, 126.978,
                 "010-1111-1111",
@@ -113,7 +112,7 @@ class WorkSessionServiceIntegrationTest {
                 "010-2222-2222",
                 3000, 0);
 
-        assertThatThrownBy(() -> deliveryService.assignDelivery(eating.getRiderNo(), req))
+        assertThatThrownBy(() -> deliveryService.assignDelivery(req))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("배차 가능 상태가 아닙니다")
                 .hasMessageContaining("EATING");

@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude_ai_Notion__notion-fetch",
+      "Bash(./gradlew :mmg-admin-service:compileJava -x test)",
+      "Bash(./gradlew :mmg-auth-service:compileJava :mmg-main-service:compileJava -x test)",
+      "mcp__claude_ai_Notion__notion-search",
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "Bash(npm install *)",
+      "Bash(./gradlew :mmg-rider-service:test --tests \"com.green.mmg.rider.rider.RiderServiceTest\")",
+      "Bash(git stash *)",
+      "Bash(./gradlew :mmg-rider-service:compileTestJava)",
+      "Bash(./gradlew :mmg-rider-service:compileJava)",
+      "Bash(./gradlew :mmg-admin-service:compileJava)",
+      "Bash(npm list *)"
+    ]
+  }
+}

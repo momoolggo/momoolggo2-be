@@ -1,9 +1,11 @@
 package com.green.mmg.main.order;
 
+import com.green.mmg.main.internal.dto.InternalSettlementOrderRes;
 import com.green.mmg.main.order.model.*;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -22,4 +24,15 @@ public interface OrderMapper {
     List<OrderHistoryDto> findOrdersByUserId(OrderHistoryReq req);
     OrderHistoryDto orderHistoryDetail(long id);
     int calSumOrder(@Param("storeId") long storeId);
+
+    List<InternalSettlementOrderRes> findSettlementOrderDetails(@Param("storeId") long storeId,
+                                                                @Param("start")LocalDateTime start,
+                                                                @Param("end") LocalDateTime end);
+
+    Long sumSettlementSales(@Param("storeId") Long storeId,
+                            @Param("start") LocalDateTime start,
+                            @Param("end") LocalDateTime end);
+
+    /** 2026-05-25 9건 트랙 정정 — 거리 기반 배달팁용 가게 좌표 조회 */
+    java.util.Map<String, Object> findStoreCoord(@Param("storeId") Long storeId);
 }

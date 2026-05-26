@@ -100,58 +100,38 @@
 
 ---
 
-## 임시 운영 (admin-service 도입 전) — D11
+## 임시 운영 (admin-service 도입 전) — D11 (영구 폐기 2026-05-21)
 
-Q2-B 결정 (PENDING → admin 승인 → ACTIVE)은 admin-service의 승인 endpoint
-(`POST /internal/rider/{riderNo}/approve`, interfaces.md §3.1)에 의존한다.
+**상태**: ✅ 영구 폐기 (SSE 자동화 트랙, 2026-05-21).
 
-**제약**: admin-service는 다른 팀원 작업 영역으로 현재 상태 미상. 충돌 회피 위해
-rider-service에서는 admin-service에 어떤 endpoint도 추가/수정/삭제하지 않는다.
+**경위**: Q2-B 결정(PENDING → admin 승인 → ACTIVE)을 위해 admin-service의 승인 endpoint
+(`POST /internal/rider/{riderNo}/approve`, interfaces.md §3.1)에 의존하는 흐름을 임시 우회용 `rider.auto-approve` toggle로 박제했음. 그러나 사용자 결정(2026-05-21) — "두 번 인증 흐름 자체 불필요. 가입 즉시 ACTIVE 단일화".
 
-### 임시 처리 (D11 옵션 A-1: profile toggle)
+### 폐기 내용
 
-`rider-service` `application.yml`에 `rider.auto-approve` toggle 추가:
-- 개발 / 학원 발표: `true` → 가입 직후 자동 ACTIVE 전환
-- 운영 (admin 도입 후): `false` → PENDING 정상 흐름, admin approve 대기
+| 항목 | 이전 박제 | 이후 |
+|---|---|---|
+| `rider.auto-approve` toggle | dev true / prod false | **제거** (Rider 생성자에서 status=ACTIVE 직접 박제) |
+| `RiderService.joinProfile` autoApprove 분기 | toggle 검사 + approve 호출 | **제거** |
+| `Rider.approve()` 메서드 | PENDING → ACTIVE 전이 검증 | **제거** |
+| `Rider.suspend()` 메서드 | ?→SUSPENDED 전이 검증 | **제거** |
+| `RiderService.approveRider/suspendRider` | admin 승인/제재 처리 | **제거** |
+| `RiderInternalController` `/approve/suspend` endpoint | admin Feign 호출 wrapper | **제거** |
+| `RiderApproveReq/RiderSuspendReq` DTO | endpoint Body | **삭제** |
+| admin `RiderApprovalController` + `RiderFeignClient.approveRider/suspendRider` | admin 외부 PATCH + Feign | **삭제** (SSE 트랙 admin 정리 커밋 a781c2b) |
+| `RiderProperties` 클래스 | autoApprove toggle 박제 | **삭제** (사용처 0) |
+| `RiderStatus.PENDING/SUSPENDED` enum 값 | 신원 승인/제재 상태 | **보존** (DB 정합 + DeliveryService/WorkSessionService/LocationService의 거부 검증 의도) |
 
-`RiderService.join()` 내 명시적 블록 + TODO 주석 (Phase 5-R1에서 구현):
+### 보존 의도
 
-```java
-public void join(RiderProfileRequest req, long callerUserNo) {
-    Rider rider = new Rider(callerUserNo, req);
-    rider.setStatus(RiderStatus.PENDING);
-    rider = riderRepository.save(rider);
+- Rider 생성자: `status = RiderStatus.ACTIVE` 직접 박제 (가입 즉시 활성).
+- enum PENDING/SUSPENDED: 학원 DB 기존 데이터 정합 + 단위 테스트에서 거부 검증 mock으로 사용. 미래 회원 정지 흐름(user.status SUSPENDED) 동기화 도입 시 SUSPENDED 재활용 가능.
 
-    // === 임시: admin-service 미도입 시 자동 ACTIVE (D11 옵션 A-1) ===
-    // TODO: admin-service approve endpoint 도입 후 이 블록 제거
-    //       + application.yml `rider.auto-approve: false`
-    if (riderProperties.isAutoApprove()) {
-        rider.setStatus(RiderStatus.ACTIVE);
-        riderRepository.save(rider);
-    }
-}
-```
+### 관련 커밋
 
-```yaml
-# rider-service application.yml
-rider:
-  auto-approve: ${RIDER_AUTO_APPROVE:true}   # 개발/발표 기본 true, 운영 false
-```
-
-### admin 통합 시점 (해소 절차)
-
-admin-service의 승인 endpoint 도입 시:
-1. `application.yml`: `rider.auto-approve: false`
-2. `RiderService.join()` 내 임시 블록 제거 (TODO 주석 trigger)
-3. PENDING 상태 라이더는 admin approve 후 ACTIVE 전환 — interfaces.md §3.1 그대로 활용
-4. tech-debt 해소 표시 — 본 D11 임시 처리 완료
-
-**중요**: 이 임시 처리는 **Q2-C(자동 승인) 결정 변경이 아닌 Q2-B 흐름의 임시 우회**.
-PENDING 상태 자체는 정상 저장되어 admin endpoint 도입 시 즉시 통합 가능.
-
-### tech-debt 등재
-
-- D11 임시 처리 — admin-service approve endpoint 도입 후 `rider.auto-approve: false` 전환 + 임시 블록 제거 (Phase 5 admin-service 진행 동기화 시점)
+- BE rider: SSE 자동화 트랙 Phase 1-A `5ce412e` (auto-approve true), 본 트랙 (Rider entity + RiderService + Controller + Properties + 테스트 정리)
+- BE admin: `a781c2b` (RiderApprovalController/Service approve 흐름 + Feign + DTO 폐기)
+- FE: `01a816c` (AdminRiderView 삭제 + adminService.js 4 API)
 
 ---
 
@@ -161,3 +141,108 @@ PENDING 상태 자체는 정상 저장되어 admin endpoint 도입 시 즉시 �
 - `feedback_verify_diagnostic_assumptions.md` — Role enum 부재 검증 (정정 #6)
 - `project_phase4a_backfill_state.md` — InternalUserController 패턴 재사용 근거
 - `project_phase_rider_cleanup_state.md` — D11 결정 박제 (admin 의존성 우회)
+
+---
+
+# ADR-001 (D) — 회원/라이더 승인 통합 (2026-05-19 신설, supersedes (C) 승인 분리 부분)
+
+## Status
+
+Accepted (2026-05-19). **(C)의 "테이블 분리 + DB 트랜잭션 분리" 박제는 그대로 유지**, **"승인 흐름 2단계 분리"** 박제만 supersede.
+
+## Context
+
+(C) 채택 후 사용 검증 시점에 발견된 비즈니스 직관 위반:
+
+1. 라이더가 가입 → admin이 `/admin/user`에서 회원 승인 1회 (auth.user.status PENDING→ACTIVE) → **rider.status는 그대로 PENDING** → 라이더 화면 진입 시 "아직 승인되지 않았습니다" 화면
+2. admin이 `/admin/rider`에서 라이더 승인 추가 1회 (rider.status PENDING→ACTIVE) → 라이더 화면 정상 진입
+
+→ **admin이 같은 라이더에 대해 2번 클릭해야 활성화**. 사용자 UX 결함.
+
+(C)의 박제 의도는 "DB 트랜잭션 분리 (auth와 rider 별 트랜잭션, 사가 패턴 회피)"였으나, "비즈니스 승인 흐름도 2단계로 분리"로 잘못 확장 적용된 박제 결함. `figma-analysis.md` 사례 #15 박제.
+
+기존 박제(`RiderApprovalController.java:17` 주석)에 이미 "Q-A18 (b) cross-schema 정합성 → Phase 6+ outbox tech-debt 등재" 박제로 인지됨. (D)는 outbox 도입 없이 admin Feign 조율 + try-catch 보상으로 MVP 처리.
+
+## Decision
+
+**라이더 승인 통합** — admin 1회 클릭으로 auth.user.status + rider.status 동시 ACTIVE.
+
+**메인 흐름 — `/admin/user` 회원관리 화면 (2026-05-19 정정)**:
+
+```
+admin /admin/user 회원관리 화면에서 승인하기 버튼 클릭 (RIDER/OWNER/CUSTOMER 공통)
+   ↓
+PATCH /api/admin/user/{userNo}/approval (status=ACTIVE)
+   ↓
+admin-service AdminUserController.updateApproval
+   1. authFeign.updateApproval(userNo, ACTIVE)              ← auth.user.status PENDING→ACTIVE
+   2. status=ACTIVE면 riderApprovalService.approveByUserNoIfRider(userNo) 호출
+        ↓
+        RiderApprovalService:
+        a. riderFeign.getRiderList(null)로 userNo → riderNo 매핑 시도
+        b. 매핑 안 됨 (rider 행 없음) = 일반 회원 (CUSTOMER/OWNER) → skip (auth만으로 끝)
+        c. 매핑됨 (라이더) → riderFeign.approveRider(riderNo) 호출
+             ↓ 실패 시
+             authFeign.updateApproval(userNo, PENDING) 보상 호출
+             보상도 실패 → log.warn + admin 수동 정정 안내 (시연 시 매우 드묾)
+```
+
+**보조 흐름 — `/admin/rider` 라이더 관리 화면 (선택적 별 경로)**:
+
+```
+admin /admin/rider 화면에서 라이더 행 승인 버튼 (라이더 단독 관리 화면)
+   ↓
+PATCH /api/admin/rider/{riderNo}/approve
+   ↓
+RiderApprovalService.approveRider(riderNo)
+   - riderNo → userNo 매핑 후 auth + rider 동시 ACTIVE (동일 로직, 진입 위치만 다름)
+```
+
+> **메인 진입은 `/admin/user`**. `/admin/rider`는 라이더 단독 관리(목록/제재 등) 용도. 어느 화면이든 동일 통합 흐름 보장.
+
+DB 트랜잭션 분리(테이블 분리)는 (C) 박제 유지. 사가 인프라(Outbox/Saga) 미도입 — Phase 6+ tech-debt 일관.
+
+### 사장 도메인 (D) 적용 X — 박제 부재 근거
+
+| 박제 | 위치 | 의미 |
+|---|---|---|
+| `main-schema.sql:246-271` `store` 테이블 | line 246 | `state` 컬럼은 0종료/1오픈 (영업 상태) — 사장 프로필 status 아님 |
+| `mmg-main-service/.../owner/` grep | OwnerController/OwnerService | approve endpoint 0건 |
+| `auth.user(role=OWNER)` 단일 테이블 | `UserService.signup:65-66` 박제 | 사장은 1테이블 (auth.user)로 status 마스터 |
+
+→ 사장은 `/admin/user`에서 1회 승인으로 이미 완성 (auth.user.status ACTIVE). (D) 통합 처리 불필요. 박제 부재 시 신설은 결정 분기 (나) (`main-schema` owner 테이블 신설 + 가입 흐름 2단계 변경)으로 가능하나 학원 발표 시간 압박 부적합. 본 (D)는 라이더 전용 적용.
+
+## Consequences
+
+### 본인 영역 + 한정 권한 변경
+
+| 모듈 | 변경 | 영역 |
+|---|---|---|
+| `mmg-rider-service` | 변경 거의 없음 (RiderInternalController.approve 호출 주체만 admin 조율로) | ✅ 본인 |
+| `mmg-auth-service` | 기존 `PATCH /internal/auth/user/{userNo}/approval` 재사용 (UserApprovalReq.status로 ACTIVE/PENDING 양방향). 신설 0건 가능. | 🟡 한정 권한 (확인 후 미사용 시 권한 미발동) |
+| `mmg-admin-service` | `RiderApprovalService` 신설 (`approveRider` + `approveByUserNoIfRider`). `AdminUserController.updateApproval`에 통합 호출 추가. `RiderApprovalController.approve` 위임 | 🟡 한정 권한 |
+| FE `views/admin/AdminUserView` | **변경 0** — 기존 "승인하기" 버튼 그대로 (RIDER/OWNER/CUSTOMER 공통). BE에서 자동 통합 처리 (2026-05-19 정정) | ✅ |
+
+본 작업 종료 후 영역 매트릭스 원위치 (CLAUDE.md §3 line 91).
+
+### 박제 #34 정정 (figma-analysis.md)
+
+- 이전 박제 #34: "admin 회원관리 동작은 맞으나 해결책은 BE 수정"
+- 정정 후 (2026-05-19): "admin `/admin/user` 화면이 **모든 role(CUSTOMER/OWNER/RIDER) 통합 승인 진입점**. BE가 role 자동 판단(라이더 매핑 여부)으로 통합 처리. `/admin/rider`는 라이더 단독 관리(목록/제재) 화면이며 승인은 보조 경로."
+
+### tech-debt 등재
+
+- 보상 호출 실패 시 admin 수동 정정 — Phase 6+ Outbox/Saga 도입으로 자동화 검토
+- (D) 적용 종료 후 `RiderApprovalController.java:17` 주석의 "Q-A18 (b) outbox 위임" 의도는 유지 (보상 패턴 = MVP, Outbox = 운영)
+
+## Rejected Alternatives
+
+- **(C) 승인 분리 부분 폐기**: 위 Context 결함
+- **(E) admin 직접 양쪽 DB UPDATE**: 테이블 분리 원칙 위반, MSA 경계 침범 (CLAUDE.md §6 규칙 8)
+- **(F) Saga + Outbox**: Phase 6+ 도입 예정, MVP 과설계 (ADR-001 (A) 거부 사유 일관)
+- **(나) 사장 도메인 박제 신설**: 사장은 박제 부재 + 학원 발표 시간 압박 부적합
+
+## 관련 사례
+
+- `figma-analysis.md` 사례 #15 (2026-05-19 신설)
+- 사용자 1인칭 검증으로 발견된 비즈니스 직관 위반 패턴

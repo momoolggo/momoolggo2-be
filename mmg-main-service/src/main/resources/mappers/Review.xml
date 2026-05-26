@@ -29,6 +29,8 @@
         r.rating,
         r.contents,
         r.photo,
+        r.blinded,
+        r.blind_reason AS blindReason,
         DATE_FORMAT(r.written_at,
             CONCAT(YEAR(r.written_at), '.',
                    LPAD(MONTH(r.written_at), 2, '0'), '.',
@@ -98,12 +100,14 @@
             FROM review r
                      JOIN orders o ON o.order_id = r.order_id
             WHERE o.store_id = #{storeId}
+            AND r.blinded = false
         ),
             s.rating_count = (
                 SELECT COUNT(1)
                 FROM review r
                          JOIN orders o ON o.order_id = r.order_id
                 WHERE o.store_id = #{storeId}
+                AND r.blinded = false
             )
         WHERE s.store_id = #{storeId}
     </update>
@@ -123,6 +127,50 @@
         JOIN store s ON s.store_id = o.store_id
         ORDER BY r.written_at DESC
         LIMIT #{startIdx}, #{size}
+    </select>
+
+    <!-- 전체 리뷰 검색 (storeName, 날짜 범위) -->
+    <select id="searchInternalReviewList" resultType="com.green.mmg.main.internal.dto.InternalReviewListRes">
+        SELECT
+            r.review_id AS reviewId,
+            s.store_name AS storeName,
+            o.user_no AS userNo,
+            '' AS writer,
+            r.contents AS content,
+            r.rating AS rating,
+            r.written_at AS createdAt
+        FROM review r
+        JOIN orders o ON o.order_id = r.order_id
+        JOIN store s ON s.store_id = o.store_id
+        <where>
+            <if test="storeName != null and storeName != ''">
+                AND s.store_name LIKE CONCAT('%', #{storeName}, '%')
+            </if>
+            <if test="startDate != null and startDate != ''">
+                AND r.written_at &gt;= #{startDate}
+            </if>
+            <if test="endDate != null and endDate != ''">
+                AND r.written_at &lt;= CONCAT(#{endDate}, ' 23:59:59')
+            </if>
+        </where>
+        ORDER BY r.written_at DESC
+        LIMIT #{startIdx}, #{size}
+    </select>
+
+    <!-- 리뷰 단건 조회 (internal) -->
+    <select id="findInternalReviewById" resultType="com.green.mmg.main.internal.dto.InternalReviewListRes">
+        SELECT
+            r.review_id AS reviewId,
+            s.store_name AS storeName,
+            o.user_no AS userNo,
+            '' AS writer,
+            r.contents AS content,
+            r.rating AS rating,
+            r.written_at AS createdAt
+        FROM review r
+        JOIN orders o ON o.order_id = r.order_id
+        JOIN store s ON s.store_id = o.store_id
+        WHERE r.review_id = #{reviewId}
     </select>
 
 </mapper>

@@ -7,10 +7,16 @@ import com.green.mmg.rider.delivery.dto.DeliveryCompleteReq;
 import com.green.mmg.rider.delivery.dto.DeliveryHistoryRes;
 import com.green.mmg.rider.delivery.dto.DeliveryTransitionResult;
 import com.green.mmg.rider.delivery.dto.DeliveryWaitingRowRes;
+import com.green.mmg.rider.delivery.sse.OrderAssignSseRegistry;
 import com.green.mmg.rider.feign.MainInternalClient;
 import com.green.mmg.rider.feign.dto.DeliveryStatusUpdateReq;
+import com.green.mmg.rider.rider.RiderRepository;
+import com.green.mmg.rider.rider.model.Rider;
+import com.green.mmg.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -42,6 +49,26 @@ public class RiderOrderController {
 
     private final DeliveryService deliveryService;
     private final MainInternalClient mainInternalClient;
+    private final OrderAssignSseRegistry sseRegistry;
+    private final RiderRepository riderRepository;
+
+    /** SSE stream timeout — SettlementController 패턴 일관 (30분). 클라이언트 EventSource 자동 재연결. */
+    private static final long SSE_TIMEOUT_MS = 30L * 60 * 1000;
+
+    /**
+     * GET /api/rider/order/stream — 배차 알림 SSE (자잘 에러 트랙, 2026-05-23).
+     *
+     * <p>{@code order-assigned} event = 새 배차 도착 (모든 활성 라이더), {@code order-claimed} = 풀에서 누가 잡음.
+     * 같은 라이더 재접속 시 기존 emitter close (다중 탭/네트워크 단절 안전).</p>
+     */
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@AuthenticationPrincipal UserPrincipal principal) {
+        Rider rider = riderRepository.findByUserNo(principal.getSignedUserNo())
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+        return sseRegistry.register(rider.getRiderNo(), emitter);
+    }
 
     @GetMapping("/waiting")
     public ResultResponse<List<DeliveryWaitingRowRes>> waiting(
@@ -75,6 +102,20 @@ public class RiderOrderController {
         return new ResultResponse<>("배달내역 조회 성공", data);
     }
 
+    /**
+     * 라이더 풀에서 본인 잡기 — WAITING_ASSIGN → ASSIGNED + rider_no 박기 (2026-05-19 신설).
+     * code-reviewer FAIL 진단 결함 1번 정정. ADR-001 (D) 박제 정합성 일관.
+     */
+    @PutMapping("/{deliveryNo}/claim")
+    public ResultResponse<Void> claim(
+            @PathVariable String deliveryNo,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        DeliveryTransitionResult result = deliveryService.claimDelivery(
+                deliveryNo, principal.getSignedUserNo());
+        notifyMain(result);
+        return new ResultResponse<>("배차 수락 성공", null);
+    }
+
     @PutMapping("/{deliveryNo}/accept")
     public ResultResponse<Void> accept(
             @PathVariable String deliveryNo,
@@ -82,7 +123,7 @@ public class RiderOrderController {
         DeliveryTransitionResult result = deliveryService.acceptDelivery(
                 deliveryNo, principal.getSignedUserNo());
         notifyMain(result);
-        return new ResultResponse<>("배차 수락 성공", null);
+        return new ResultResponse<>("가게 도착 처리 성공", null);
     }
 
     @PutMapping("/{deliveryNo}/reject")
@@ -132,7 +173,7 @@ public class RiderOrderController {
             @RequestBody DeliveryCompleteReq req) {
         DeliveryTransitionResult result = deliveryService.completeDelivery(
                 deliveryNo, principal.getSignedUserNo(), req);
-        notifyMain(result);
+        notifyMainComplete(deliveryNo, result, req);
         return new ResultResponse<>("배달 완료 처리 성공", null);
     }
 
@@ -167,6 +208,34 @@ public class RiderOrderController {
         } catch (Exception e) {
             log.warn("Main 동기화 실패: orderId={}, status={}, ex={}",
                     result.orderId(), result.newStatus(), e.getMessage());
+        }
+    }
+
+    /**
+     * Main 완료 동기화 — interfaces.md §2.2. best-effort try-catch (notifyMain 패턴 일관, D1-bis).
+     *
+     * <p>complete 호출이 {@code delivery_state=3} + {@code order_state=6} 동반 UPDATE이라
+     * {@code updateDeliveryStatus(DELIVERED)} 중복 호출 X (Q-A4-호출 흐름 (나)).
+     * Feign DTO는 외부 endpoint DTO와 같은 클래스명이라 full qualified name 사용 (case-#34 영역 분리 일관).</p>
+     *
+     * <p>매핑: {@code deliveryNo}는 path variable에서, {@code riderNo}+{@code completedAt}는 result에서,
+     * {@code deliveredMethod}+{@code deliveredPhotoUrl}는 외부 req에서 보강.</p>
+     */
+    private void notifyMainComplete(String deliveryNo,
+                                    DeliveryTransitionResult result,
+                                    DeliveryCompleteReq externalReq) {
+        try {
+            mainInternalClient.complete(
+                    result.orderId(),
+                    new com.green.mmg.rider.feign.dto.DeliveryCompleteReq(
+                            deliveryNo,
+                            result.riderNo(),
+                            externalReq.deliveredMethod(),
+                            externalReq.deliveredPhotoUrl(),
+                            result.changedAt()));
+        } catch (Exception e) {
+            log.warn("Main 완료 동기화 실패: orderId={}, deliveryNo={}, ex={}",
+                    result.orderId(), deliveryNo, e.getMessage());
         }
     }
 }

@@ -27,6 +27,10 @@ public class UserPrincipal implements UserDetails {
         return jwtUser.getRole();
     }
 
+    public String getStatus() {
+        return jwtUser.getStatus();
+    }
+
     public String getName() {
         return jwtUser.getName();
     }

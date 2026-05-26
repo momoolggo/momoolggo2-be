@@ -4,9 +4,11 @@ import com.green.mmg.main.order.model.*;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.model.UserPrincipal;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.util.Map;
@@ -30,8 +32,8 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<?> placeOrder(@AuthenticationPrincipal UserPrincipal principal,
             @RequestBody OrderReqDto dto) {
-        long orderId = orderService.placeOrder(principal.getSignedUserNo(), dto);
-        return ResponseEntity.ok(Map.of("result", "success","orderId", orderId));
+        OrderCreateRes res = orderService.placeOrder(principal.getSignedUserNo(), dto);
+        return ResponseEntity.ok(Map.of("result", "success","orderId", res.orderId(), "totalAmount", res.totalAmount()));
     }
 
     // 주문 취소
@@ -71,4 +73,25 @@ public class OrderController {
         return new ResultResponse<>("조회성공",result);
     }
 
+    // 재주문
+    @PostMapping("/{orderId}/reorder")
+    public ResultResponse<Void> reorder(@AuthenticationPrincipal UserPrincipal principal,
+                                        @PathVariable long orderId) {
+        orderService.reorder(principal.getSignedUserNo(), orderId);
+        return new ResultResponse<>("재주문: 장바구니 담기 완료", null);
+    }
+
+    //배달 현황 SSE 알림
+    @GetMapping("/{orderId}/status")
+    public ResultResponse<OrderDeliveryStatusRes> getDeliveryStatus(@AuthenticationPrincipal UserPrincipal principal,
+                                          @PathVariable Long orderId) {
+        return new ResultResponse<>("배달 현황 조회 성공", orderService.getDeliveryStatus(principal.getSignedUserNo(),orderId));
+    }
+
+    @GetMapping(value = "/{orderId}/status/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter subscribeDeliveryStatus(@AuthenticationPrincipal UserPrincipal principal,
+                                              @PathVariable Long orderId) {
+        return orderService.subscribeDeliveryStatus(principal.getSignedUserNo(), orderId);
+    }
 }
+

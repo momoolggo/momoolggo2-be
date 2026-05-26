@@ -21,7 +21,6 @@ public class NoticeService {
         return noticeRepository.findAll();
     }
 
-    // 공지 등록
     @Transactional
     public void createNotice(NoticeReq req) {
         noticeRepository.save(new Notice(req));

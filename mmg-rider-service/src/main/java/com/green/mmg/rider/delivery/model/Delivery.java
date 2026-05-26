@@ -39,8 +39,8 @@ public class Delivery extends BaseEntity {
     @Column(name = "delivery_no", length = 20)
     private String deliveryNo;
 
-    @Column(name = "order_id", length = 20, nullable = false)
-    private String orderId;
+    @Column(name = "order_id", nullable = false)
+    private Long orderId;
 
     @Column(name = "rider_no")
     private Long riderNo;
@@ -54,6 +54,9 @@ public class Delivery extends BaseEntity {
 
     @Column(name = "customer_phone", length = 20)
     private String customerPhone;
+
+    @Column(name = "store_name", length = 200)
+    private String storeName;
 
     @Column(name = "pickup_address", length = 200)
     private String pickupAddress;
@@ -89,6 +92,13 @@ public class Delivery extends BaseEntity {
     @Column(name = "delivered_photo_url", length = 500)
     private String deliveredPhotoUrl;
 
+    // 2026-05-25 9건 트랙 #3 라이더 — 가게/배달 요청사항 스냅샷 (orders → delivery 복제)
+    @Column(name = "order_request", length = 500)
+    private String orderRequest;
+
+    @Column(name = "rider_request", length = 500)
+    private String riderRequest;
+
     @Column(name = "assigned_at")
     private LocalDateTime assignedAt;
 
@@ -111,18 +121,35 @@ public class Delivery extends BaseEntity {
     /**
      * 배차 대기 시점 생성자 — Main이 Feign으로 배차 요청 시 호출 (R3 DeliveryService).
      * status 고정: WAITING_ASSIGN (가입 시점 PENDING 패턴 일관, R1-A Rider 일관).
-     * extra_fee 고정: 0 (DDL DEFAULT 0 일관).
+     * 2026-05-19 정정: extra_fee 0 고정 → DeliveryService가 좌표 기반 거리 산출 후 동적 결정.
      */
-    public Delivery(String deliveryNo, String orderId,
+    public Delivery(String deliveryNo, Long orderId,
                     String pickupPhone, String customerPhone,
                     String pickupAddress, Double pickupLat, Double pickupLng,
                     String deliveryAddress, Double deliveryLat, Double deliveryLng,
-                    Integer baseFee) {
+                    Integer baseFee, Integer extraFee) {
+        this(deliveryNo, orderId, pickupPhone, customerPhone, null,
+                pickupAddress, pickupLat, pickupLng,
+                deliveryAddress, deliveryLat, deliveryLng,
+                baseFee, extraFee, null, null);
+    }
+
+    /**
+     * 정산 시연 UX 트랙 #6 (2026-05-21) — storeName 스냅샷 박제용 13 파라미터.
+     * 2026-05-25 9건 트랙 #3 — orderRequest/riderRequest 2 파라미터 추가 (총 15).
+     */
+    public Delivery(String deliveryNo, Long orderId,
+                    String pickupPhone, String customerPhone, String storeName,
+                    String pickupAddress, Double pickupLat, Double pickupLng,
+                    String deliveryAddress, Double deliveryLat, Double deliveryLng,
+                    Integer baseFee, Integer extraFee,
+                    String orderRequest, String riderRequest) {
         this.deliveryNo = deliveryNo;
         this.orderId = orderId;
         this.status = DeliveryStatus.WAITING_ASSIGN;
         this.pickupPhone = pickupPhone;
         this.customerPhone = customerPhone;
+        this.storeName = storeName;
         this.pickupAddress = pickupAddress;
         this.pickupLat = pickupLat;
         this.pickupLng = pickupLng;
@@ -130,7 +157,9 @@ public class Delivery extends BaseEntity {
         this.deliveryLat = deliveryLat;
         this.deliveryLng = deliveryLng;
         this.baseFee = baseFee;
-        this.extraFee = 0;
+        this.extraFee = extraFee;
+        this.orderRequest = orderRequest;
+        this.riderRequest = riderRequest;
     }
 
     /**

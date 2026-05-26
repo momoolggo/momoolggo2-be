@@ -12,12 +12,33 @@ spring:
       host: localhost
       port: 6379
       password:
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 server:
   port: 8081
 
 cors:
   allowed-origins: http://localhost:5173
+
+# Feign — main-service 호출 (Phase 5 펫 자동 지급)
+feign:
+  main-service:
+    url: ${MAIN_SERVICE_URL:http://localhost:8080}
+  client:
+    config:
+      default:
+        connectTimeout: 2000
+        readTimeout: 5000
 
 mybatis:
   configuration:

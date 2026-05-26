@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
  */
 public record DeliveryHistoryRowRes(
         String deliveryNo,
-        String orderId,
+        Long orderId,
         String pickupAddress,
         String deliveryAddress,
         Integer baseFee,

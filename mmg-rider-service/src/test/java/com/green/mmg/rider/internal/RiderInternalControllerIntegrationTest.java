@@ -84,13 +84,13 @@ class RiderInternalControllerIntegrationTest {
         return Math.abs(System.nanoTime() + ThreadLocalRandom.current().nextLong(1, 10_000));
     }
 
+    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제. PENDING 시드 분기 폐기.
     private Rider seedRider(boolean active) {
         Rider rider = new Rider(
                 uniqueUserNo(),
                 "11-22-" + UUID.randomUUID().toString().substring(0, 6) + "-44",
                 "2종보통", VehicleType.MOTORBIKE,
                 "신한은행", "110-123-456789", "홍길동");
-        if (active) rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 
@@ -98,10 +98,11 @@ class RiderInternalControllerIntegrationTest {
      * sample assign request JSON — interfaces.md §1.1 Body 박제 일관.
      * ObjectMapper 의존 회피 (mmg-rider-service implementation 스코프 격리), text block 직접 박제.
      */
-    private String sampleReqJson(String orderId) {
+    private String sampleReqJson(Long orderId, Long riderNo) {
         return String.format("""
                 {
-                  "orderId": "%s",
+                  "orderId": %d,
+                  "riderNo": %d,
                   "storeNo": 7,
                   "storeName": "맛있는집",
                   "storeAddress": "가게 주소",
@@ -115,7 +116,7 @@ class RiderInternalControllerIntegrationTest {
                   "baseFee": 4000,
                   "extraFee": 1500
                 }
-                """, orderId);
+                """, orderId, riderNo);
     }
 
     @Test
@@ -123,13 +124,13 @@ class RiderInternalControllerIntegrationTest {
     void assign_happy() throws Exception {
         Rider rider = seedRider(true);
         // 학원 공유 DB 잔존 데이터 격리 — UUID 기반 orderId 고정값 회피 (W-1 정정)
-        String orderId = "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        Long orderId = System.nanoTime();
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
                 .thenReturn(new DeliveryStatusUpdateRes(orderId, 0, 1));
 
-        String reqJson = sampleReqJson(orderId);
+        String reqJson = sampleReqJson(orderId, rider.getRiderNo());
 
-        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
+        mockMvc.perform(post("/internal/rider/assign")
                         .contentType(APPLICATION_JSON).content(reqJson))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.assigned").value(true))
@@ -149,7 +150,12 @@ class RiderInternalControllerIntegrationTest {
         assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
         assertThat(saved.getRiderNo()).isEqualTo(rider.getRiderNo());
         assertThat(saved.getAssignedAt()).isNotNull();
-        assertThat(saved.getBaseFee()).isEqualTo(4000);
+        // 사례 #21 (2026-05-19): main이 baseFee=4000/extraFee=1500 보냈으나 rider가 좌표 기반 override.
+        // base = DELIVERY_BASE_FEE(1500) 고정, extra = ceil(0.86km)*1000 = 1000.
+        assertThat(saved.getBaseFee()).isEqualTo(1500);
+        assertThat(saved.getExtraFee()).isEqualTo(1000);
+        // 정산 시연 UX 트랙 #6 (2026-05-21) — req.storeName 스냅샷 박제 검증
+        assertThat(saved.getStoreName()).isEqualTo("맛있는집");
 
         // log 검증
         List<DeliveryLog> logs = deliveryLogRepository.findAll().stream()
@@ -167,18 +173,8 @@ class RiderInternalControllerIntegrationTest {
         verify(mainInternalClient).updateDeliveryStatus(eq(orderId), any(DeliveryStatusUpdateReq.class));
     }
 
-    @Test
-    @DisplayName("POST /assign rider PENDING: 400 BAD_REQUEST + Main 동기화 미호출")
-    void assign_pendingRider_returns400() throws Exception {
-        Rider rider = seedRider(false);
-        String reqJson = sampleReqJson("ORD0002");
-
-        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
-                        .contentType(APPLICATION_JSON).content(reqJson))
-                .andExpect(status().isBadRequest());
-
-        verify(mainInternalClient, never()).updateDeliveryStatus(any(), any());
-    }
+    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제로 PENDING 라이더 시드 불가.
+    // PENDING 거부 검증은 단위 테스트(DeliveryServiceTest)에서 mock으로 충분. 본 통합 케이스 폐기.
 
     @Test
     @DisplayName("GET /status without progress: 200 + currentDeliveryNo null + status ACTIVE")
@@ -197,10 +193,10 @@ class RiderInternalControllerIntegrationTest {
     void status_withProgress() throws Exception {
         Rider rider = seedRider(true);
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
-                .thenReturn(new DeliveryStatusUpdateRes("ORD0003", 0, 1));
+                .thenReturn(new DeliveryStatusUpdateRes(3L, 0, 1));
 
-        String reqJson = sampleReqJson("ORD0003");
-        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
+        String reqJson = sampleReqJson(3L, rider.getRiderNo());
+        mockMvc.perform(post("/internal/rider/assign")
                         .contentType(APPLICATION_JSON).content(reqJson))
                 .andExpect(status().isOk());
 
@@ -231,12 +227,12 @@ class RiderInternalControllerIntegrationTest {
     void monitor_returnsSummaryAndDeliveries() throws Exception {
         Rider rider = seedRider(true);
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
-                .thenReturn(new DeliveryStatusUpdateRes("ORD", 0, 1));
+                .thenReturn(new DeliveryStatusUpdateRes(System.nanoTime(), 0, 1));
 
         // 1건 ASSIGNED 시드
-        String orderId = "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
-        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
-                        .contentType(APPLICATION_JSON).content(sampleReqJson(orderId)))
+        Long orderId = System.nanoTime();
+        mockMvc.perform(post("/internal/rider/assign")
+                        .contentType(APPLICATION_JSON).content(sampleReqJson(orderId, rider.getRiderNo())))
                 .andExpect(status().isOk());
 
         em.flush();
@@ -256,11 +252,11 @@ class RiderInternalControllerIntegrationTest {
     void monitor_assignedFilter_returnsAssignedRows() throws Exception {
         Rider rider = seedRider(true);
         when(mainInternalClient.updateDeliveryStatus(any(), any()))
-                .thenReturn(new DeliveryStatusUpdateRes("ORD", 0, 1));
+                .thenReturn(new DeliveryStatusUpdateRes(System.nanoTime(), 0, 1));
 
-        String orderId = "OR" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
-        mockMvc.perform(post("/internal/rider/" + rider.getRiderNo() + "/assign")
-                        .contentType(APPLICATION_JSON).content(sampleReqJson(orderId)))
+        Long orderId = System.nanoTime();
+        mockMvc.perform(post("/internal/rider/assign")
+                        .contentType(APPLICATION_JSON).content(sampleReqJson(orderId, rider.getRiderNo())))
                 .andExpect(status().isOk());
 
         em.flush();
@@ -269,7 +265,7 @@ class RiderInternalControllerIntegrationTest {
         mockMvc.perform(get("/internal/rider/monitor").param("status", "assigned"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.deliveries").isArray())
-                .andExpect(jsonPath("$.deliveries[?(@.orderId == '" + orderId + "')].status")
+                .andExpect(jsonPath("$.deliveries[?(@.orderId == " + orderId + ")].status")
                         .value("ASSIGNED"));
     }
 

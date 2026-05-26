@@ -21,6 +21,9 @@ import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -67,7 +70,6 @@ class LocationServiceTest {
         @Test
         @DisplayName("ACTIVE happy: Store.save 호출 + RiderLocation 필드 박제")
         void active_happy_savesLocation() {
-            rider.approve();
             when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
 
             LocationUpdateReq req = new LocationUpdateReq(35.125, 128.456);
@@ -97,7 +99,8 @@ class LocationServiceTest {
         @Test
         @DisplayName("PENDING: BAD_REQUEST + Store 미호출")
         void pending_throwsBadRequest() {
-            // rider 기본 status = PENDING
+            // SSE 자동화 트랙(2026-05-21) — Rider 생성자에서 ACTIVE 직접 박제. PENDING 명시 mock 필요.
+            when(rider.getStatus()).thenReturn(RiderStatus.PENDING);
             when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
 
             assertThatThrownBy(() -> locationService.publishLocation(
@@ -142,7 +145,6 @@ class LocationServiceTest {
         @Test
         @DisplayName("Redis 다운: D1 throw 그대로 전파 (5xx, best-effort 회피)")
         void redisDown_propagatesException() {
-            rider.approve();
             when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
             doThrow(new RedisConnectionFailureException("connection refused"))
                     .when(riderLocationStore).save(eq(RIDER_NO), any(RiderLocation.class));
@@ -183,6 +185,44 @@ class LocationServiceTest {
                     .hasMessageContaining("위치 송신 0회 또는 TTL 만료")
                     .extracting(e -> ((BusinessException) e).getStatus())
                     .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("getActiveLocations (Group 10, 2026-05-17)")
+    class GetActiveLocations {
+
+        @Test
+        @DisplayName("Store 다건: List 변환 결과 정확 (riderNo/lat/lng/updatedAt)")
+        void multipleStored_returnsList() {
+            LocalDateTime t1 = LocalDateTime.of(2026, 5, 17, 10, 0, 0);
+            LocalDateTime t2 = LocalDateTime.of(2026, 5, 17, 10, 5, 0);
+            Map<Long, RiderLocation> stored = new HashMap<>();
+            stored.put(1L, new RiderLocation(35.10, 128.20, t1));
+            stored.put(2L, new RiderLocation(35.30, 128.40, t2));
+            when(riderLocationStore.getAll()).thenReturn(stored);
+
+            List<RiderInternalLocationRes> res = locationService.getActiveLocations();
+
+            assertThat(res).hasSize(2);
+            Map<Long, RiderInternalLocationRes> byRider = new HashMap<>();
+            for (RiderInternalLocationRes r : res) byRider.put(r.riderNo(), r);
+            assertThat(byRider.get(1L).lat()).isEqualTo(35.10);
+            assertThat(byRider.get(1L).lng()).isEqualTo(128.20);
+            assertThat(byRider.get(1L).updatedAt()).isEqualTo(t1);
+            assertThat(byRider.get(2L).lat()).isEqualTo(35.30);
+            assertThat(byRider.get(2L).lng()).isEqualTo(128.40);
+            assertThat(byRider.get(2L).updatedAt()).isEqualTo(t2);
+        }
+
+        @Test
+        @DisplayName("Store 빈 결과: 빈 List (NOT_FOUND throw X — admin 화면 정상)")
+        void empty_returnsEmptyList() {
+            when(riderLocationStore.getAll()).thenReturn(Map.of());
+
+            List<RiderInternalLocationRes> res = locationService.getActiveLocations();
+
+            assertThat(res).isEmpty();
         }
     }
 

@@ -1,6 +1,7 @@
 package com.green.mmg.main.review;
 
 import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.review.model.GetReviewReq;
 import com.green.mmg.main.review.model.Review;
 import com.green.mmg.main.review.model.ReviewReq;
@@ -30,29 +31,35 @@ import java.util.Map;
 public class ReviewService {
 
     private final ReviewMapper reviewMapper;
-    private final ReviewRepository reviewRepository;  // postReview만
+    private final ReviewRepository reviewRepository;
+    private final AdminFeignClient adminFeignClient;
 
     @Transactional
     public void postReview(long user, ReviewReq req) {
         try {
-            long userId = reviewMapper.checkReviewWriter(req);  // orders 도메인 SQL — 영구 잔존
+            long userId = reviewMapper.checkReviewWriter(req);
             if (userId == user) {
                 Review review = new Review();
                 review.setOrderId(req.getOrderId());
                 review.setRating(req.getRating());
                 review.setContents(req.getText());
                 review.setPhoto(req.getImage());
-                // saveAndFlush: 후속 MyBatis findStoreIdByOrderId/updateStoreRating 가시화
-                // BaseEntity Auditing — write_at/amended_at 자동 채움 검증 포인트
                 reviewRepository.saveAndFlush(review);
 
                 long storeId = reviewMapper.findStoreIdByOrderId(req.getOrderId());
                 reviewMapper.updateStoreRating(storeId);
+
+                // 리뷰 작성 시 AI 자동 감지 요청
+                try {
+                    adminFeignClient.autoDetect(review.getReviewId(),
+                            Map.of("content", req.getText() != null ? req.getText() : ""));
+                } catch (Exception e) {
+                    log.warn("AI 자동 감지 요청 실패 reviewId={} error={}", review.getReviewId(), e.getMessage());
+                }
             } else {
                 throw new BusinessException("주문한 사용자가 아닙니다.", HttpStatus.FORBIDDEN);
             }
         } catch (DataIntegrityViolationException e) {
-            // DataIntegrityViolationException은 DuplicateKeyException의 부모 — JPA UNIQUE 위반 모두 포착
             throw new BusinessException("이미 리뷰가 등록되었습니다.", HttpStatus.CONFLICT);
         }
     }
@@ -88,7 +95,28 @@ public class ReviewService {
     public void updateReview(long userNo, long reviewId, int rating, String contents) {
         int result = reviewMapper.updateReview(reviewId, userNo, rating, contents);
         if (result == 0) throw new BusinessException("수정 권한이 없거나 리뷰를 찾을 수 없습니다.", HttpStatus.FORBIDDEN);
+
         long storeId = reviewMapper.findStoreIdByReviewId(reviewId);
         reviewMapper.updateStoreRating(storeId);
+
+        // 블라인드 상태인 리뷰 수정 시 AI 소명 재판정 요청
+        requestReassessmentIfBlinded(reviewId, contents);
+    }
+
+    private void requestReassessmentIfBlinded(long reviewId, String contents) {
+        try {
+            Review review = reviewRepository.findById(reviewId).orElse(null);
+            if (review == null || !review.isBlinded()) {
+                return;
+            }
+
+            log.info("블라인드 리뷰 소명 감지 - AI 재판정 요청 reviewId={}", reviewId);
+            adminFeignClient.reassessReview(
+                    reviewId,
+                    Map.of("updatedContent", contents != null ? contents : "")
+            );
+        } catch (Exception e) {
+            log.warn("AI 재판정 요청 실패 reviewId={} error={}", reviewId, e.getMessage());
+        }
     }
 }

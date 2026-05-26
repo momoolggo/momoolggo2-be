@@ -1,12 +1,14 @@
 package com.green.mmg.admin.feign;
 
 import com.green.mmg.admin.dto.feign.AdminUserRes;
+import com.green.mmg.admin.dto.feign.InternalUserDetailRes;
 import com.green.mmg.admin.dto.feign.UserApprovalReq;
 import com.green.mmg.admin.dto.feign.UserSuspensionReq;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.data.domain.Page;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,11 +29,15 @@ public interface AuthFeignClient {
     @GetMapping("/internal/auth/owner/{userNo}")
     UserBriefDto getOwner(@PathVariable("userNo") long userNo);
 
-    // 전체 회원 목록
+    // 전체 회원 목록 (검색 조건 포함)
     @GetMapping("/internal/auth/users/list")
     ResultResponse<Page<AdminUserRes>> getUserList(
             @RequestParam(required = false) String role,
-            @RequestParam(defaultValue = "0") int page
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate
     );
 
     // 승인 대기 회원 목록
@@ -59,4 +65,11 @@ public interface AuthFeignClient {
     // 라이더 수 조회
     @GetMapping("/internal/auth/rider/count")
     ResultResponse<Long> getRiderCount();
+
+    @GetMapping("/internal/auth/user/{userNo}/detail")
+    ResultResponse<InternalUserDetailRes> getUserDetail(@PathVariable("userNo") Long userNo);
+
+    // 회원 삭제 — ADR-001 (D) cascade 보완 (2026-05-19 신설). rider 먼저 삭제 후 본 호출.
+    @DeleteMapping("/internal/auth/user/{userNo}")
+    ResultResponse<Void> deleteUser(@PathVariable("userNo") Long userNo);
 }

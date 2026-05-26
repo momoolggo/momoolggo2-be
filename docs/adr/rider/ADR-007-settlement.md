@@ -95,7 +95,7 @@ payout        = gross - commission - tax - insurance
 
 > COMMISSION_RATE, INSURANCE_PER_WEEK 등 정확한 값은 Phase 5-R7에서 결정 (Figma 검토 + 학원 정책).
 
-### 흐름 (D10-b admin 수동)
+### 흐름 (SSE 자동화 트랙, 2026-05-21 정정 — admin 수동 트리거 영구 폐기)
 
 ```
 1. 라이더 화면: GET /api/rider/settlement?startDate=&endDate= (Figma 기간 필터)
@@ -105,17 +105,26 @@ payout        = gross - commission - tax - insurance
 2. 라이더 화면: GET /api/rider/settlement/account → account_bank/no/holder 표시
 3. 라이더 화면: PUT /api/rider/settlement/account → 변경
 
-4. 매주 월요일 자정 (혹은 임의 시점):
-   - admin 화면에서 "이번 주 정산 집계" 버튼 클릭
-   - admin-service: GET /internal/settlement/calculate?period_start=&period_end=
-   - rider-service: 해당 기간 DELIVERED 배달 집계 → settlement INSERT (status=PENDING)
+4. 배달 완료 시점 (자동, SSE 자동화 트랙 2026-05-21):
+   - DeliveryService.completeDelivery 끝에 SettlementService.recalculateThisWeek(riderNo) 자동 호출
+   - 단일 라이더, 이번 주(ISO 월~일) 기준 UPSERT:
+     - row 없음 → 신규 INSERT (status=PENDING) + publishEvent
+     - row PENDING → recalculate UPDATE (이번 주 누적 즉시 반영) + publishEvent
+     - row CONFIRMED → skip (admin 확정 보호, publishEvent 미발행 — reviewer W-1)
+   - 같은 트랜잭션 내 실행 (실패 시 transition도 롤백)
+   - 트랜잭션 commit 후 @TransactionalEventListener(AFTER_COMMIT) → SettlementSseRegistry.send → 라이더 화면 SSE push
+
+4-stream. 라이더 화면 SSE 구독: GET /api/rider/settlement/stream (text/event-stream)
+   - SettlementSseRegistry 라이더별 단일 emitter (재접속 시 기존 close)
+   - 'settlement-updated' event 수신 시 settlements 자동 갱신 (settlementNo 일치 시 교체, 미일치 시 prepend)
 
 5. admin 검토:
-   - admin 화면에서 PENDING 정산 목록 확인
+   - admin 화면에서 PENDING 정산 목록 확인 (GET /api/admin/rider-settlement/pending)
    - 라이더별 detail (Figma 정산 상세 모달) 확인
-   - confirm 버튼 → POST /internal/settlement/{settlementId}/confirm
+   - confirm 버튼 → PATCH /api/admin/rider-settlement/{settlementNo}/confirm
    - rider-service: settlement.status=CONFIRMED, confirmed_by_admin_no, confirmed_at 기록
    - paid_at은 별도 (실 입금 처리 후 admin이 다시 갱신 — Phase 6+ 자동화)
+   - (admin 수동 "주간 정산 집계" 트리거 endpoint POST /api/admin/rider-settlement/calculate는 SSE 트랙에서 영구 폐기)
 ```
 
 ### 권한 검증

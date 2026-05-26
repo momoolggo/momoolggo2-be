@@ -2,8 +2,11 @@ package com.green.mmg.main.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.CacheControl;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * main-service 정적 리소스 핸들러.
@@ -20,20 +23,34 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${file.upload.store-path}")  private String storePath;
     @Value("${file.upload.review-path:}")  private String reviewPath;
     @Value("${file.upload.pet-path:}")     private String petPath;
+    @Value("${file.upload.delivery-path:}") private String deliveryPath;
+
+    private static final CacheControl UPLOADS_CACHE_CONTROL =
+            CacheControl.maxAge(365, TimeUnit.DAYS).cachePublic();
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler("/uploads/menu/**")
-                .addResourceLocations("file:" + menuPath);
+                .addResourceLocations("file:" + menuPath)
+                .setCacheControl(UPLOADS_CACHE_CONTROL);
         registry.addResourceHandler("/uploads/store/**")
-                .addResourceLocations("file:" + storePath);
+                .addResourceLocations("file:" + storePath)
+                .setCacheControl(UPLOADS_CACHE_CONTROL);
         if (!reviewPath.isBlank()) {
             registry.addResourceHandler("/uploads/review/**")
-                    .addResourceLocations("file:" + reviewPath);
+                    .addResourceLocations("file:" + reviewPath)
+                    .setCacheControl(UPLOADS_CACHE_CONTROL);
         }
         if (!petPath.isBlank()) {
             registry.addResourceHandler("/uploads/pet/**")
-                    .addResourceLocations("file:" + petPath);
+                    .addResourceLocations("file:" + petPath)
+                    .setCacheControl(UPLOADS_CACHE_CONTROL);
+        }
+        // 자잘 에러 트랙 #9 (2026-05-23) — 라이더 배달 완료 사진 정적 서빙
+        if (!deliveryPath.isBlank()) {
+            registry.addResourceHandler("/uploads/delivery/**")
+                    .addResourceLocations("file:" + deliveryPath)
+                    .setCacheControl(UPLOADS_CACHE_CONTROL);
         }
     }
 }

@@ -13,5 +13,8 @@ public class InternalUserDetailRes {
     private String name;
     private String tel;
     private Integer green;
-    private Date createdAt; // 가입일
+    private Date createdAt;
+    private String status;
+
+
 }

@@ -1,7 +1,6 @@
 package com.green.mmg.main.order.model;
-import lombok.AllArgsConstructor;
+
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.List;
@@ -19,15 +18,6 @@ public class OrderHistoryDto {
     private long orderId;          // orders.order_id
     private int orderState;        // orders.order_state
     private int hasReview;
+    private String deliveredPhotoUrl;
     private List<OrderItemDto> items;
-
-   @Getter
-   @Setter
-   @NoArgsConstructor
-   @AllArgsConstructor   // JPQL constructor expression (OrderDetailRepository.findItemsByOrderId)
-    public static class OrderItemDto {
-        private String name;   // order_detail.menu_name
-        private int count;     // order_detail.quantity
-        private int price;     // order_detail.menu_price
-    }
 }

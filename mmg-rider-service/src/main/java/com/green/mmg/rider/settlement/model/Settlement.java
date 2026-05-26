@@ -120,4 +120,22 @@ public class Settlement extends BaseEntity {
     public void markPaid(LocalDateTime at) {
         this.paidAt = at;
     }
+
+    /**
+     * PENDING 재집계 — admin 재트리거 시 진행 중 배달 반영.
+     * CONFIRMED 보호는 Service에서 status 분기로 처리 (본 메서드는 status 무관 UPDATE).
+     * status / confirmed_* / paid_* 필드는 변경 X (PENDING 유지 의도).
+     */
+    public void recalculate(Integer deliveryCount, Integer totalDistanceM,
+                            Integer totalBaseFee, Integer totalExtraFee,
+                            Integer commission, Integer tax, Integer insurance, Integer payout) {
+        this.deliveryCount = deliveryCount;
+        this.totalDistanceM = totalDistanceM;
+        this.totalBaseFee = totalBaseFee;
+        this.totalExtraFee = totalExtraFee;
+        this.commission = commission;
+        this.tax = tax;
+        this.insurance = insurance;
+        this.payout = payout;
+    }
 }
