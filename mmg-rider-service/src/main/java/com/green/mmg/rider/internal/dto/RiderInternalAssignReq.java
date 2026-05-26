@@ -28,6 +28,9 @@ public record RiderInternalAssignReq(
         Double deliveryLng,
         String customerPhone,
         Integer baseFee,
-        Integer extraFee
+        Integer extraFee,
+        // 2026-05-25 9건 트랙 #3 — 라이더에게 요청사항 전달 (orders.request / orders.rider_request 스냅샷)
+        String orderRequest,
+        String riderRequest
 ) {
 }

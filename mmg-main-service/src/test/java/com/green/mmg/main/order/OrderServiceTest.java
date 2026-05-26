@@ -11,6 +11,7 @@ import com.green.mmg.main.cart.model.CartItemRes;
 import com.green.mmg.main.order.model.OrderAddressInfo;
 import com.green.mmg.main.order.model.OrderHistoryDto;
 import com.green.mmg.main.order.model.OrderHistoryReq;
+import com.green.mmg.main.order.model.OrderItemDto;
 import com.green.mmg.main.order.model.OrderInfoRes;
 import com.green.mmg.main.order.model.Orders;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,8 +45,15 @@ class OrderServiceTest {
     @Mock private OrderDetailRepository orderDetailRepository;
     @Mock private CartMapper cartMapper;
     @Mock private CartRepository cartRepository;
+    @Mock private com.green.mmg.main.cart.CartDetailRepository cartDetailRepository;
     @Mock private UserAddressRepository userAddressRepository;
+    @Mock private com.green.mmg.main.order.OrderStatusLogRepository orderStatusLogRepository;
     @Mock private AuthFeignClient authFeignClient;
+    @Mock private com.green.mmg.main.order.OrderDeliverySseService orderDeliverySseService;
+    @Mock private com.green.mmg.main.notification.NotificationService notificationService;
+    @Mock private com.green.mmg.main.payment.PaymentService paymentService;
+    @Mock private com.green.mmg.main.pet.PetService petService;
+    @Mock private com.green.mmg.main.owner.OwnerOrderSseService ownerOrderSseService;
 
     @InjectMocks
     private OrderService orderService;
@@ -192,10 +200,10 @@ class OrderServiceTest {
             o2.setOrderId(391_000_002L);
             when(orderMapper.findOrdersByUserId(req)).thenReturn(List.of(o1, o2));
 
-            List<OrderHistoryDto.OrderItemDto> items1 = List.of(
-                    new OrderHistoryDto.OrderItemDto("피자", 2, 15000));
-            List<OrderHistoryDto.OrderItemDto> items2 = List.of(
-                    new OrderHistoryDto.OrderItemDto("치킨", 1, 18000));
+            List<OrderItemDto> items1 = List.of(
+                    new OrderItemDto("피자", 2, 15000));
+            List<OrderItemDto> items2 = List.of(
+                    new OrderItemDto("치킨", 1, 18000));
             when(orderDetailRepository.findItemsByOrderId(391_000_001L)).thenReturn(items1);
             when(orderDetailRepository.findItemsByOrderId(391_000_002L)).thenReturn(items2);
 
@@ -252,8 +260,8 @@ class OrderServiceTest {
             dto.setStoreName("가게A");
             when(orderMapper.orderHistoryDetail(orderId)).thenReturn(dto);
 
-            List<OrderHistoryDto.OrderItemDto> items = List.of(
-                    new OrderHistoryDto.OrderItemDto("피자", 1, 15000));
+            List<OrderItemDto> items = List.of(
+                    new OrderItemDto("피자", 1, 15000));
             when(orderDetailRepository.findItemsByOrderId(orderId)).thenReturn(items);
 
             OrderHistoryDto result = orderService.orderHistoryDetail(USER_NO, orderId);
@@ -327,6 +335,64 @@ class OrderServiceTest {
             int result = orderService.maxHistoryPage(USER_NO, USER_NO);
 
             assertThat(result).isZero();
+        }
+    }
+
+    /**
+     * 자잘 에러 트랙 #7 (2026-05-23) — order_state 자동 동기화 검증.
+     * delivery 1(배차됨) → order 4 / delivery 2(배달중) → order 5.
+     * WAITING_ASSIGN(reject 풀 복귀) 예외 — order_state 전진 X (reviewer W-1 정정 검증).
+     */
+    @Nested
+    @DisplayName("updateDeliveryStatus — order_state 자동 동기화")
+    class UpdateDeliveryStatusOrderStateSync {
+
+        private static final long ORDER_ID = 100L;
+
+        private Orders orderWith(int orderState, Integer deliveryState) {
+            Orders order = new Orders();
+            order.setOrderId(ORDER_ID);
+            order.setOrderState(orderState);
+            order.setDeliveryState(deliveryState);
+            return order;
+        }
+
+        @Test
+        @DisplayName("ASSIGNED(라이더 잡음) → order_state 3 → 4 전진")
+        void assigned_advancesOrderStateTo4() {
+            Orders order = orderWith(3, null);
+            when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+
+            orderService.updateDeliveryStatus(ORDER_ID, "ASSIGNED");
+
+            assertThat(order.getDeliveryState()).isEqualTo(1);
+            assertThat(order.getOrderState()).isEqualTo(4);
+        }
+
+        @Test
+        @DisplayName("DELIVERING(픽업 후 배달중) → order_state 4 → 5 전진")
+        void delivering_advancesOrderStateTo5() {
+            Orders order = orderWith(4, 1);
+            when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+
+            orderService.updateDeliveryStatus(ORDER_ID, "DELIVERING");
+
+            assertThat(order.getDeliveryState()).isEqualTo(2);
+            assertThat(order.getOrderState()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("WAITING_ASSIGN(reject 풀 복귀) → order_state 4 유지 (전진 X, reviewer W-1)")
+        void waitingAssign_keepsOrderState() {
+            // 라이더가 잡았다가 reject — order_state는 이미 4로 전진된 상태에서 호출
+            Orders order = orderWith(4, 1);
+            when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+
+            orderService.updateDeliveryStatus(ORDER_ID, "WAITING_ASSIGN");
+
+            assertThat(order.getDeliveryState()).isEqualTo(1);
+            // order_state는 4 유지 — 사장 화면이 뒤로 가지 않음
+            assertThat(order.getOrderState()).isEqualTo(4);
         }
     }
 }

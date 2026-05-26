@@ -19,6 +19,16 @@ server:
 cors:
   allowed-origins: http://localhost:5173
 
+# Feign — main-service 호출 (Phase 5 펫 자동 지급)
+feign:
+  main-service:
+    url: ${MAIN_SERVICE_URL:http://localhost:8080}
+  client:
+    config:
+      default:
+        connectTimeout: 2000
+        readTimeout: 5000
+
 mybatis:
   configuration:
     map-underscore-to-camel-case: true

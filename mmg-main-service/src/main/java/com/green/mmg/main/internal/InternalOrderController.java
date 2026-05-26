@@ -41,7 +41,7 @@ public class InternalOrderController {
             @PathVariable Long orderId,
             @RequestBody DeliveryCompleteReq req
     ) {
-        return orderService.completeDelivery(orderId, req.completedAt());
+        return orderService.completeDelivery(orderId, req.completedAt(), req.deliveredPhotoUrl());
     }
 
     /** 그린포인트 적립/POST /internal/order/{orderId}/greenpoint */

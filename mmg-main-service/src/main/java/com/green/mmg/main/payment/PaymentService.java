@@ -4,6 +4,7 @@ import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.cart.CartDetailRepository;
 import com.green.mmg.main.cart.CartRepository;
 import com.green.mmg.main.coupon.CouponService;
+import com.green.mmg.main.greenpoint.GreenPointRewardService;
 import com.green.mmg.main.order.OrderRepository;
 import com.green.mmg.main.order.model.Orders;
 import com.green.mmg.main.owner.OwnerOrderSseService;
@@ -56,6 +57,7 @@ public class PaymentService {
     private final CartDetailRepository cartDetailRepository;
     private final CouponService couponService;
     private final OwnerOrderSseService ownerOrderSseService;
+    private final GreenPointRewardService greenPointRewardService;
 
     private static final int PAY_STATE_REFUNDED = 3;
 
@@ -94,6 +96,9 @@ public class PaymentService {
 
         // 4-1) 주문 생성 시 예약된 쿠폰 사용
         couponService.markCouponUsedByOrder(order.getUserNo(), orderId);
+
+        // 4-2) 친환경 선택 주문은 결제 승인 성공 후 친환경(그린포인트) 적립
+        greenPointRewardService.rewardIfEcoSelected(order);
 
         // 5) 장바구니 정리 — 결제 완료 후 비움 (앞 단계 모두 성공한 뒤에만 도달)
         Long userNo = order.getUserNo();
@@ -217,4 +222,5 @@ public class PaymentService {
 
         return response;
     }
+
 }

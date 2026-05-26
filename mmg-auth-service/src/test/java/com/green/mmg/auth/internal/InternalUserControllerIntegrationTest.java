@@ -71,10 +71,10 @@ class InternalUserControllerIntegrationTest {
 
         mockMvc.perform(get("/internal/auth/user/" + saved.getUserNo()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userNo").value(saved.getUserNo()))
-                .andExpect(jsonPath("$.name").value("준하"))
-                .andExpect(jsonPath("$.tel").value("010-1111-2222"))
-                .andExpect(jsonPath("$.address").value(""));
+                .andExpect(jsonPath("$.resultData.userNo").value(saved.getUserNo()))
+                .andExpect(jsonPath("$.resultData.name").value("준하"))
+                .andExpect(jsonPath("$.resultData.tel").value("010-1111-2222"))
+                .andExpect(jsonPath("$.resultData.address").value(""));
     }
 
     @Test
@@ -98,10 +98,10 @@ class InternalUserControllerIntegrationTest {
 
         mockMvc.perform(get("/internal/auth/owner/" + saved.getUserNo()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userNo").value(saved.getUserNo()))
-                .andExpect(jsonPath("$.name").value("사장님"))
-                .andExpect(jsonPath("$.tel").value("010-3333-4444"))
-                .andExpect(jsonPath("$.address").value(""));
+                .andExpect(jsonPath("$.resultData.userNo").value(saved.getUserNo()))
+                .andExpect(jsonPath("$.resultData.name").value("사장님"))
+                .andExpect(jsonPath("$.resultData.tel").value("010-3333-4444"))
+                .andExpect(jsonPath("$.resultData.address").value(""));
     }
 
     @Test
@@ -128,15 +128,15 @@ class InternalUserControllerIntegrationTest {
                         .param("ids", String.valueOf(u1.getUserNo()))
                         .param("ids", String.valueOf(u2.getUserNo())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$.resultData.length()").value(2))
                 // 순서 비보장 — userNo별 매핑 검증 (JsonPath filter)
-                .andExpect(jsonPath("$[?(@.userNo == " + u1.getUserNo() + ")].name").value("준하"))
-                .andExpect(jsonPath("$[?(@.userNo == " + u1.getUserNo() + ")].tel").value("010-1111-1111"))
-                .andExpect(jsonPath("$[?(@.userNo == " + u2.getUserNo() + ")].name").value("민수"))
-                .andExpect(jsonPath("$[?(@.userNo == " + u2.getUserNo() + ")].tel").value("010-2222-2222"))
+                .andExpect(jsonPath("$.resultData[?(@.userNo == " + u1.getUserNo() + ")].name").value("준하"))
+                .andExpect(jsonPath("$.resultData[?(@.userNo == " + u1.getUserNo() + ")].tel").value("010-1111-1111"))
+                .andExpect(jsonPath("$.resultData[?(@.userNo == " + u2.getUserNo() + ")].name").value("민수"))
+                .andExpect(jsonPath("$.resultData[?(@.userNo == " + u2.getUserNo() + ")].tel").value("010-2222-2222"))
                 // address는 모두 빈 문자열 (consumer가 자체 채움)
-                .andExpect(jsonPath("$[?(@.userNo == " + u1.getUserNo() + ")].address").value(""))
-                .andExpect(jsonPath("$[?(@.userNo == " + u2.getUserNo() + ")].address").value(""));
+                .andExpect(jsonPath("$.resultData[?(@.userNo == " + u1.getUserNo() + ")].address").value(""))
+                .andExpect(jsonPath("$.resultData[?(@.userNo == " + u2.getUserNo() + ")].address").value(""));
     }
 
     @Test
@@ -149,8 +149,8 @@ class InternalUserControllerIntegrationTest {
                         .param("ids", String.valueOf(u1.getUserNo()))
                         .param("ids", String.valueOf(nonexistent)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].userNo").value(u1.getUserNo()))
-                .andExpect(jsonPath("$[0].name").value("준하"));
+                .andExpect(jsonPath("$.resultData.length()").value(1))
+                .andExpect(jsonPath("$.resultData[0].userNo").value(u1.getUserNo()))
+                .andExpect(jsonPath("$.resultData[0].name").value("준하"));
     }
 }

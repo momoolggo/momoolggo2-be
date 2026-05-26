@@ -13,12 +13,11 @@ public class OrderHistoryDto {
     private String storeName;
     private String storeImage;
     private long storeId;
-    private int amount;            // 쿠폰 할인 반영 후 최종 결제 금액
     private int totalPrice;        // orders.amount
     private int deliveryFee;       // orders.delivery_fee
-    private int couponDiscount;   // 쿠폰 할인 금액
     private long orderId;          // orders.order_id
     private int orderState;        // orders.order_state
     private int hasReview;
+    private String deliveredPhotoUrl;
     private List<OrderItemDto> items;
 }

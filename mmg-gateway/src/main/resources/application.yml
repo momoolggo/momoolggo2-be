@@ -66,6 +66,22 @@ spring:
               uri: http://localhost:8080
               predicates:
                 - Path=/uploads/**
+            - id: main-delivery-photo-route  # 자잘 에러 트랙 #9 (2026-05-23) 라이더 배달 완료 사진 업로드
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/delivery-photo/**
+            - id: main-chatbot-route          # 2026-05-25 9건 트랙 #5/#6 — 사장/라이더 챗봇 호출 라우트 누락 정정
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/chatbot/**
+            - id: main-attendance-route       # 2026-05-25 9건 트랙 #8 부채 Step B — 출석 시스템
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/attendance/**
+            - id: main-pet-route              # 2026-05-25 9건 트랙 #8 — 펫 도메인 (이전 트랙에서 누락)
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/pet/**
 
             # ---------- rider-service (8082) — Phase 5 본격 진행 시 ----------
             - id: rider-route

@@ -42,7 +42,7 @@ public class User {
 
     @Column(name = "status", columnDefinition = "ENUM('PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED')",
     nullable = false)
-    private String status;
+    private String status = "ACTIVE";
 
     /** DB DATE ↔ Java String("yyyy-MM-dd") — 응답 스펙 동결 */
     @Convert(converter = StringDateConverter.class)
@@ -64,6 +64,9 @@ public class User {
 
     @Column(name = "tel", length = 20)
     private String tel;
+
+    @Column(name = "email", length = 100)
+    private String email;
 
     @Column(name = "business_no", length = 10)
     private String businessNo;

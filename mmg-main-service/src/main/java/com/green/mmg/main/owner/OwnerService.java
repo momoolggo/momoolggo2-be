@@ -8,6 +8,10 @@ import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.feign.RiderFeignClient;
 import com.green.mmg.main.feign.model.RiderAssignReq;
+import com.green.mmg.main.notification.NotificationService;
+import com.green.mmg.main.notification.model.NotificationCreateReq;
+import com.green.mmg.main.order.OrderRepository;
+import com.green.mmg.main.order.model.Orders;
 import com.green.mmg.main.owner.entity.MenuOption;
 import com.green.mmg.main.owner.entity.MenuOptionCategory;
 import com.green.mmg.main.owner.model.*;
@@ -40,6 +44,8 @@ public class OwnerService {
     private final MenuOptionCategoryRepository menuOptionCategoryRepository;
     private final AdminFeignClient adminFeignClient;
     private final OwnerOrderSseService ownerOrderSseService;
+    private final OrderRepository orderRepository;
+    private final NotificationService notificationService;
 
     private static final int IMAGE_MAX_WIDTH = 1200;
     private static final int IMAGE_MAX_HEIGHT = 1200;
@@ -49,6 +55,8 @@ public class OwnerService {
     // ORDER_STATE 매핑 (CLAUDE.md §7) — 본 작업 A Group 4에서 3(조리중) 진입 시점만 인용.
     // Q-A9.d (ii) 일관: order_state=4/5 변경 책임 추가 X (admin 시연 수동 변경 가능, ADR-004 박제 범위 좁힘).
     private static final int ORDER_STATE_COOKING = 3;
+    // 2026-05-25 9건 트랙 — 사장 "배차 신청" 명시 클릭 시점에만 라이더 풀 트리거 (이전: 주문 수락=3 시점 자동)
+    private static final int ORDER_STATE_RIDER_REQUESTED = 4;
 
     // ========== 이미지 업로드 (공통) ==========
 
@@ -183,17 +191,38 @@ public class OwnerService {
     @Transactional
     public void updateOrderState(long callerOwnerNo, OwnerOrderStateReq req){
         verifyOrderOwner(callerOwnerNo, req.getOrderId());
+        Orders order = orderRepository.findById(req.getOrderId())
+                .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다."));
+        Integer previousOrderState = order.getOrderState();
+
         int result = ownerMapper.updateOrderState(req);
         if (result == 0){
             throw new RuntimeException("주문 상태 변경 실패: 주문을 찾을 수 없습니다.");
         }
 
-        // 점주 수락 시점 (order_state=3 진입)에 자동 배차 트리거 (team-handoff §8, Q-A9.a (β+δ)).
-        // 라이더 풀 모델 — req.riderNo=null로 호출 → rider 측 WAITING_ASSIGN 생성 → 라이더가 R6 GET /api/rider/order/waiting 선착순 수락.
-        // best-effort try-catch (D1-bis 일관) — 배차 실패해도 order_state 전환은 성공.
-        if (req.getOrderState() == ORDER_STATE_COOKING) {
+        // 점주가 주문을 수락해 조리중으로 처음 진입한 시점에 고객 내부 알림을 저장한다.
+        // SSE 실시간 수신을 놓치거나 재로그인하더라도 알림 목록 조회로 다시 확인할 수 있다.
+        if (!Objects.equals(previousOrderState, ORDER_STATE_COOKING)
+                && req.getOrderState() == ORDER_STATE_COOKING) {
+            sendOrderAcceptedNotification(order);
+        }
+
+        // 2026-05-25 9건 트랙 정정 — state 3(주문 수락)이 아닌 state 4(배차 신청)에서만 트리거.
+        // 사장이 "배차 신청" 버튼을 명시적으로 눌러야 라이더 풀에 INSERT + 라이더 SSE 발송.
+        // best-effort try-catch — 배차 실패해도 order_state 전환은 성공.
+        if (req.getOrderState() == ORDER_STATE_RIDER_REQUESTED) {
             triggerRiderAssign(req.getOrderId());
         }
+    }
+
+    private void sendOrderAcceptedNotification(Orders order) {
+        notificationService.createNotification(new NotificationCreateReq(
+                order.getUserNo(),
+                "ORDER_STATUS",
+                "주문이 수락되었습니다.",
+                "가게에서 주문을 확인하고 조리를 시작했습니다.",
+                "/order/history/" + order.getOrderId()
+        ));
     }
 
     /**
