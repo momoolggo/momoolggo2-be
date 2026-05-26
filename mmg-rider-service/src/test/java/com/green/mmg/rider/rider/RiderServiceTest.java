@@ -1,6 +1,9 @@
 package com.green.mmg.rider.rider;
 
+import com.green.mmg.common.dto.ResultResponse;
+import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.rider.feign.AuthInternalClient;
 import com.green.mmg.rider.rider.model.Rider;
 import com.green.mmg.rider.rider.model.RiderProfileReq;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
@@ -35,6 +38,7 @@ class RiderServiceTest {
     private static final long CALLER_USER_NO = 42L;
 
     @Mock private RiderRepository riderRepository;
+    @Mock private AuthInternalClient authInternalClient;
 
     @InjectMocks private RiderService riderService;
 
@@ -128,6 +132,43 @@ class RiderServiceTest {
             assertThat(riderCaptor.getAllValues())
                     .extracting(Rider::getVehicleType)
                     .containsExactly(VehicleType.WALK, VehicleType.BICYCLE, VehicleType.MOTORBIKE, VehicleType.CAR);
+        }
+
+        @Test
+        @DisplayName("phone 미입력 시 auth tel 자동 조회 — rider.phone에 auth tel 저장")
+        void noPhone_fetchesFromAuth() {
+            when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
+            ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
+            when(riderRepository.save(riderCaptor.capture())).thenAnswer(i -> i.getArgument(0));
+
+            UserBriefDto brief = new UserBriefDto(CALLER_USER_NO, "홍길동", "010-9999-8888", "");
+            when(authInternalClient.getUser(CALLER_USER_NO))
+                    .thenReturn(new ResultResponse<>("유저 조회 완료", brief));
+
+            RiderProfileReq req = new RiderProfileReq(
+                    "11-22-333333-44", "2종보통", "MOTORBIKE",
+                    "신한은행", "110-123-456789", "홍길동", null);
+            riderService.joinProfile(CALLER_USER_NO, req);
+
+            assertThat(riderCaptor.getValue().getPhone()).isEqualTo("010-9999-8888");
+            verify(authInternalClient, times(1)).getUser(CALLER_USER_NO);
+        }
+
+        @Test
+        @DisplayName("phone 미입력 + auth 호출 실패 시 — phone null로 가입 정상 완료 (auth 장애 격리)")
+        void noPhone_authFails_registersWithNullPhone() {
+            when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
+            ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
+            when(riderRepository.save(riderCaptor.capture())).thenAnswer(i -> i.getArgument(0));
+            when(authInternalClient.getUser(CALLER_USER_NO)).thenThrow(new RuntimeException("auth down"));
+
+            RiderProfileReq req = new RiderProfileReq(
+                    "11-22-333333-44", "2종보통", "MOTORBIKE",
+                    "신한은행", "110-123-456789", "홍길동", null);
+            riderService.joinProfile(CALLER_USER_NO, req);
+
+            assertThat(riderCaptor.getValue().getPhone()).isNull();
+            verify(riderRepository, times(1)).save(any(Rider.class));
         }
 
         @Test

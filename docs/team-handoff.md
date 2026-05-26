@@ -205,6 +205,20 @@
 
 ---
 
+## ~~14. admin `GET /api/admin/rider-settlement/all` 라이더 전체 정산 내역 relay 미구현~~ ✅ 본인 직접 처리 완료 (2026-05-26)
+
+| 항목 | 내용 |
+|---|---|
+| **영역** | `mmg-admin-service` ❌ 팀원 |
+| **위치** | `mmg-admin-service/.../rider/RiderFeignClient.java` (메서드 추가) + admin 라이더 정산 컨트롤러 (endpoint 추가) |
+| **경위** | admin FE `AdminSettlementView.vue`에서 PENDING 목록만 표시되던 문제 수정 — CONFIRMED 포함 전체 내역이 필요. rider-service BE 및 admin FE는 완료됨. admin-service relay만 남음. |
+| **rider-service 준비 완료** | `GET /internal/rider/settlement/all` — `SettlementService.findAll()` (periodStart DESC), `RiderInternalController.allSettlements()` |
+| **admin FE 준비 완료** | `adminService.getRiderSettlementAll()` → `GET /api/admin/rider-settlement/all` 호출 준비됨. `AdminSettlementView.vue`에서 `fetchRiderSettlements()`가 이 메서드 호출. |
+| **필요 처리 (admin 측)** | 1. `RiderFeignClient.java`에 `getRiderSettlementAll()` 메서드 추가 — `@GetMapping("/internal/rider/settlement/all") List<SettlementRowRes> getRiderSettlementAll()`. 2. admin 라이더 정산 컨트롤러에 `GET /api/admin/rider-settlement/all` endpoint 추가 — `riderFeignClient.getRiderSettlementAll()` 호출 후 반환. 3. 응답 타입: `List<SettlementRowRes>` (기존 pending과 동일 DTO). |
+| **참조** | `RiderInternalController.java:150-154` / `SettlementService.findAll()` / `adminService.js:getRiderSettlementAll` |
+
+---
+
 ## 처리 완료
 
 (팀원 처리 완료 시 이력 박제 — 항목 / 처리 커밋 / 처리일)

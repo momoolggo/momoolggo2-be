@@ -210,6 +210,15 @@ public class SettlementService {
                 .stream().map(SettlementRowRes::from).toList();
     }
 
+    /** Internal — admin 전체 정산 목록 (PENDING + CONFIRMED). 기간 내림차순. */
+    @Transactional(readOnly = true)
+    public List<SettlementRowRes> findAll() {
+        return settlementRepository.findAll(
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC, "periodStart"))
+                .stream().map(SettlementRowRes::from).toList();
+    }
+
     // ─── 도구 ────────────────────────────────────────────────────────
 
     private Rider riderByUserNo(Long callerUserNo) {
