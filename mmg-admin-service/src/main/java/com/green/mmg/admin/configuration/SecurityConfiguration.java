@@ -20,10 +20,11 @@ public class SecurityConfiguration {
                         .requestMatchers(
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
-                                "/api/admin/**",
-                                "/internal/**"
+                                "/actuator/health",
+                                "/internal/**"          // Gateway가 외부 차단 (InternalBlockController)
                         ).permitAll()
-                        .anyRequest().hasRole("ADMIN")
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")  // 외부 무인증 우회 차단
+                        .anyRequest().authenticated()
                 )
                 .build();
     }
