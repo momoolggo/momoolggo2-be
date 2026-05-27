@@ -104,7 +104,7 @@ class OrderServiceTest {
             when(authFeignClient.getUser(USER_NO))
                     .thenReturn(new UserBriefDto(USER_NO, "준하", "010-1234-5678", ""));
             when(userAddressRepository.findFirstDefaultByUserNo(USER_NO))
-                    .thenReturn(Optional.of(new OrderAddressInfo("서울시 강남구", "101동 202호")));
+                    .thenReturn(Optional.of(new OrderAddressInfo("서울시 강남구", "101동 202호", null, null)));
 
             OrderInfoRes res = orderService.getOrderInfo(USER_NO);
 

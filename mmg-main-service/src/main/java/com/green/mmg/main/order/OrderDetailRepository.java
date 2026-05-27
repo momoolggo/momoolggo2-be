@@ -25,6 +25,7 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, Long> 
     List<OrderItemDto> findItemsByOrderId(@Param("orderId") Long orderId);
     List<OrderDetail> findAllByOrderId(Long orderId);
 
-    @Modifying
-    void deleteByOrderId(Long orderId);
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM OrderDetail od WHERE od.orderId = :orderId")
+    int deleteByOrderId(@Param("orderId") Long orderId);
 }

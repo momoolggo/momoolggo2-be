@@ -24,6 +24,7 @@ public class UnpaidOrderCleanupService {
 
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
+    private final OrderStatusLogRepository orderStatusLogRepository;
     private final CouponListRepository couponListRepository;
     private final OrderMapper orderMapper;
 
@@ -50,6 +51,7 @@ public class UnpaidOrderCleanupService {
                 .forEach(CouponList::releaseReservation);
 
         orderDetailRepository.deleteByOrderId(orderId);
+        orderStatusLogRepository.deleteByOrderId(orderId);
         int deleted = orderRepository.deleteByOrderIdAndPayStateUnpaid(orderId);
 
         if (deleted > 0 && storeId != null) {

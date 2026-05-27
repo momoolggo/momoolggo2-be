@@ -68,4 +68,6 @@ public interface CouponListRepository extends JpaRepository<CouponList, Long> {
     Optional<CouponList> findFirstByOrderIdAndUserNoAndUsedFalse(Long orderId, Long userNo);
 
     List<CouponList> findAllByOrderIdAndUsedFalse(Long orderId);
+
+    boolean existsByUserNoAndCouponId(Long userNo, Long couponId);
 }
