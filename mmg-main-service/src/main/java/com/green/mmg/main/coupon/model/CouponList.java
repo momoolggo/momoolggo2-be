@@ -39,6 +39,16 @@ public class CouponList {
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
 
+    public static CouponList issue(Long userNo, Coupon coupon, LocalDateTime issuedAt) {
+        CouponList couponList = new CouponList();
+        couponList.userNo = userNo;
+        couponList.couponId = coupon.getCouponId();
+        couponList.used = false;
+        int validityDays = coupon.getValidityDays() == null ? 30 : coupon.getValidityDays();
+        couponList.expiresAt = issuedAt.plusDays(validityDays);
+        return couponList;
+    }
+
     public void reserveForOrder(Long orderId){
         this.orderId = orderId;
     }

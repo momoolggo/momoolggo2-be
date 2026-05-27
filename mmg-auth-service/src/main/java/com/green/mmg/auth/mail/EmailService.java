@@ -31,6 +31,8 @@ public class EmailService {
                  
                  감사합니다.
                  
+                 메일이 보이지 않으면 스팸함을 확인해 주세요.
+                 
                  뭐물꼬 momoolggo
                 """.formatted(name, code);
 
@@ -38,6 +40,8 @@ public class EmailService {
     }
 
     public void sendApprovalRejected(String to, String name, String role, String reason){
+        log.info("가입신청 반려 메일 생성: to={}, name={}, role={}, reason={}", to, name, role, reason);
+
         String roleName = "OWNER".equals(role) ? "사장" : "RIDER".equals(role) ?  "라이더" : "회원";
         String rejectionReason = reason == null || reason.isBlank()
                 ? "반려 사유가 입력되지 않았습니다."
@@ -56,22 +60,24 @@ public class EmailService {
                 
                 감사합니다.
                 
+                메일이 보이지 않으면 스팸함을 확인해 주세요.
+                
                 뭐물꼬 momoolggo
                 """.formatted(name, roleName, rejectionReason);
 
         send(to, subject, text);
     }
 
-    private void send(String to, String subject, String text){
+    private void send(String to, String subject, String text) {
         if (to == null || to.isBlank()) {
-            log.warn("메일 수신자가 없어 발송을 건너뜁니다. subject={}", subject);
-            return;
+            log.error("메일 수신자가 없어 발송할 수 없습니다. subject={}", subject);
+            throw new IllegalStateException("메일 수신자가 없습니다.");
         }
 
         JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
         if (mailSender == null) {
-            log.warn("메일 설정이 없어 발송을 건너뜁니다. to={}, subject={}", to, subject);
-            return;
+            log.error("JavaMailSender Bean이 없습니다. MAIL_HOST/MAIL_USERNAME/MAIL_PASSWORD 설정을 확인하세요. to={}, subject={}", to, subject);
+            throw new IllegalStateException("메일 설정이 없습니다.");
         }
 
         SimpleMailMessage message = new SimpleMailMessage();

@@ -23,6 +23,7 @@ public class GreenPointRewardService {
 
     private final GreenPointLogRepository greenPointLogRepository;
     private final AuthFeignClient authFeignClient;
+    private final EcoLevelCouponRewardService ecoLevelCouponRewardService;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void rewardIfEcoSelected(Orders order) {
@@ -57,15 +58,30 @@ public class GreenPointRewardService {
     }
 
     private void requestGreenPoint(GreenPointLog greenPointLog) {
+        Integer afterPoint;
         try {
-            authFeignClient.addGreenPoint(
+            afterPoint = authFeignClient.addGreenPoint(
                     greenPointLog.getUserNo(),
-                    new GreenPointAddReq(greenPointLog.getPoint(), greenPointLog.getReason(), greenPointLog.getOrderId()));
+                    new GreenPointAddReq(greenPointLog.getPoint(), greenPointLog.getReason(), greenPointLog.getOrderId()))
+                    .getResultData();
             greenPointLog.markSuccess();
         } catch (Exception e) {
             greenPointLog.markFailed(e.getMessage());
             log.warn("그린포인트 적립 재시도 대상 orderId={} userNo={} retryCount={} error={}",
                     greenPointLog.getOrderId(), greenPointLog.getUserNo(), greenPointLog.getRetryCount(), e.getMessage());
+            return;
+        }
+
+        if (afterPoint == null) {
+            return;
+        }
+
+        int beforePoint = Math.max(0, afterPoint - greenPointLog.getPoint());
+        try {
+            ecoLevelCouponRewardService.issueRewardsForCrossedStages(greenPointLog.getUserNo(), beforePoint, afterPoint);
+        } catch (Exception e) {
+            log.warn("친환경 등급 보상 쿠폰 지급 실패 userNo={} beforePoint={} afterPoint={} error={}",
+                    greenPointLog.getUserNo(), beforePoint, afterPoint, e.getMessage());
         }
     }
 }

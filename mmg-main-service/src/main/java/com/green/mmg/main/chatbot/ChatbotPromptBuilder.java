@@ -54,7 +54,7 @@ public class ChatbotPromptBuilder {
             case BEAR -> "느긋한 곰";
             case FOX -> "영리하고 장난기 많은 여우";
             case PANDA -> "느릿느릿 식탐 많은 판다";
-            case KOALA -> "잠 많은 코알라";
+            case FROG -> "꿈 많고 통통 튀는 개구리";
         };
     }
 

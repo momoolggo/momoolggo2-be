@@ -7,5 +7,5 @@ package com.green.mmg.main.pet.entity;
  */
 public enum PetSpecies {
     DOG, CAT, RABBIT, HAMSTER,
-    BEAR, FOX, PANDA, KOALA
+    BEAR, FOX, PANDA, FROG
 }

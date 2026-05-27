@@ -27,7 +27,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("PetService — 단위 테스트")
-class PetServiceTest {
+class zzPetServiceTest {
 
     @Mock private PetRepository petRepository;
     @Mock private GreenPointLogRepository greenPointLogRepository;
@@ -128,6 +128,26 @@ class PetServiceTest {
     @Nested
     @DisplayName("updatePet — 종족/이름 수정")
     class Update {
+        @Test
+        @DisplayName("happy: 신규 종족 FOX/BEAR/PANDA/FROG 수정 가능")
+        void newSpecies_updates() {
+            for (PetSpecies species : java.util.List.of(
+                    PetSpecies.FOX,
+                    PetSpecies.BEAR,
+                    PetSpecies.PANDA,
+                    PetSpecies.FROG
+            )) {
+                Pet pet = new Pet(USER_NO, PetSpecies.DOG, "테스트");
+                when(petRepository.findByUserNo(USER_NO)).thenReturn(Optional.of(pet));
+
+                PetUpdateReq req = new PetUpdateReq();
+                req.setSpecies(species);
+
+                PetRes res = petService.updatePet(USER_NO, req);
+
+                assertThat(res.getSpecies()).isEqualTo(species);
+            }
+        }
 
         @Test
         @DisplayName("happy: 종족+이름 모두 변경")
