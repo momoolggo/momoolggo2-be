@@ -12,7 +12,10 @@
       "Bash(./gradlew :mmg-rider-service:compileTestJava)",
       "Bash(./gradlew :mmg-rider-service:compileJava)",
       "Bash(./gradlew :mmg-admin-service:compileJava)",
-      "Bash(npm list *)"
+      "Bash(npm list *)",
+      "mcp__claude_ai_Notion__notion-update-page",
+      "Read(//d/yelim kim/vue\" 2>/dev/**)",
+      "Read(//c/codding/project\" 2>/dev/**)"
     ]
   }
 }

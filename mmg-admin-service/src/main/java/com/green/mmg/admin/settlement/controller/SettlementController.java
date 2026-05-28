@@ -68,12 +68,6 @@ public class SettlementController {
         return new ResultResponse<>("정산 보류 처리", null);
     }
 
-    // 가게별 정산 내역 조회 (internal)
-    @GetMapping("/internal/store/{storeId}")
-    public ResultResponse<?> getSettlementsByStore(@PathVariable Long storeId) {
-        return new ResultResponse<>("조회 성공", settlementService.getSettlementsByStoreId(storeId));
-    }
-
     // 정산 상세 주문내역 조회 (기간별 날짜별 매출)
     @GetMapping("/{settlementId}/orders")
     public ResultResponse<?> getSettlementOrders(@PathVariable Long settlementId) {
