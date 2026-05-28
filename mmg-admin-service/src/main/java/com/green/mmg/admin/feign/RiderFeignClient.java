@@ -67,12 +67,17 @@ public interface RiderFeignClient {
     List<RiderSettlementRowRes> getRiderSettlementAll();
 
     // ─── §3.1/§3.2 라이더 관리 (Group 8.5 신설, Q-A1 (라+)) ──────
-    // SSE 자동화 트랙(2026-05-21) — approveRider/suspendRider 폐기 (auto-approve true 박제로 신원 승인 흐름 단일화).
-    // getRiderList는 AdminDeliveryController.getRiderCount에서 사용 중 (라이더 공지 모달).
+    // 2026-05-28 트랙 — approveRider 복원 (PENDING → ACTIVE).
+    // (이전: SSE 자동화 트랙(2026-05-21)에서 영구 폐기 박제 — 2026-05-28 트랙에서 사용자 명시 요청으로 복원.)
+    // suspendRider는 여전히 미복원 — user 도메인 정지로 단일화 유지.
 
-    /** 라이더 목록 조회 — interfaces.md §3.5. status null=전체. AdminDeliveryController.getRiderCount 잔존 사용처. */
+    /** 라이더 목록 조회 — interfaces.md §3.5. status null=전체 / "PENDING"=승인 대기 등. */
     @GetMapping("/internal/rider/list")
     List<RiderProfileRes> getRiderList(@RequestParam(value = "status", required = false) String status);
+
+    /** 라이더 승인 — PENDING → ACTIVE (2026-05-28 트랙 복원). */
+    @PostMapping("/internal/rider/{userNo}/approve")
+    RiderProfileRes approveRider(@PathVariable("userNo") Long userNo);
 
     // ─── §1.3 라이더 위치 다건 조회 (Group 10 신설, 2026-05-17) ──────
     // 결정 (가) Redis TTL 기준 — 위치 송신 fresh 라이더만. 빈 결과는 빈 List.

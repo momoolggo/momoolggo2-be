@@ -17,6 +17,7 @@ public record RiderProfileRes(
         String accountBank,
         String accountNo,
         String accountHolder,
-        String phone           // 정산 시연 UX 트랙 #9 (2026-05-21) rider Provider 10 필드 동기
+        String phone,          // 정산 시연 UX 트랙 #9 (2026-05-21) rider Provider 10 필드 동기
+        String licenseImageUrl // 2026-05-28 트랙 rider Provider 11 필드 동기 (admin 승인 시 면허증 사진 노출)
 ) {
 }

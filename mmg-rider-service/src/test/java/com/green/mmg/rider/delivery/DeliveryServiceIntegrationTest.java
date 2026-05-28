@@ -68,6 +68,8 @@ class DeliveryServiceIntegrationTest {
                 "신한은행",
                 "110-123-456789",
                 "홍길동");
+        // 2026-05-28 트랙 — 생성자 status=PENDING 복원. 본 테스트는 ACTIVE 라이더 시나리오 박제.
+        rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 

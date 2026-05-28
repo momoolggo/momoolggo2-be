@@ -62,8 +62,8 @@ class RiderServiceTest {
     class JoinProfile {
 
         @Test
-        @DisplayName("happy: 신규 Rider INSERT — Rider 생성자에서 status=ACTIVE 직접 박제 (SSE 자동화 트랙)")
-        void happy_savesAsActive() {
+        @DisplayName("happy: 신규 Rider INSERT — status=PENDING 박제 (2026-05-28 트랙 가입 승인 흐름 복원)")
+        void happy_savesAsPending() {
             when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
             ArgumentCaptor<Rider> riderCaptor = ArgumentCaptor.forClass(Rider.class);
             when(riderRepository.save(riderCaptor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -76,8 +76,8 @@ class RiderServiceTest {
             assertThat(captured.getUserNo()).isEqualTo(CALLER_USER_NO);
             assertThat(captured.getLicenseNo()).isEqualTo("11-22-333333-44");
             assertThat(captured.getVehicleType()).isEqualTo(VehicleType.MOTORBIKE);
-            assertThat(captured.getStatus()).isEqualTo(RiderStatus.ACTIVE);
-            assertThat(res.status()).isEqualTo("ACTIVE");
+            assertThat(captured.getStatus()).isEqualTo(RiderStatus.PENDING);
+            assertThat(res.status()).isEqualTo("PENDING");
             assertThat(res.userNo()).isEqualTo(CALLER_USER_NO);
         }
 
@@ -220,7 +220,7 @@ class RiderServiceTest {
     class FindProfile {
 
         @Test
-        @DisplayName("happy: 본인 rider 조회 → RiderProfileRes 반환 (가입 즉시 ACTIVE)")
+        @DisplayName("happy: 본인 rider 조회 → RiderProfileRes 반환 (가입 직후 PENDING, 2026-05-28 트랙)")
         void happy_returnsDto() {
             Rider rider = new Rider(CALLER_USER_NO, "11-22-333333-44", "2종보통", VehicleType.MOTORBIKE,
                     "신한은행", "110-123-456789", "홍길동");
@@ -230,7 +230,7 @@ class RiderServiceTest {
             RiderProfileRes res = riderService.findProfile(CALLER_USER_NO);
 
             assertThat(res.userNo()).isEqualTo(CALLER_USER_NO);
-            assertThat(res.status()).isEqualTo("ACTIVE");
+            assertThat(res.status()).isEqualTo("PENDING");
             assertThat(res.licenseType()).isEqualTo("2종보통");
             assertThat(res.vehicleType()).isEqualTo("MOTORBIKE");
             assertThat(res.accountHolder()).isEqualTo("홍길동");
@@ -246,6 +246,53 @@ class RiderServiceTest {
                     .hasMessage("라이더 프로필이 등록되지 않았습니다.")
                     .extracting(e -> ((BusinessException) e).getStatus())
                     .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("ApproveByUserNo (2026-05-28 트랙 가입 승인 흐름 복원)")
+    class ApproveByUserNo {
+
+        @Test
+        @DisplayName("happy: PENDING rider → ACTIVE 전이 + RiderProfileRes 반환")
+        void happy_pendingToActive() {
+            Rider rider = new Rider(CALLER_USER_NO, "11-22-333333-44", "2종보통", VehicleType.MOTORBIKE,
+                    "신한은행", "110-123-456789", "홍길동");
+            assertThat(rider.getStatus()).isEqualTo(RiderStatus.PENDING);
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
+
+            RiderProfileRes res = riderService.approveByUserNo(CALLER_USER_NO);
+
+            assertThat(rider.getStatus()).isEqualTo(RiderStatus.ACTIVE);
+            assertThat(res.status()).isEqualTo("ACTIVE");
+            assertThat(res.userNo()).isEqualTo(CALLER_USER_NO);
+        }
+
+        @Test
+        @DisplayName("부재: findByUserNo empty → BusinessException NOT_FOUND")
+        void notFound_throwsNotFound() {
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> riderService.approveByUserNo(CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("라이더 프로필이 등록되지 않았습니다.")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("이미 ACTIVE: approve 재호출 → BusinessException CONFLICT (화이트리스트 검증)")
+        void alreadyActive_throwsConflict() {
+            Rider rider = new Rider(CALLER_USER_NO, "11-22-333333-44", "2종보통", VehicleType.MOTORBIKE,
+                    "신한은행", "110-123-456789", "홍길동");
+            rider.approve(); // PENDING → ACTIVE
+            when(riderRepository.findByUserNo(CALLER_USER_NO)).thenReturn(Optional.of(rider));
+
+            assertThatThrownBy(() -> riderService.approveByUserNo(CALLER_USER_NO))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("PENDING 상태가 아닌")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.CONFLICT);
         }
     }
 }

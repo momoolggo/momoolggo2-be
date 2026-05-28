@@ -23,9 +23,10 @@ import java.util.List;
  * 매 요청 rider.status를 DB에서 읽음. JwtUser.status는 토큰 발급 시점 동결되어
  * 토글 후 stale 가능 — 신뢰하지 않음.
  *
- * <h3>SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 흐름 영구 폐기</h3>
- * 가입 시점에 Rider 생성자에서 status=ACTIVE 직접 박제 (D11 auto-approve toggle 폐기).
- * RiderStatus.PENDING/SUSPENDED enum 값은 DB 정합 + DeliveryService/WorkSessionService/LocationService 거부 검증 의도로 보존.
+ * <h3>2026-05-28 트랙 — 가입 신원 승인 흐름 복원</h3>
+ * 가입 시점에 Rider 생성자에서 status=PENDING 박제. admin이 approveByUserNo() 호출 시 ACTIVE 전이.
+ * RiderLayout.vue:31-33 박제 일관 — PENDING은 라이더 화면 차단 (블록 화면 노출).
+ * (이전: SSE 자동화 트랙(2026-05-21)에서 영구 폐기 박제 — 2026-05-28 트랙에서 사용자 명시 요청으로 복원.)
  */
 @Slf4j
 @Service
@@ -41,7 +42,7 @@ public class RiderService {
      * <ol>
      *   <li>중복 가입 방지 (existsByUserNo)</li>
      *   <li>입력 검증 (필수 필드 + vehicleType 화이트리스트)</li>
-     *   <li>Rider INSERT — 생성자에서 status=ACTIVE 직접 박제 (SSE 자동화 트랙, 2026-05-21)</li>
+     *   <li>Rider INSERT — 생성자에서 status=PENDING 박제 (2026-05-28 트랙 가입 승인 흐름 복원)</li>
      * </ol>
      *
      * @param callerUserNo SecurityContextHolder 추출 — dto.userNo 신뢰 X (위조 방지)
@@ -114,6 +115,24 @@ public class RiderService {
     @Transactional
     public long deleteByUserNoIfExists(Long userNo) {
         return riderRepository.deleteByUserNo(userNo);
+    }
+
+    /**
+     * admin 라이더 승인 — PENDING → ACTIVE (2026-05-28 트랙 복원).
+     * Q-A20 (가) entity 메서드 위임 + IllegalStateException → BusinessException CONFLICT 변환.
+     * 라이더 부재 → NOT_FOUND. 이미 ACTIVE/SUSPENDED → CONFLICT.
+     */
+    @Transactional
+    public RiderProfileRes approveByUserNo(long userNo) {
+        Rider rider = riderRepository.findByUserNo(userNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        try {
+            rider.approve();
+        } catch (IllegalStateException e) {
+            throw new BusinessException(e.getMessage(), HttpStatus.CONFLICT);
+        }
+        return RiderProfileRes.from(rider);
     }
 
     private void validate(RiderProfileReq req) {
