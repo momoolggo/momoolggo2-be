@@ -270,6 +270,15 @@ public class OwnerController {
         return new ResultResponse<>("매출 순위 조회 성공", ranking);
     }
 
+    @GetMapping("/settlement/{settlementId}/orders")
+    public ResultResponse<?> getMySettlementOrders(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long settlementId,
+            @RequestParam Long storeId) {
+        return new ResultResponse<>("정산 상세 조회 성공",
+                ownerService.getMySettlementOrders(principal.getSignedUserNo(), storeId, settlementId));
+    }
+
     @PostMapping("/settlement/inquiry")
     public ResultResponse<?> submitInquiry(
             @AuthenticationPrincipal UserPrincipal principal,
