@@ -86,14 +86,23 @@ public class UserController {
         if (principal == null) {
             return new ResultResponse<>("로그인이 필요합니다.", null);
         }
-        UserSigninRes data = new UserSigninRes(
-                principal.getSignedUserNo(),
-                principal.getName(),
-                principal.getRole(),
-                0L,  // ← me는 만료시각 안 씀, 0으로 채우기
-                null
-        );
-        return new ResultResponse<>("조회 성공", data);
+        return new ResultResponse<>("조회 성공", userService.getMe(principal.getSignedUserNo()));
+    }
+
+    // 계정 탈퇴
+    @DeleteMapping
+    public ResultResponse<Void> withdraw(@AuthenticationPrincipal UserPrincipal principal,
+                                         @RequestBody(required = false) UserWithdrawReq req,
+                                         HttpServletResponse res){
+        userService.withdraw(principal.getSignedUserNo(),req, res);
+        return new ResultResponse<>("회원 탈퇴 완료", null);
+    }
+
+    // 계정 복구 (탈퇴 후 14일 이내)
+    @PostMapping("/recover")
+    public ResultResponse<UserSigninRes> recover(@RequestBody UserRecoverReq req,
+                                                 HttpServletResponse res) {
+        return new ResultResponse<>("계정 복구 완료", userService.recover(req, res));
     }
 
     // 내 정보 조회

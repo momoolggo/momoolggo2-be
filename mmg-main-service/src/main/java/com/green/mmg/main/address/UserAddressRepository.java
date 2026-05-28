@@ -63,6 +63,11 @@ public interface UserAddressRepository extends JpaRepository<UserAddress, Long> 
         """)
     List<UserDefaultAddressRes> findDefaultAddressesByUserNos(@Param("userNos") List<Long> userNos);
 
+    /** 회원 탈퇴 시  */
+    @Modifying
+    @Query("DELETE FROM UserAddress a WHERE a.userNo = :userNo")
+    int deleteByUserNo(@Param("userNo") long userNo);
+
 }
 
 

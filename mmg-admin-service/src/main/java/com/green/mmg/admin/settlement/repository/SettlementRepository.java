@@ -53,6 +53,7 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
 
     List<Settlement> findByTargetTypeAndStatusIn(SettlementTargetType targetType, List<SettlementsStatus> statuses, Pageable pageable);
     Long countByTargetTypeAndStatusIn(SettlementTargetType targetType, List<SettlementsStatus> statuses);
+    Long countByTargetTypeAndTargetNoInAndStatusIn(SettlementTargetType targetType, List<Long> targetNos, List<SettlementsStatus> statuses);
 
     Long countByTargetType(SettlementTargetType targetType);
 

@@ -52,4 +52,6 @@ public interface DeliveryRepository extends JpaRepository<Delivery, String> {
     /** Admin 모니터 keyword 검색 — storeName LIKE + status 그룹 필터. */
     Page<Delivery> findByStatusInAndStoreNameContainingIgnoreCase(
             Collection<DeliveryStatus> statuses, String storeName, Pageable pageable);
+
+    long countByRiderNoAndStatusIn(Long riderNo, Collection<DeliveryStatus> statuses);
 }
