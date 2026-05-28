@@ -58,22 +58,35 @@ public class Rider extends BaseEntity {
     @Column(name = "phone", length = 20)
     private String phone;
 
+    @Column(name = "license_image_url", length = 500)
+    private String licenseImageUrl;
+
     /**
-     * 7 파라미터 생성자 — phone 미입력(NULL) 허용. 기존 테스트 호환 박제.
-     * 신규 가입 흐름은 8 파라미터 생성자 사용 (joinProfile 박제 일관).
+     * 7 파라미터 생성자 — phone/licenseImageUrl 미입력(NULL) 허용. 기존 테스트 호환 박제.
+     * 신규 가입 흐름은 9 파라미터 생성자 사용 (joinProfile 박제 일관).
      */
     public Rider(Long userNo, String licenseNo, String licenseType, VehicleType vehicleType,
                  String accountBank, String accountNo, String accountHolder) {
         this(userNo, licenseNo, licenseType, vehicleType,
-                accountBank, accountNo, accountHolder, null);
+                accountBank, accountNo, accountHolder, null, null);
     }
 
     /**
      * 정산 시연 UX 트랙 #9 (2026-05-21, 옵션 A) — phone 스냅샷 박제용 8 파라미터.
-     * SSE 자동화 트랙(2026-05-21) — 가입 시점 status=ACTIVE 직접 박제 (라이더 신원 승인 흐름 영구 폐기).
+     * licenseImageUrl 미입력(NULL) 허용. 기존 호출처 호환 박제.
      */
     public Rider(Long userNo, String licenseNo, String licenseType, VehicleType vehicleType,
                  String accountBank, String accountNo, String accountHolder, String phone) {
+        this(userNo, licenseNo, licenseType, vehicleType,
+                accountBank, accountNo, accountHolder, phone, null);
+    }
+
+    /**
+     * 2026-05-28 트랙 — 가입 시 면허증 사진 URL 박제용 9 파라미터.
+     * SSE 자동화 트랙(2026-05-21) — 가입 시점 status=ACTIVE 직접 박제 (라이더 신원 승인 흐름 영구 폐기).
+     */
+    public Rider(Long userNo, String licenseNo, String licenseType, VehicleType vehicleType,
+                 String accountBank, String accountNo, String accountHolder, String phone, String licenseImageUrl) {
         this.userNo = userNo;
         this.licenseNo = licenseNo;
         this.licenseType = licenseType;
@@ -82,6 +95,7 @@ public class Rider extends BaseEntity {
         this.accountNo = accountNo;
         this.accountHolder = accountHolder;
         this.phone = phone;
+        this.licenseImageUrl = licenseImageUrl;
         this.status = RiderStatus.ACTIVE;
     }
 

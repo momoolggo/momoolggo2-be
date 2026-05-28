@@ -110,7 +110,8 @@ class WorkSessionServiceIntegrationTest {
                 "010-1111-1111",
                 "손님 주소", 37.5670, 126.979,
                 "010-2222-2222",
-                3000, 0);
+                3000, 0,
+                null, null);
 
         assertThatThrownBy(() -> deliveryService.assignDelivery(req))
                 .isInstanceOf(BusinessException.class)

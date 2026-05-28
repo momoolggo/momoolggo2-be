@@ -70,6 +70,10 @@ spring:
               uri: http://localhost:8080
               predicates:
                 - Path=/api/delivery-photo/**
+            - id: main-rider-license-route   # 2026-05-28 트랙 라이더 가입 면허증 사진 업로드
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/rider-license/**
             - id: main-chatbot-route          # 2026-05-25 9건 트랙 #5/#6 — 사장/라이더 챗봇 호출 라우트 누락 정정
               uri: http://localhost:8080
               predicates:

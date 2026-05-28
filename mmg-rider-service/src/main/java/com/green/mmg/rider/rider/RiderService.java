@@ -75,7 +75,8 @@ public class RiderService {
                 req.accountBank(),
                 req.accountNo(),
                 req.accountHolder(),
-                phone
+                phone,
+                req.licenseImageUrl()
         );
         rider = riderRepository.save(rider);
         return RiderProfileRes.from(rider);
@@ -116,8 +117,10 @@ public class RiderService {
     }
 
     private void validate(RiderProfileReq req) {
+        // phone은 validate 미포함 — joinProfile 본체에서 auth 조회 fallback 처리 (S-1 정합).
         requireNonBlank(req.licenseNo(), "licenseNo");
         requireNonBlank(req.licenseType(), "licenseType");
+        requireNonBlank(req.licenseImageUrl(), "licenseImageUrl"); // 2026-05-28 트랙 — 가입 시 면허증 사진 필수 (vehicleType valueOf 분기 앞에 배치, W-2 정정)
         requireNonBlank(req.vehicleType(), "vehicleType");
         // account_* nullable=true (Rider.java:50-57 + rider-schema.sql:23-25 일관). 가입 시 미입력 허용, 마이페이지에서 등록 (사용자 결정 A1' 정합성).
     }

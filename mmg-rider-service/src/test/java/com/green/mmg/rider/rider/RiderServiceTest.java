@@ -42,6 +42,8 @@ class RiderServiceTest {
 
     @InjectMocks private RiderService riderService;
 
+    private static final String VALID_LICENSE_IMAGE_URL = "/uploads/rider-license/test.jpg";
+
     private static RiderProfileReq validReq() {
         return new RiderProfileReq(
                 "11-22-333333-44",
@@ -50,7 +52,8 @@ class RiderServiceTest {
                 "신한은행",
                 "110-123-456789",
                 "홍길동",
-                "010-1234-5678"
+                "010-1234-5678",
+                VALID_LICENSE_IMAGE_URL
         );
     }
 
@@ -100,7 +103,7 @@ class RiderServiceTest {
             RiderProfileReq req = new RiderProfileReq(
                     "11-22-333333-44", "1종보통", "HELICOPTER",
                     "신한은행", "110-123-456789", "홍길동",
-                    "010-1234-5678"
+                    "010-1234-5678", VALID_LICENSE_IMAGE_URL
             );
 
             assertThatThrownBy(() -> riderService.joinProfile(CALLER_USER_NO, req))
@@ -124,7 +127,7 @@ class RiderServiceTest {
                 RiderProfileReq req = new RiderProfileReq(
                         "11-22-333333-44", "1종보통", type.name(),
                         "신한은행", "110-123-456789", "홍길동",
-                        "010-1234-5678");
+                        "010-1234-5678", VALID_LICENSE_IMAGE_URL);
                 riderService.joinProfile(CALLER_USER_NO, req);
             }
 
@@ -147,7 +150,7 @@ class RiderServiceTest {
 
             RiderProfileReq req = new RiderProfileReq(
                     "11-22-333333-44", "2종보통", "MOTORBIKE",
-                    "신한은행", "110-123-456789", "홍길동", null);
+                    "신한은행", "110-123-456789", "홍길동", null, VALID_LICENSE_IMAGE_URL);
             riderService.joinProfile(CALLER_USER_NO, req);
 
             assertThat(riderCaptor.getValue().getPhone()).isEqualTo("010-9999-8888");
@@ -164,7 +167,7 @@ class RiderServiceTest {
 
             RiderProfileReq req = new RiderProfileReq(
                     "11-22-333333-44", "2종보통", "MOTORBIKE",
-                    "신한은행", "110-123-456789", "홍길동", null);
+                    "신한은행", "110-123-456789", "홍길동", null, VALID_LICENSE_IMAGE_URL);
             riderService.joinProfile(CALLER_USER_NO, req);
 
             assertThat(riderCaptor.getValue().getPhone()).isNull();
@@ -179,12 +182,32 @@ class RiderServiceTest {
             RiderProfileReq req = new RiderProfileReq(
                     "  ", "1종보통", "CAR",
                     "신한은행", "110-123-456789", "홍길동",
-                    "010-1234-5678"
+                    "010-1234-5678", VALID_LICENSE_IMAGE_URL
             );
 
             assertThatThrownBy(() -> riderService.joinProfile(CALLER_USER_NO, req))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage("licenseNo는 필수 입력값입니다.")
+                    .extracting(e -> ((BusinessException) e).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(riderRepository, never()).save(any(Rider.class));
+        }
+
+        @Test
+        @DisplayName("licenseImageUrl blank: BusinessException BAD_REQUEST + save 미호출 (2026-05-28 트랙)")
+        void blankLicenseImageUrl_throwsBadRequest() {
+            when(riderRepository.existsByUserNo(CALLER_USER_NO)).thenReturn(false);
+
+            RiderProfileReq req = new RiderProfileReq(
+                    "11-22-333333-44", "1종보통", "CAR",
+                    "신한은행", "110-123-456789", "홍길동",
+                    "010-1234-5678", null
+            );
+
+            assertThatThrownBy(() -> riderService.joinProfile(CALLER_USER_NO, req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("licenseImageUrl는 필수 입력값입니다.")
                     .extracting(e -> ((BusinessException) e).getStatus())
                     .isEqualTo(HttpStatus.BAD_REQUEST);
 
