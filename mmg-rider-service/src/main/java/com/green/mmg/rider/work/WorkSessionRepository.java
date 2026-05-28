@@ -20,4 +20,5 @@ public interface WorkSessionRepository extends JpaRepository<WorkSession, Long> 
     /** 기간 내 세션 (오늘/주간 summary). started_at 기준 BETWEEN + DESC 정렬 (W-1 fix). */
     List<WorkSession> findByRiderNoAndStartedAtBetweenOrderByStartedAtDesc(
             Long riderNo, LocalDateTime from, LocalDateTime to);
+
 }

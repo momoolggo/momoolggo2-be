@@ -20,4 +20,8 @@ public interface LikedStoreRepository extends JpaRepository<LikedStore, LikedSto
     @Modifying
     @Query("DELETE FROM LikedStore l WHERE l.userNo = :userNo AND l.storeId = :storeId")
     int deleteByUserNoAndStoreId(@Param("userNo") long userNo, @Param("storeId") long storeId);
+
+    @Modifying
+    @Query("DELETE FROM LikedStore l WHERE l.userNo = :userNo")
+    int deleteByUserNo(@Param("userNo") long userNo);
 }
