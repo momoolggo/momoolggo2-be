@@ -1,17 +1,20 @@
 package com.green.mmg.admin.delivery;
 
+import com.green.mmg.admin.dto.feign.RiderProfileRes;
 import com.green.mmg.admin.feign.RiderFeignClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 /**
- * 회원 삭제 cascade — admin이 user 삭제 시 rider 행도 함께 정리.
+ * 라이더 신원 승인 + 회원 삭제 cascade.
  *
- * <p>SSE 자동화 트랙(2026-05-21) 정정 — 라이더 신원 승인/제재 흐름 폐기 후 본 클래스는 회원 삭제 cascade 단일 책임.
- * (이전: ADR-001 (D) 라이더 통합 승인 + 보상 패턴. 폐기 — auto-approve true로 가입 시 즉시 ACTIVE 박제.)</p>
+ * <p>2026-05-28 트랙 — 라이더 가입 신원 승인 흐름 복원. PENDING → ACTIVE 단순 위임.
+ * (이전: SSE 자동화 트랙(2026-05-21)에서 영구 폐기 박제. 2026-05-28 트랙에서 사용자 명시 요청으로 복원.)</p>
  *
- * <p>Phase 6+ 클래스 이름 변경 후보 (RiderCascadeService 등) — 본 트랙에서는 호출처 영향 최소화 위해 그대로.</p>
+ * <p>회원 삭제 cascade는 ADR-001 (D) 박제 일관 — admin이 user 삭제 전 호출.</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -27,5 +30,15 @@ public class RiderApprovalService {
      */
     public long deleteByUserNoIfRider(Long userNo) {
         return riderFeignClient.deleteRiderByUserNo(userNo);
+    }
+
+    /** 라이더 승인 위임 — rider /internal/rider/{userNo}/approve. NOT_FOUND/CONFLICT는 rider Provider 박제. */
+    public RiderProfileRes approve(Long userNo) {
+        return riderFeignClient.approveRider(userNo);
+    }
+
+    /** 라이더 목록 — status 필터 통과 (null/전체/PENDING/ACTIVE/EATING/SUSPENDED). */
+    public List<RiderProfileRes> list(String status) {
+        return riderFeignClient.getRiderList(status);
     }
 }

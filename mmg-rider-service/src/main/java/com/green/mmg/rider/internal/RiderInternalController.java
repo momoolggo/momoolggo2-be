@@ -156,12 +156,15 @@ public class RiderInternalController {
     // ─── §3.1/§3.2 라이더 관리 (Group 8.5 신설, Q-A1 (라+)) ──────
 
     /**
-     * 라이더 승인 — interfaces.md §3.1. PENDING → ACTIVE 전이 (Q-A20 (가) entity 검증).
-     * {@code req.approvedByAdminNo}는 audit log 별 영역 (Q-A18 (b) Phase 6+ outbox 위임) — 본 단계 미사용.
-     * Phase 6+ audit log 도입 시 req 인자 service 메서드로 전달 연결.
+     * 라이더 승인 — PENDING → ACTIVE (2026-05-28 트랙 복원).
+     * Q-A20 (가) entity 메서드 위임. NOT_FOUND / CONFLICT 분기는 RiderService.approveByUserNo 박제.
+     * (이전: SSE 자동화 트랙(2026-05-21)에서 endpoint 영구 폐기 박제 — 2026-05-28 트랙에서 사용자 명시 요청으로 복원.)
+     * audit log(승인자 admin_no 기록)는 Phase 6+ outbox 위임 — 본 endpoint는 단순 상태 전환만.
      */
-    // SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 endpoint 영구 폐기.
-    // 가입 즉시 ACTIVE 박제 (Rider 생성자) + 회원 정지는 user 도메인으로 단일화.
+    @PostMapping("/{userNo}/approve")
+    public RiderProfileRes approve(@PathVariable Long userNo) {
+        return riderService.approveByUserNo(userNo);
+    }
 
     /**
      * 라이더 목록 조회 — interfaces.md §3.5 (Q-A1 (라++) Group 8 신설 2026-05-17).

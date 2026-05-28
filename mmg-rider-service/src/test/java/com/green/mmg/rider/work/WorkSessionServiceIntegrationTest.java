@@ -74,7 +74,11 @@ class WorkSessionServiceIntegrationTest {
                 "국민은행",
                 "110-987-654321",
                 "홍길동");
-        // SSE 자동화 트랙(2026-05-21) — 가입 시 ACTIVE 직접 박제. PENDING 시드 분기 폐기.
+        // 2026-05-28 트랙 — 가입 신원 승인 흐름 복원. 생성자 status=PENDING이므로
+        // 통합 테스트 시 시나리오 상 ACTIVE/EATING 필요 시 approve() 명시 호출.
+        if (initial == RiderStatus.ACTIVE || initial == RiderStatus.EATING) {
+            rider.approve();
+        }
         if (initial == RiderStatus.EATING) {
             rider.toggleEating();
         }
@@ -110,7 +114,8 @@ class WorkSessionServiceIntegrationTest {
                 "010-1111-1111",
                 "손님 주소", 37.5670, 126.979,
                 "010-2222-2222",
-                3000, 0);
+                3000, 0,
+                null, null);
 
         assertThatThrownBy(() -> deliveryService.assignDelivery(req))
                 .isInstanceOf(BusinessException.class)

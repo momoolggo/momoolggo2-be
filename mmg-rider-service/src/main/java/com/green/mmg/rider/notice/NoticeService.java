@@ -7,8 +7,10 @@ import com.green.mmg.rider.notice.model.Notice;
 import com.green.mmg.rider.notice.model.NoticeCategory;
 import com.green.mmg.rider.notice.model.NoticeSendType;
 import com.green.mmg.rider.notice.model.NoticeTargetType;
+import com.green.mmg.rider.notice.sse.NoticeBroadcastEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +45,7 @@ public class NoticeService {
             EnumSet.of(NoticeTargetType.ALL, NoticeTargetType.RIDER);
 
     private final NoticeRepository noticeRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public Notice createNotice(RiderInternalNoticeReq req) {
@@ -64,7 +67,14 @@ public class NoticeService {
                 reservedAt,
                 publishedAt,
                 TEMP_SENDER_ADMIN_NO);
-        return noticeRepository.save(notice);
+        Notice saved = noticeRepository.save(notice);
+
+        // 2026-05-28 트랙 — sendType=NOW + RIDER 가시성(ALL/RIDER)인 경우만 SSE broadcast.
+        // RESERVED는 published_at 미래라 라이더 GET 필터 자동 제외 (scheduler 미도입 부채).
+        if (req.sendType() == NoticeSendType.NOW && RIDER_VISIBLE_TARGETS.contains(req.targetType())) {
+            eventPublisher.publishEvent(new NoticeBroadcastEvent(RiderNoticeRowRes.from(saved)));
+        }
+        return saved;
     }
 
     // 공지 목록 조회 — admin 전체 (R4-a, KYL)

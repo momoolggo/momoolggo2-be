@@ -347,7 +347,8 @@ class DeliveryServiceTest {
                     "053-111-2222",
                     "손님 주소", 35.130, 128.460,
                     "010-1234-5678",
-                    4000, 1500);
+                    4000, 1500,
+                    null, null);
         }
 
         private Rider activeRider() {
@@ -465,7 +466,8 @@ class DeliveryServiceTest {
                     "053-111-2222",
                     "손님 주소", 35.130, 128.460,
                     "010-1234-5678",
-                    4000, 1500);
+                    4000, 1500,
+                    null, null);
 
             RiderInternalAssignRes res = deliveryService.assignDelivery(poolReq);
 
@@ -522,7 +524,8 @@ class DeliveryServiceTest {
                     1L, CALLER_RIDER_NO, 7L, "맛있는집",
                     "가게 주소", sLat, sLng, "053-111-2222",
                     "손님 주소", dLat, dLng, "010-1234-5678",
-                    9999, 9999); // main 입력값은 의도적으로 큰 값 — rider override 검증용
+                    9999, 9999, // main 입력값은 의도적으로 큰 값 — rider override 검증용
+                    null, null);
         }
 
         private Delivery captureSavedAfterAssign(RiderInternalAssignReq req) {
@@ -652,7 +655,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.findAll(any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(d1, d2)));
 
-            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0);
+            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0, null);
 
             assertThat(res.summary().waiting()).isEqualTo(2L);
             assertThat(res.summary().assigned()).isEqualTo(3L); // 1+2+0
@@ -675,7 +678,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.findByStatusIn(captor.capture(), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of()));
 
-            deliveryService.getMonitor("assigned", 0);
+            deliveryService.getMonitor("assigned", 0, null);
 
             assertThat(captor.getValue()).containsExactlyInAnyOrder(
                     DeliveryStatus.ASSIGNED,
@@ -693,7 +696,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.findByStatusIn(captor.capture(), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of()));
 
-            deliveryService.getMonitor("DELIVERING", 0);
+            deliveryService.getMonitor("DELIVERING", 0, null);
 
             assertThat(captor.getValue()).containsExactlyInAnyOrder(
                     DeliveryStatus.PICKED_UP,
@@ -703,7 +706,7 @@ class DeliveryServiceTest {
         @Test
         @DisplayName("invalid status → BusinessException BAD_REQUEST + count 미호출 (W-1 정정)")
         void monitor_invalidStatus_throwsBadRequest() {
-            assertThatThrownBy(() -> deliveryService.getMonitor("xxx", 0))
+            assertThatThrownBy(() -> deliveryService.getMonitor("xxx", 0, null))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getStatus())
                     .isEqualTo(HttpStatus.BAD_REQUEST);
@@ -715,7 +718,7 @@ class DeliveryServiceTest {
         @Test
         @DisplayName("page<0 → BusinessException BAD_REQUEST")
         void monitor_negativePage_throwsBadRequest() {
-            assertThatThrownBy(() -> deliveryService.getMonitor(null, -1))
+            assertThatThrownBy(() -> deliveryService.getMonitor(null, -1, null))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getStatus())
                     .isEqualTo(HttpStatus.BAD_REQUEST);
@@ -731,7 +734,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.findAll(pageableCaptor.capture()))
                     .thenReturn(new PageImpl<>(List.of()));
 
-            deliveryService.getMonitor(null, 3);
+            deliveryService.getMonitor(null, 3, null);
 
             Pageable captured = pageableCaptor.getValue();
             assertThat(captured.getPageSize()).isEqualTo(20);
@@ -757,7 +760,7 @@ class DeliveryServiceTest {
             ArgumentCaptor<Iterable<Long>> idsCaptor = ArgumentCaptor.forClass(Iterable.class);
             when(riderRepository.findAllById(idsCaptor.capture())).thenReturn(List.of(r5, r6));
 
-            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0);
+            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0, null);
 
             assertThat(idsCaptor.getValue()).containsExactlyInAnyOrder(5L, 6L);
             assertThat(res.deliveries().get(0).riderPhone()).isEqualTo("010-1111-2222");
@@ -773,7 +776,7 @@ class DeliveryServiceTest {
             when(deliveryRepository.findAll(any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(d1, d2)));
 
-            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0);
+            RiderInternalMonitorRes res = deliveryService.getMonitor(null, 0, null);
 
             verify(riderRepository, never()).findAllById(any());
             assertThat(res.deliveries().get(0).riderPhone()).isNull();

@@ -7,6 +7,7 @@ import com.green.mmg.rider.notice.model.Notice;
 import com.green.mmg.rider.notice.model.NoticeCategory;
 import com.green.mmg.rider.notice.model.NoticeSendType;
 import com.green.mmg.rider.notice.model.NoticeTargetType;
+import com.green.mmg.rider.notice.sse.NoticeBroadcastEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
@@ -38,11 +40,12 @@ import static org.mockito.Mockito.when;
 class NoticeServiceTest {
 
     @Mock private NoticeRepository noticeRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private NoticeService noticeService;
 
     @Test
-    @DisplayName("NOW happy: publishedAt=now, reservedAt=null, save 호출")
+    @DisplayName("NOW happy: publishedAt=now, reservedAt=null, save 호출 + SSE broadcast 1회 (2026-05-28 트랙)")
     void now_happy_savesWithNowPublishedAt() {
         RiderInternalNoticeReq req = new RiderInternalNoticeReq(
                 "공지 제목", NoticeTargetType.ALL, "본문", NoticeSendType.NOW, null);
@@ -61,10 +64,17 @@ class NoticeServiceTest {
         assertThat(saved.getReservedAt()).isNull();
         assertThat(saved.getPublishedAt()).isBetween(before, after);
         assertThat(saved.getSenderAdminNo()).isEqualTo(1L);
+
+        // SSE broadcast 검증 — NOW + ALL 가시성이라 1회 publish
+        ArgumentCaptor<NoticeBroadcastEvent> evtCaptor = ArgumentCaptor.forClass(NoticeBroadcastEvent.class);
+        verify(eventPublisher).publishEvent(evtCaptor.capture());
+        RiderNoticeRowRes payload = evtCaptor.getValue().payload();
+        assertThat(payload.title()).isEqualTo("공지 제목");
+        assertThat(payload.content()).isEqualTo("본문");
     }
 
     @Test
-    @DisplayName("RESERVED happy: publishedAt=reservedAt, reservedAt 보존")
+    @DisplayName("RESERVED happy: publishedAt=reservedAt, reservedAt 보존 + SSE broadcast 0회 (예약 미푸시, 2026-05-28 트랙)")
     void reserved_happy_savesWithReservedAt() {
         LocalDateTime future = LocalDateTime.now().plusHours(2);
         RiderInternalNoticeReq req = new RiderInternalNoticeReq(
@@ -79,6 +89,9 @@ class NoticeServiceTest {
         assertThat(saved.getReservedAt()).isEqualTo(future);
         assertThat(saved.getSendType()).isEqualTo(NoticeSendType.RESERVED);
         assertThat(saved.getTargetType()).isEqualTo(NoticeTargetType.RIDER);
+
+        // SSE broadcast 0회 — published_at 미래라 즉시 푸시 X (scheduler 미도입 부채)
+        verify(eventPublisher, never()).publishEvent(any(NoticeBroadcastEvent.class));
     }
 
     @Test
