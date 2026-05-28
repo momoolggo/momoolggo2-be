@@ -21,6 +21,9 @@ public interface AdminFeignClient {
     @GetMapping("/internal/settlement/store/{storeId}")
     ResultResponse<List<Object>> getSettlementsByStore(@PathVariable("storeId") Long storeId);
 
+    @GetMapping("/internal/settlement/{settlementId}/orders")
+    ResultResponse<Object> getSettlementOrders(@PathVariable("settlementId") Long settlementId);
+
     @PostMapping("/api/admin/cs/internal/inquiry")
     ResultResponse<Void> createInquiry(@RequestBody Map<String, Object> req);
 
