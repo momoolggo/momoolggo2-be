@@ -1,5 +1,13 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
+## Main order lookup indexes (2026-05-29)
+
+- Added DB indexes for orders lookup performance: `idx_orders_user_time`, `idx_orders_store_pay_state_time`, `idx_orders_store_time`.
+- DDL record: `docs/ddl/main-order-index-2026-05-29.sql`.
+- Scope: DB index only. Java logic, Mapper SQL, API response shape, and frontend contract unchanged.
+
+---
+
 > 작성: 2026-04-28 / 최종 갱신: **2026-05-06 Phase 5-R1-A 종결 + R2-a/b 적용 (rider 10건 PASS + DeliveryLog 3건, 학원 DB my_mmg_rider 3 테이블 적용 / Q-DB (다) → (가) 전환)**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).

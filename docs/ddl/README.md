@@ -1,5 +1,14 @@
 # docs/ddl/
 
+## Main order lookup indexes (2026-05-29)
+
+- Script: `main-order-index-2026-05-29.sql`
+- Target: `my_mmg_main.orders`
+- Added indexes: `idx_orders_user_time`, `idx_orders_store_pay_state_time`, `idx_orders_store_time`
+- Scope: DB index only. Java logic, Mapper SQL, API response shape, and frontend contract unchanged.
+
+---
+
 DB 스키마 DDL과 마이그레이션 절차 기록. 미래 schema(main/rider/admin) 마이그레이션 시 같은 패턴 재사용.
 
 ## 학원 DB 환경
