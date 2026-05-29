@@ -181,7 +181,13 @@ public class OrderService {
         // 기존 패턴 유지: serverOrderId + timestamp 결합 큰 숫자 ID
         long uniqueId = Long.parseLong("39" + System.currentTimeMillis());
 
-        totalAmount = couponService.applyCouponToOrder(userNo, uniqueId, dto.getCouponId(), totalAmount);
+        totalAmount = couponService.applyCouponToOrder(
+                userNo,
+                uniqueId,
+                dto.getCouponId(),
+                dto.getCouponListId(),
+                totalAmount
+        );
 
         Orders order = new Orders();
         order.setOrderId(uniqueId);
