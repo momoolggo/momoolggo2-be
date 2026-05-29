@@ -50,6 +50,20 @@ spring.cloud.openfeign.client.config.default:
   connectTimeout: 3000
   readTimeout: 5000
 
+spring.cloud.openfeign.circuitbreaker.enabled: true
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 3s
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+
 # 토스페이먼츠 — secret_key만 시크릿 (.env)
 toss:
   secret-key: ${TOSS_SECRET_KEY}

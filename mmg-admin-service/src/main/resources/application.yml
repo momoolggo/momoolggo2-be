@@ -62,3 +62,17 @@ feign:
     url: http://localhost:8082
   okhttp:
     enabled: true
+  circuitbreaker:
+    enabled: true
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 3s
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
