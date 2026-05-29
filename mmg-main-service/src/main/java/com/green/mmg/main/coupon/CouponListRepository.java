@@ -19,6 +19,7 @@ public interface CouponListRepository extends JpaRepository<CouponList, Long> {
                 cl.couponListId,
                 c.couponId,
                 c.name,
+                c.discountType,
                 c.discountValue,
                 cl.expiresAt
             )
