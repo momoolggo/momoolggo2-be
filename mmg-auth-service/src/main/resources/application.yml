@@ -72,3 +72,5 @@ constants:
     refresh-token-cookie-path: /api/user/reissue
     refresh-token-cookie-validity-seconds: 1296000
     refresh-token-validity-milliseconds: 1296000000
+    cookie-secure: false
+    cookie-same-site: Lax
