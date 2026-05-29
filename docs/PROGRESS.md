@@ -1,5 +1,17 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
+## Admin report dedupe and blind concurrency review (2026-05-29)
+
+- Added duplicate report protection for owner review reports.
+- Main now forwards `reviewContent` to admin report intake for AI review judgement.
+- Admin report intake converts duplicate unique races to HTTP 409 conflict.
+- AI auto-blind processing now locks the first report row for the same review and skips blind creation when an active blind already exists.
+- DDL record: `docs/ddl/admin-report-dedupe-blind-2026-05-29.sql`.
+- Review note: `docs/admin-report-count-review-2026-05-29.md`.
+- Tests added: `ReportServiceTest` 3 cases, `ReviewReportAiProcessorTest` 1 case.
+
+---
+
 ## Main order lookup indexes (2026-05-29)
 
 - Added DB indexes for orders lookup performance: `idx_orders_user_time`, `idx_orders_store_pay_state_time`, `idx_orders_store_time`.

@@ -1,10 +1,12 @@
 package com.green.mmg.admin.report.dto;
 
 import lombok.Getter;
+import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor
+@AllArgsConstructor
 public class ReportReq {
     private Long reviewId;
     private Long reporterNo;

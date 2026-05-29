@@ -114,7 +114,8 @@ public class OwnerReviewService {
                         reviewId,
                         ownerNo,
                         req.getReason(),
-                        null
+                        null,
+                        review.getContents()
                 )
         );
 

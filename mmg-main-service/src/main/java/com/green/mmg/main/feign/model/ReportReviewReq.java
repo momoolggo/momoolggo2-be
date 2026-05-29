@@ -10,4 +10,5 @@ public class ReportReviewReq {
     private Long reporterNo;
     private String reason;
     private String content;
+    private String reviewContent;
 }
