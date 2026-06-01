@@ -137,7 +137,7 @@ public class UserService {
 
         long atExpiresAt = 0L;
 
-        if ("ACTIVE".equals(saved.getStatus())) {
+        if ("ACTIVE".equals(saved.getStatus()) || "RIDER".equals(saved.getRole())) {
             JwtUser jwtUser = new JwtUser(saved.getUserNo(), saved.getRole(), saved.getStatus(), saved.getName());
             issueAndStoreTokens(res, jwtUser);
             atExpiresAt = System.currentTimeMillis() + constJwt.getAccessTokenValidityMilliseconds();

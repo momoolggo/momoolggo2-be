@@ -3,7 +3,8 @@ package com.green.mmg.admin.user.controller;
 import com.green.mmg.admin.dto.feign.*;
 import com.green.mmg.admin.delivery.RiderApprovalService;
 import com.green.mmg.admin.feign.AuthFeignClient;
-import com.green.mmg.admin.feign.MainFeignClient;  // 추가
+import com.green.mmg.admin.feign.MainFeignClient;
+import com.green.mmg.admin.feign.RiderFeignClient;
 import com.green.mmg.common.dto.ResultResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -18,8 +19,9 @@ import java.util.List;
 public class AdminUserController {
 
     private final AuthFeignClient authFeignClient;
-    private final MainFeignClient mainFeignClient;  // 추가
-    private final RiderApprovalService riderApprovalService;  // ADR-001 (D) 라이더 통합 승인
+    private final MainFeignClient mainFeignClient;
+    private final RiderFeignClient riderFeignClient;
+    private final RiderApprovalService riderApprovalService;
 
     // 전체 회원 목록 조회 (검색 조건 포함)
     @GetMapping
@@ -108,5 +110,19 @@ public class AdminUserController {
     @GetMapping("/{userNo}/owner-profile")
     public ResultResponse<OwnerProfileRes> getOwnerProfile(@PathVariable Long userNo) {
         return mainFeignClient.getOwnerProfile(userNo);
+    }
+
+    //라이더 회원가입 프로필 (면허증 사진 등 승인 모달용) — 기존 list 엔드포인트 활용
+    @GetMapping("/{userNo}/rider-profile")
+    public ResultResponse<?> getRiderProfile(@PathVariable Long userNo) {
+        try {
+            return new ResultResponse<>("조회 성공",
+                riderFeignClient.getRiderList(null).stream()
+                    .filter(r -> userNo.equals(r.userNo()))
+                    .findFirst()
+                    .orElse(null));
+        } catch (Exception e) {
+            return new ResultResponse<>("라이더 프로필 미등록", null);
+        }
     }
 }
