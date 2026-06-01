@@ -169,6 +169,12 @@ public class RiderInternalController {
      * (이전: SSE 자동화 트랙(2026-05-21)에서 endpoint 영구 폐기 박제 — 2026-05-28 트랙에서 사용자 명시 요청으로 복원.)
      * audit log(승인자 admin_no 기록)는 Phase 6+ outbox 위임 — 본 endpoint는 단순 상태 전환만.
      */
+    /** admin 라이더 프로필 단건 조회 (userNo 기준) — 승인 모달 면허증 사진 노출용. */
+    @GetMapping("/by-user/{userNo}/profile")
+    public RiderProfileRes getProfileByUserNo(@PathVariable Long userNo) {
+        return riderService.getProfileByUserNo(userNo);
+    }
+
     @PostMapping("/{userNo}/approve")
     public RiderProfileRes approve(@PathVariable Long userNo) {
         return riderService.approveByUserNo(userNo);

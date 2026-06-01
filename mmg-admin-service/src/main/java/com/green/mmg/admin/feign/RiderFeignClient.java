@@ -75,6 +75,10 @@ public interface RiderFeignClient {
     @GetMapping("/internal/rider/list")
     List<RiderProfileRes> getRiderList(@RequestParam(value = "status", required = false) String status);
 
+    /** admin 라이더 프로필 단건 조회 — 승인 모달 면허증 사진 노출용. */
+    @GetMapping("/internal/rider/by-user/{userNo}/profile")
+    RiderProfileRes getRiderProfileByUserNo(@PathVariable("userNo") Long userNo);
+
     /** 라이더 승인 — PENDING → ACTIVE (2026-05-28 트랙 복원). */
     @PostMapping("/internal/rider/{userNo}/approve")
     RiderProfileRes approveRider(@PathVariable("userNo") Long userNo);

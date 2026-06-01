@@ -95,6 +95,13 @@ public class RiderService {
         return RiderProfileRes.from(rider);
     }
 
+    public RiderProfileRes getProfileByUserNo(Long userNo) {
+        Rider rider = riderRepository.findByUserNo(userNo)
+                .orElseThrow(() -> new BusinessException(
+                        "라이더 프로필이 등록되지 않았습니다.", HttpStatus.NOT_FOUND));
+        return RiderProfileRes.from(rider);
+    }
+
     /**
      * admin 라이더 목록 조회 (interfaces.md §3.5, Q-A1 (라++) Group 8 신설 2026-05-17).
      *
