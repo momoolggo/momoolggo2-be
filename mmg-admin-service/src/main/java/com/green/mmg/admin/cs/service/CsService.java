@@ -8,7 +8,9 @@ import com.green.mmg.admin.cs.dto.InquiryRes;
 import com.green.mmg.admin.cs.dto.InquirySummaryRes;
 import com.green.mmg.admin.cs.entity.ChatbotInquiry;
 import com.green.mmg.admin.cs.repository.ChatbotInquiryRepository;
+import com.green.mmg.admin.dto.feign.NotificationCreateReq;
 import com.green.mmg.admin.feign.AuthFeignClient;
+import com.green.mmg.admin.feign.MainFeignClient;
 import com.green.mmg.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +29,7 @@ public class CsService {
     private final ChatbotInquiryRepository chatbotInquiryRepository;
     private final AdminEscalationSseService escalationSseService;
     private final AuthFeignClient authFeignClient;
+    private final MainFeignClient mainFeignClient;
 
     // 문의 현황 카드
     public InquirySummaryRes getSummary() {
@@ -100,6 +103,18 @@ public class CsService {
         ChatbotInquiry inquiry = chatbotInquiryRepository.findById(inquiryId)
                 .orElseThrow(() -> new ResourceNotFoundException("문의를 찾을 수 없습니다."));
         inquiry.reply(req.getReply());
+
+        try {
+            mainFeignClient.createNotification(new NotificationCreateReq(
+                    inquiry.getUserNo(),
+                    "CS_REPLY",
+                    "문의 답변이 등록되었습니다.",
+                    req.getReply(),
+                    null
+            ));
+        } catch (Exception e) {
+            log.warn("고객 알림 전송 실패 inquiryId={}: {}", inquiryId, e.getMessage());
+        }
     }
 
     @Transactional
