@@ -45,6 +45,8 @@ public class JwtTokenManager { //인증 처리 총괄
                 , accessToken
                 , constJwt.getAccessTokenCookieValiditySeconds()
                 , constJwt.getAccessTokenCookiePath()
+                , constJwt.isCookieSecure()
+                , constJwt.getCookieSameSite()
         );
     }
 
@@ -55,6 +57,8 @@ public class JwtTokenManager { //인증 처리 총괄
                 , refreshToken
                 , constJwt.getRefreshTokenCookieValiditySeconds()
                 , constJwt.getRefreshTokenCookiePath()
+                , constJwt.isCookieSecure()
+                , constJwt.getCookieSameSite()
         );
     }
 

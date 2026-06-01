@@ -43,9 +43,28 @@ constants:
     secret-key: ${JWT_SECRET}
     access-token-cookie-name: access-token
     access-token-cookie-path: /
-    access-token-cookie-validity-seconds: 1296000
+    access-token-cookie-validity-seconds: 1800
     access-token-validity-milliseconds: ${JWT_ACCESS_TOKEN_VALIDITY_MS}
     refresh-token-cookie-name: refresh-token
     refresh-token-cookie-path: /api/user/reissue
-    refresh-token-cookie-validity-seconds: 1296000
+    refresh-token-cookie-validity-seconds: 1209600
     refresh-token-validity-milliseconds: ${JWT_REFRESH_TOKEN_VALIDITY_MS}
+    cookie-secure: true
+    cookie-same-site: STRICT
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true

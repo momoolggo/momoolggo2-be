@@ -35,6 +35,8 @@ public interface BlindRepository extends JpaRepository<Blind, Long> {
     // 특정 리뷰 블라인드 조회
     List<Blind> findByReviewNo(Long reviewNo);
 
+    boolean existsByReviewNoAndStatusIn(Long reviewNo, List<BlindStatus> statuses);
+
     // 소명 기간 지난 블라인드 조회 (자동 계정정지용)
     List<Blind> findByStatusAndEndsAtBefore(BlindStatus status, LocalDateTime now);
 

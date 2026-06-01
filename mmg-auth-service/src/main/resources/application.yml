@@ -39,6 +39,20 @@ feign:
       default:
         connectTimeout: 2000
         readTimeout: 5000
+  circuitbreaker:
+    enabled: true
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 3s
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
 
 mybatis:
   configuration:
@@ -72,3 +86,5 @@ constants:
     refresh-token-cookie-path: /api/user/reissue
     refresh-token-cookie-validity-seconds: 1296000
     refresh-token-validity-milliseconds: 1296000000
+    cookie-secure: false
+    cookie-same-site: Lax

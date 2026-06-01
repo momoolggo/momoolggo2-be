@@ -8,7 +8,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'  // Phase 4-C: RT 저장
     implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'  // Phase 5 펫: main 호출
+    implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j'
     implementation 'org.springframework.boot:spring-boot-starter-mail' // 이메일
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:4.0.1'
     runtimeOnly  'com.mysql:mysql-connector-j'
 

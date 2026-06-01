@@ -98,8 +98,8 @@ class OrderServiceCalSumOrderTest {
             dto.setRiderRequest("문 앞에");
             dto.setPayState(1);
 
-            when(couponService.applyCouponToOrder(eq(USER_NO), anyLong(), isNull(), eq(16500)))
-                    .thenAnswer(inv -> inv.getArgument(3));
+            when(couponService.applyCouponToOrder(eq(USER_NO), anyLong(), isNull(), isNull(), eq(15000)))
+                    .thenAnswer(inv -> inv.getArgument(4));
 
             OrderCreateRes res = orderService.placeOrder(USER_NO, dto);
 

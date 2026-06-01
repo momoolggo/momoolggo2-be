@@ -3,6 +3,7 @@ package com.green.mmg.admin.report.ai;
 import com.green.mmg.admin.blind.entity.Blind;
 import com.green.mmg.admin.blind.repository.BlindRepository;
 import com.green.mmg.admin.common.enums.BlindReason;
+import com.green.mmg.admin.common.enums.BlindStatus;
 import com.green.mmg.admin.dto.feign.InternalReviewRes;
 import com.green.mmg.admin.dto.feign.InternalStoreListPageRes;
 import com.green.mmg.admin.dto.feign.InternalStoreListRes;
@@ -24,6 +25,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -93,6 +95,14 @@ public class ReviewReportAiProcessor {
         if (gate) {
             try {
                 // 1. main-service review 블라인드 처리
+                reportRepository.findFirstByTargetNoOrderByReportIdAsc(report.getTargetNo());
+                if (hasActiveBlind(report.getTargetNo())) {
+                    log.info("이미 블라인드 처리된 리뷰입니다. reportId={} reviewId={}",
+                            reportId, report.getTargetNo());
+                    reportRepository.save(report);
+                    return;
+                }
+
                 reviewBlindClient.blind(
                         report.getTargetNo(),
                         new ReviewBlindClient.BlindRequest("AUTO_AI", judgement.reason(), reportId)
@@ -163,6 +173,13 @@ public class ReviewReportAiProcessor {
     }
 
     // 신고 사유 → BlindReason 매핑
+    private boolean hasActiveBlind(Long reviewId) {
+        return blindRepository.existsByReviewNoAndStatusIn(
+                reviewId,
+                List.of(BlindStatus.REVIEWING, BlindStatus.BLINDED, BlindStatus.SUSPENDED, BlindStatus.PERMANENT)
+        );
+    }
+
     private BlindReason parseBlindReason(String reason) {
         if (reason == null) return BlindReason.ETC;
         if (reason.contains("욕설") || reason.contains("혐오")) return BlindReason.PROFANITY;

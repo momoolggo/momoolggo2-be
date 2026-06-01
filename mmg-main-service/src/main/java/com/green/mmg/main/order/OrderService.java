@@ -176,12 +176,18 @@ public class OrderService {
                 .sum();
         // 2026-05-25 9건 트랙 — 거리 기반 동적 배달팁
         int deliveryFee = calcDeliveryFee(cart.getStoreId(), addr);
-        int totalAmount = menuTotal + deliveryFee;
 
         // 기존 패턴 유지: serverOrderId + timestamp 결합 큰 숫자 ID
         long uniqueId = Long.parseLong("39" + System.currentTimeMillis());
 
-        totalAmount = couponService.applyCouponToOrder(userNo, uniqueId, dto.getCouponId(), totalAmount);
+        int discountedMenuTotal = couponService.applyCouponToOrder(
+                userNo,
+                uniqueId,
+                dto.getCouponId(),
+                dto.getCouponListId(),
+                menuTotal
+        );
+        int totalAmount = discountedMenuTotal + deliveryFee;
 
         Orders order = new Orders();
         order.setOrderId(uniqueId);

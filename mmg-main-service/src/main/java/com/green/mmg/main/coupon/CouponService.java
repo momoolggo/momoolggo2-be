@@ -25,16 +25,25 @@ public class CouponService {
     }
 
     @Transactional
-    public int applyCouponToOrder(Long userNo, Long orderId, Long couponId, int orderAmount){
-        if (couponId == null) {
+    public int applyCouponToOrder(Long userNo, Long orderId, Long couponId, int orderAmount) {
+        return applyCouponToOrder(userNo, orderId, couponId, null, orderAmount);
+    }
+
+    @Transactional
+    public int applyCouponToOrder(Long userNo, Long orderId, Long couponId, Long couponListId, int orderAmount) {
+        if (couponId == null && couponListId == null) {
             return orderAmount;
         }
 
-        CouponList couponList = couponListRepository
-                .findFirstUsableCoupon(userNo, couponId, LocalDateTime.now())
-                .orElseThrow(() -> new BusinessException("사용 가능한 쿠폰이 아닙니다", HttpStatus.BAD_REQUEST));
+        LocalDateTime now = LocalDateTime.now();
 
-        Coupon coupon = couponRepository.findById(couponId)
+        CouponList couponList = couponListId != null
+                ? couponListRepository.findUsableCouponByCouponListId(userNo, couponListId, now)
+                .orElseThrow(() -> new BusinessException("사용 가능한 쿠폰이 아닙니다.", HttpStatus.BAD_REQUEST))
+                : couponListRepository.findFirstUsableCoupon(userNo, couponId, now)
+                .orElseThrow(() -> new BusinessException("사용 가능한 쿠폰이 아닙니다.", HttpStatus.BAD_REQUEST));
+
+        Coupon coupon = couponRepository.findById(couponList.getCouponId())
                 .orElseThrow(() -> new BusinessException("쿠폰 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
         int discountAmount = calculateDiscountAmount(coupon, orderAmount);
