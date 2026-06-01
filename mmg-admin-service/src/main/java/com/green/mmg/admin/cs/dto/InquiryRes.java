@@ -12,6 +12,8 @@ import java.time.format.DateTimeFormatter;
 public class InquiryRes {
     private Long inquiryId;
     private Long userNo;
+    private String userId;
+    private String userRole;
     private InquiryUserType category;
     private String content;
     private InquiryStatus state;
