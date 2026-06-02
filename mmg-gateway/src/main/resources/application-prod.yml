@@ -55,6 +55,12 @@ spring:
               uri: ${MAIN_SERVICE_URL}
               predicates:
                 - Path=/api/payment/**
+            - id: main-notification-route
+              uri: ${MAIN_SERVICE_URL}
+              predicates:
+                - Path=/api/notification/**
+              filters:
+                - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin, RETAIN_FIRST
             - id: main-address-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
@@ -75,6 +81,22 @@ spring:
               uri: ${MAIN_SERVICE_URL}
               predicates:
                 - Path=/api/pet/**
+            - id: main-map-route
+              uri: ${MAIN_SERVICE_URL}
+              predicates:
+                - Path=/api/map/**
+            - id: main-delivery-photo-route
+              uri: ${MAIN_SERVICE_URL}
+              predicates:
+                - Path=/api/delivery-photo/**
+            - id: main-rider-license-route
+              uri: ${MAIN_SERVICE_URL}
+              predicates:
+                - Path=/api/rider-license/**
+            - id: main-mypage-route
+              uri: ${MAIN_SERVICE_URL}
+              predicates:
+                - Path=/api/mypage/**
             - id: main-uploads-route     # 이미지 정적 (CLAUDE.md §5 main 단독 책임)
               uri: ${MAIN_SERVICE_URL}
               predicates:

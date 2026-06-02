@@ -1,9 +1,15 @@
 package com.green.mmg.main.owner;
 
 import com.green.mmg.common.dto.feign.UserBriefDto;
+import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.exception.BusinessException;
-import com.green.mmg.common.feign.AuthFeignClient;
+import com.green.mmg.main.feign.AdminFeignClient;
+import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.feign.RiderFeignClient;
+import com.green.mmg.main.feign.model.AdminSettlementRes;
+import com.green.mmg.main.notification.NotificationService;
+import com.green.mmg.main.order.OrderRepository;
+import com.green.mmg.main.order.model.Orders;
 import com.green.mmg.main.owner.model.OwnerMenuRegReq;
 import com.green.mmg.main.owner.model.OwnerMenuRes;
 import com.green.mmg.main.owner.model.OwnerMenuUpdateReq;
@@ -31,6 +37,7 @@ import org.springframework.http.HttpStatus;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -61,6 +68,12 @@ class OwnerServiceTest {
     @Mock private OwnerMapper ownerMapper;
     @Mock private AuthFeignClient authFeignClient;
     @Mock private RiderFeignClient riderFeignClient;  // Group 4 의존성 추가 (case-#38 mock 동시 갱신 강제)
+    @Mock private MenuOptionRepository menuOptionRepository;
+    @Mock private MenuOptionCategoryRepository menuOptionCategoryRepository;
+    @Mock private AdminFeignClient adminFeignClient;
+    @Mock private OwnerOrderSseService ownerOrderSseService;
+    @Mock private OrderRepository orderRepository;
+    @Mock private NotificationService notificationService;
 
     @InjectMocks
     private OwnerService ownerService;
@@ -70,6 +83,7 @@ class OwnerServiceTest {
     private static final long STORE_ID = 21L;
     private static final long MENU_ID = 17L;
     private static final long ORDER_ID = 391_000_001L;
+    private static final long SETTLEMENT_ID = 71L;
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
@@ -300,10 +314,10 @@ class OwnerServiceTest {
             when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
             when(ownerMapper.getOrders(STORE_ID, 1, "2026-04-30"))
                     .thenReturn(List.of(o1, o2, o3));
-            when(authFeignClient.getUsers(anyList())).thenReturn(List.of(
+            when(authFeignClient.getUsers(anyList())).thenReturn(new ResultResponse<>("조회 성공", List.of(
                     new UserBriefDto(100L, "준하", "010-1111", ""),
                     new UserBriefDto(200L, "민수", "010-2222", "")
-            ));
+            )));
 
             List<OwnerOrderRes> result = ownerService.getOrders(USER_ID, STORE_ID, 1, "2026-04-30");
 
@@ -347,9 +361,9 @@ class OwnerServiceTest {
             OwnerOrderRes o2 = newOrder(391_000_002L, 999L);
             when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
             when(ownerMapper.getOrders(STORE_ID, null, null)).thenReturn(List.of(o1, o2));
-            when(authFeignClient.getUsers(anyList())).thenReturn(List.of(
+            when(authFeignClient.getUsers(anyList())).thenReturn(new ResultResponse<>("조회 성공", List.of(
                     new UserBriefDto(100L, "준하", "010-1111", "")
-            ));
+            )));
 
             List<OwnerOrderRes> result = ownerService.getOrders(USER_ID, STORE_ID, null, null);
 
@@ -381,7 +395,7 @@ class OwnerServiceTest {
             OwnerOrderRes o2 = newOrder(391_000_002L, 200L);
             when(ownerMapper.findStoreOwnerByStoreId(STORE_ID)).thenReturn(USER_ID);
             when(ownerMapper.getOrders(STORE_ID, null, null)).thenReturn(List.of(o1, o2));
-            when(authFeignClient.getUsers(anyList())).thenReturn(null);
+            when(authFeignClient.getUsers(anyList())).thenReturn(new ResultResponse<>("조회 성공", null));
 
             List<OwnerOrderRes> result = ownerService.getOrders(USER_ID, STORE_ID, null, null);
 
@@ -404,6 +418,7 @@ class OwnerServiceTest {
         void happyPath_updates() {
             OwnerOrderStateReq req = newStateReq(ORDER_ID, 3);
             when(ownerMapper.findStoreOwnerByOrderId(ORDER_ID)).thenReturn(USER_ID);
+            when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(newOrderEntity(ORDER_ID, USER_ID, 1)));
             when(ownerMapper.updateOrderState(req)).thenReturn(1);
 
             ownerService.updateOrderState(USER_ID, req);
@@ -441,6 +456,7 @@ class OwnerServiceTest {
         void updateFails_throws() {
             OwnerOrderStateReq req = newStateReq(ORDER_ID, 3);
             when(ownerMapper.findStoreOwnerByOrderId(ORDER_ID)).thenReturn(USER_ID);
+            when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(newOrderEntity(ORDER_ID, USER_ID, 1)));
             when(ownerMapper.updateOrderState(req)).thenReturn(0);
 
             assertThatThrownBy(() -> ownerService.updateOrderState(USER_ID, req))
@@ -860,6 +876,61 @@ class OwnerServiceTest {
     }
 
     // ─────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("updateMySettlementBankAccount — owner store settlement 검증 + 상태 제한")
+    class UpdateMySettlementBankAccount {
+
+        @Test
+        @DisplayName("happy: 본인 가게 PENDING 정산 → admin internal bank-account PATCH 호출")
+        void happyPath_updatesOwnPendingSettlement() {
+            OwnerStoreRes store = new OwnerStoreRes();
+            store.setStoreId(STORE_ID);
+            AdminSettlementRes settlement = settlement(STORE_ID, "PENDING");
+            when(ownerMapper.getMyStores(USER_ID)).thenReturn(List.of(store));
+            when(adminFeignClient.getSettlementsByStore(STORE_ID))
+                    .thenReturn(new ResultResponse<>("조회 성공", List.of(settlement)));
+
+            ownerService.updateMySettlementBankAccount(USER_ID, SETTLEMENT_ID, "01258978");
+
+            verify(adminFeignClient).updateSettlementBankAccount(SETTLEMENT_ID, "01258978");
+        }
+
+        @Test
+        @DisplayName("404: 본인 가게 정산 목록에 없는 settlementId → admin 변경 미호출")
+        void notOwnStoreSettlement_throwsNotFound() {
+            OwnerStoreRes store = new OwnerStoreRes();
+            store.setStoreId(STORE_ID);
+            when(ownerMapper.getMyStores(USER_ID)).thenReturn(List.of(store));
+            when(adminFeignClient.getSettlementsByStore(STORE_ID))
+                    .thenReturn(new ResultResponse<>("조회 성공", List.of(settlement(STORE_ID + 1, "PENDING"))));
+
+            assertThatThrownBy(() -> ownerService.updateMySettlementBankAccount(USER_ID, SETTLEMENT_ID, "01258978"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("정산 정보를 찾을 수 없습니다.")
+                    .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+            verify(adminFeignClient, never()).updateSettlementBankAccount(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("400: DONE 정산은 이미 완료된 건이라 계좌 변경 불가")
+        void doneSettlement_throwsBadRequest() {
+            OwnerStoreRes store = new OwnerStoreRes();
+            store.setStoreId(STORE_ID);
+            when(ownerMapper.getMyStores(USER_ID)).thenReturn(List.of(store));
+            when(adminFeignClient.getSettlementsByStore(STORE_ID))
+                    .thenReturn(new ResultResponse<>("조회 성공", List.of(settlement(STORE_ID, "DONE"))));
+
+            assertThatThrownBy(() -> ownerService.updateMySettlementBankAccount(USER_ID, SETTLEMENT_ID, "01258978"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("정산 완료된 건은 계좌 변경이 불가합니다.")
+                    .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(adminFeignClient, never()).updateSettlementBankAccount(anyLong(), any());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
     private static OwnerMenuRegReq newMenuRegReq(long menuId, long storeId, String name, int price) {
         OwnerMenuRegReq dto = new OwnerMenuRegReq();
         dto.setMenuId(menuId);
@@ -898,6 +969,14 @@ class OwnerServiceTest {
         return o;
     }
 
+    private static Orders newOrderEntity(long orderId, long userNo, int orderState) {
+        Orders order = new Orders();
+        order.setOrderId(orderId);
+        order.setUserNo(userNo);
+        order.setOrderState(orderState);
+        return order;
+    }
+
     private static OwnerStoreRegReq newRegReq(long userId, long categoryId, String name) {
         OwnerStoreRegReq dto = new OwnerStoreRegReq();
         dto.setUserId(userId);
@@ -911,5 +990,14 @@ class OwnerServiceTest {
         dto.setStoreId(storeId);
         dto.setStoreName(name);
         return dto;
+    }
+
+    private static AdminSettlementRes settlement(long storeId, String status) {
+        AdminSettlementRes settlement = new AdminSettlementRes();
+        settlement.setSettlementId(SETTLEMENT_ID);
+        settlement.setTargetType("STORE");
+        settlement.setTargetNo(storeId);
+        settlement.setStatus(status);
+        return settlement;
     }
 }

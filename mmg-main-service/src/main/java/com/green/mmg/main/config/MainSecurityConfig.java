@@ -55,7 +55,7 @@ public class MainSecurityConfig {
                         .requestMatchers("/api/cart/**").hasRole("CUSTOMER")
                         .requestMatchers("/api/order/**").hasRole("CUSTOMER")
                         .requestMatchers("/api/payment/**").hasRole("CUSTOMER")
-                        .requestMatchers("/api/notification/**").hasRole("CUSTOMER")
+                        .requestMatchers("/api/notification/**").hasAnyRole("CUSTOMER", "OWNER")
 
                         // 2026-05-25 9건 트랙 #5/#6 — 챗봇은 CUSTOMER/OWNER/RIDER 모두 사용 (CS 챗봇 공용)
                         // MYPET 진입은 ChatbotService에서 CUSTOMER 체크 (사장/라이더 펫 자동 생성 차단)

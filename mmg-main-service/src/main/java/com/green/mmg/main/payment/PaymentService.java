@@ -5,6 +5,8 @@ import com.green.mmg.main.cart.CartDetailRepository;
 import com.green.mmg.main.cart.CartRepository;
 import com.green.mmg.main.coupon.CouponService;
 import com.green.mmg.main.greenpoint.GreenPointRewardService;
+import com.green.mmg.main.notification.NotificationService;
+import com.green.mmg.main.notification.model.NotificationCreateReq;
 import com.green.mmg.main.order.OrderRepository;
 import com.green.mmg.main.order.model.Orders;
 import com.green.mmg.main.owner.OwnerOrderSseService;
@@ -58,6 +60,7 @@ public class PaymentService {
     private final CouponService couponService;
     private final OwnerOrderSseService ownerOrderSseService;
     private final GreenPointRewardService greenPointRewardService;
+    private final NotificationService notificationService;
 
     private static final int PAY_STATE_REFUNDED = 3;
 
@@ -109,10 +112,22 @@ public class PaymentService {
             });
         }
 
+        sendOrderReceivedNotification(order);
+
         // 6) 결제 승인 완료 후에만 사장 신규 주문 SSE 발송
         ownerOrderSseService.sendNewOrder(order.getStoreId(), Map.of(
                 "orderId", orderId,
                 "storeId", order.getStoreId()
+        ));
+    }
+
+    private void sendOrderReceivedNotification(Orders order) {
+        notificationService.createNotification(new NotificationCreateReq(
+                order.getUserNo(),
+                "ORDER_STATUS",
+                "주문 접수 완료",
+                "주문이 접수되었습니다. 가게에서 주문 확인을 기다리고 있어요.",
+                "/mypage/orders/" + order.getOrderId()
         ));
     }
 
