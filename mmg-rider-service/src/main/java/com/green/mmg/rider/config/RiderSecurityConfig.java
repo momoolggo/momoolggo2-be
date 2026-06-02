@@ -27,7 +27,7 @@ public class RiderSecurityConfig {
         return base.applyCommon(http)
                 .authorizeHttpRequests(req -> req
                         // 헬스
-                        .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
 
                         // Internal (Phase 4-B Gateway 차단 — R4에서 endpoint 도입 시 검토)
                         .requestMatchers("/internal/**").permitAll()
