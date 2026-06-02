@@ -86,6 +86,10 @@ spring:
               uri: http://localhost:8080
               predicates:
                 - Path=/api/pet/**
+            - id: main-mypage-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/mypage/**
 
             # ---------- rider-service (8082) — Phase 5 본격 진행 시 ----------
             - id: rider-route

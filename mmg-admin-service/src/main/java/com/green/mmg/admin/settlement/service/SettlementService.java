@@ -13,6 +13,7 @@ import com.green.mmg.admin.settlement.dto.SettlementSummaryRes;
 import com.green.mmg.admin.settlement.entity.Settlement;
 import com.green.mmg.admin.settlement.repository.SettlementRepository;
 import com.green.mmg.admin.settlement.payout.SettlementPayoutService;
+import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -183,6 +185,10 @@ public class SettlementService {
     public void updateBankAccount(Long settlementId, String bankAccount) {
         Settlement settlement = settlementRepository.findById(settlementId)
                 .orElseThrow(() -> new ResourceNotFoundException("정산 정보를 찾을 수 없습니다."));
+        if (settlement.getStatus() != SettlementsStatus.PENDING
+                && settlement.getStatus() != SettlementsStatus.HELD) {
+            throw new BusinessException("정산 완료된 건은 계좌 변경이 불가합니다.", HttpStatus.BAD_REQUEST);
+        }
         settlement.updateBankAccount(bankAccount);
     }
 

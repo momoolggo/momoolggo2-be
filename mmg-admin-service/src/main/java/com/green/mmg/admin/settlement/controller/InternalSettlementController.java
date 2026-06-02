@@ -44,4 +44,12 @@ public class InternalSettlementController {
     public ResultResponse<?> getSettlementOrders(@PathVariable Long settlementId) {
         return new ResultResponse<>("조회 성공", settlementService.getSettlementOrders(settlementId));
     }
+
+    @PatchMapping("/{settlementId}/bank-account")
+    public ResultResponse<?> updateBankAccount(
+            @PathVariable Long settlementId,
+            @RequestParam String bankAccount) {
+        settlementService.updateBankAccount(settlementId, bankAccount);
+        return new ResultResponse<>("계좌 정보 변경 완료", null);
+    }
 }
