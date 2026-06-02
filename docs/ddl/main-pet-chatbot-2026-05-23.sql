@@ -10,7 +10,7 @@
 CREATE TABLE IF NOT EXISTS `pets` (
   `pet_no` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '펫번호 PK',
   `user_no` bigint(20) NOT NULL COMMENT '회원번호 (논리FK my_mmg_auth.user.user_no, UNIQUE)',
-  `species` enum('DOG','CAT','RABBIT','HAMSTER') NOT NULL DEFAULT 'DOG' COMMENT '종족',
+  `species` enum('DOG','CAT','RABBIT','HAMSTER','BEAR','FOX','PANDA','FROG') NOT NULL DEFAULT 'DOG',
   `name` varchar(50) NOT NULL COMMENT '펫 이름 (회원가입 시 자동 지정 — JPA 레벨)',
   `level` int(11) NOT NULL DEFAULT 1 COMMENT '레벨 (1~)',
   `exp` int(11) NOT NULL DEFAULT 0 COMMENT '경험치 (0~)',

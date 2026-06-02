@@ -99,13 +99,14 @@ class RiderOrderControllerIntegrationTest {
                         .substring(0, 3).toUpperCase());
     }
 
-    // SSE 자동화 트랙(2026-05-21) — 가입 즉시 ACTIVE 박제. PENDING 시드 분기 폐기.
+    // 2026-05-28 트랙 — 가입 신원 승인 흐름 복원. 생성자 status=PENDING이라 active=true 시 approve() 명시.
     private Rider seedRider(boolean active) {
         Rider rider = new Rider(
                 uniqueUserNo(),
                 "11-22-" + UUID.randomUUID().toString().substring(0, 6) + "-44",
                 "2종보통", VehicleType.MOTORBIKE,
                 "신한", "110-1", "홍길동");
+        if (active) rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 

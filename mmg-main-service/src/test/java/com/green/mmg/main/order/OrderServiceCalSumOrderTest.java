@@ -8,6 +8,8 @@ import com.green.mmg.main.cart.CartMapper;
 import com.green.mmg.main.cart.CartRepository;
 import com.green.mmg.main.cart.model.Cart;
 import com.green.mmg.main.cart.model.CartItemRes;
+import com.green.mmg.main.coupon.CouponService;
+import com.green.mmg.main.order.model.OrderCreateRes;
 import com.green.mmg.main.order.model.OrderReqDto;
 import com.green.mmg.main.order.model.Orders;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 /**
@@ -49,6 +52,7 @@ class OrderServiceCalSumOrderTest {
     @Mock private CartMapper cartMapper;
     @Mock private CartRepository cartRepository;
     @Mock private UserAddressRepository userAddressRepository;
+    @Mock private CouponService couponService;
     @Mock private AuthFeignClient authFeignClient;
 
     @InjectMocks
@@ -94,9 +98,12 @@ class OrderServiceCalSumOrderTest {
             dto.setRiderRequest("문 앞에");
             dto.setPayState(1);
 
-            long orderId = orderService.placeOrder(USER_NO, dto);
+            when(couponService.applyCouponToOrder(eq(USER_NO), anyLong(), isNull(), isNull(), eq(15000)))
+                    .thenAnswer(inv -> inv.getArgument(4));
 
-            assertThat(orderId).isGreaterThan(0L);
+            OrderCreateRes res = orderService.placeOrder(USER_NO, dto);
+
+            assertThat(res.orderId()).isGreaterThan(0L);
             verify(orderRepository).saveAndFlush(any(Orders.class));
             verify(orderMapper).calSumOrder(STORE_ID);  // ★ orderId 아닌 storeId 전달 동결
         }

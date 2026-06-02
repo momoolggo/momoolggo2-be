@@ -34,6 +34,20 @@ spring.cloud.openfeign.client.config.default:
   connectTimeout: 3000
   readTimeout: 5000
 
+spring.cloud.openfeign.circuitbreaker.enabled: true
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 3s
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+
 # mmg-common ConstJwt 바인딩용 — JWT secret만 .env에서 (시크릿)
 constants:
   jwt:

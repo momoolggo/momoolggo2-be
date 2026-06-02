@@ -1,7 +1,11 @@
 package com.green.mmg.auth.user;
 
+import com.green.mmg.auth.feign.AdminSettlementClient;
 import com.green.mmg.auth.feign.MainOwnerProfileClient;
+import com.green.mmg.auth.feign.MainUserCleanupClient;
+import com.green.mmg.auth.feign.RiderUserClient;
 import com.green.mmg.auth.feign.dto.OwnerProfileCreateReq;
+import com.green.mmg.auth.feign.dto.OwnerWithdrawCheckRes;
 import com.green.mmg.auth.mail.EmailService;
 import com.green.mmg.auth.token.RefreshTokenStore;
 import com.green.mmg.auth.user.model.*;
@@ -23,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -52,6 +57,16 @@ public class UserService {
     private final StringRedisTemplate stringRedisTemplate;
     private final EmailService emailService;
     private final MainOwnerProfileClient mainOwnerProfileClient;
+
+    private static final String STATUS_ACTIVE = "ACTIVE";
+    private static final String STATUS_PENDING = "PENDING";
+    private static final String STATUS_REJECTED = "REJECTED";
+    private static final String STATUS_SUSPENDED = "SUSPENDED";
+    private static final String STATUS_WITHDRAWN = "WITHDRAWN";
+
+    private final MainUserCleanupClient mainUserCleanupClient;
+    private final RiderUserClient riderUserClient;
+    private final AdminSettlementClient adminSettlementClient;
 
     // ── 아이디 중복확인
     @Transactional(readOnly = true)
@@ -92,6 +107,13 @@ public class UserService {
         user.setTel(req.getTel());
         user.setEmail(email);
         user.setRole(role);
+
+        if ("CUSTOMER".equals(role)) {
+            user.setRank("BRONZE");
+            user.setGreen(0);
+            user.setKind(0);
+        }
+
         if("OWNER".equals(role) || "RIDER".equals(role)) {
             user.setStatus("PENDING");
         } else {
@@ -115,7 +137,7 @@ public class UserService {
 
         long atExpiresAt = 0L;
 
-        if ("ACTIVE".equals(saved.getStatus())) {
+        if ("ACTIVE".equals(saved.getStatus()) || "RIDER".equals(saved.getRole())) {
             JwtUser jwtUser = new JwtUser(saved.getUserNo(), saved.getRole(), saved.getStatus(), saved.getName());
             issueAndStoreTokens(res, jwtUser);
             atExpiresAt = System.currentTimeMillis() + constJwt.getAccessTokenValidityMilliseconds();
@@ -136,17 +158,16 @@ public class UserService {
             throw new BusinessException("아이디 또는 비밀번호가 틀렸습니다.", HttpStatus.UNAUTHORIZED);
         }
 
-        if (!"ACTIVE".equals(user.getStatus())) {
-            if ("PENDING".equals(user.getStatus())) {
-                throw new BusinessException("관리자 승인 후 이용 가능합니다.", HttpStatus.FORBIDDEN);
+        if (!STATUS_ACTIVE.equals(user.getStatus())) {
+            if (STATUS_WITHDRAWN.equals(user.getStatus())) {
+                boolean recoverable = user.getWithdrawnAt() != null
+                        && user.getWithdrawnAt().isAfter(LocalDateTime.now().minusDays(14));
+                String msg = recoverable
+                        ? "탈퇴한 계정입니다. 14일 이내 복구 가능합니다."
+                        : "탈퇴한 계정입니다. 복구 기간이 지났습니다.";
+                throw new BusinessException(msg, HttpStatus.FORBIDDEN);
             }
-            if ("REJECTED".equals(user.getStatus())) {
-                throw new BusinessException("가입 신청이 반려되었습니다.", HttpStatus.FORBIDDEN);
-            }
-            if ("SUSPENDED".equals(user.getStatus())) {
-                throw new BusinessException("정지된 계정입니다.", HttpStatus.FORBIDDEN);
-            }
-            throw new BusinessException("이용할 수 없는 계정 상태입니다.", HttpStatus.FORBIDDEN);
+            throw inactiveAccountException(user.getStatus(), HttpStatus.FORBIDDEN);
         }
 
         JwtUser jwtUser = new JwtUser(user.getUserNo(), user.getRole(), user.getStatus(), user.getName());
@@ -206,8 +227,8 @@ public class UserService {
         User user = userRepository.findById(jwtUser.getSignedUserNo())
                 .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.UNAUTHORIZED));
 
-        if (!"ACTIVE".equals(user.getStatus())) {
-            throw new BusinessException("관리자 승인 후 이용 가능합니다.", HttpStatus.UNAUTHORIZED);
+        if (!STATUS_ACTIVE.equals(user.getStatus())) {
+            throw inactiveAccountException(user.getStatus(), HttpStatus.UNAUTHORIZED);
         }
 
         JwtUser activeJwtUser = new JwtUser(user.getUserNo(), user.getRole(), user.getStatus(), user.getName());
@@ -217,8 +238,7 @@ public class UserService {
     // 내 정보 조회
     @Transactional(readOnly = true)
     public UserGetRes getUser(Long userNo) {
-        User user = userRepository.findById(userNo)
-                .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        User user = findActiveUser(userNo, HttpStatus.FORBIDDEN);
         return new UserGetRes(user.getUserId(), user.getName(), user.getTel(), user.getEmail(), user.getGender(), user.getBirth(),
                 user.getGreen() == null ? 0 : user.getGreen());
     }
@@ -226,8 +246,8 @@ public class UserService {
     // 내 정보 수정 — JPA dirty checking (기존 MyBatis <if> 동적 UPDATE와 동일 의미)
     @Transactional
     public void updateUser(Long userNo, UserUpdateReq req) {
-        User user = userRepository.findById(userNo)
-                .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        User user = findActiveUser(userNo, HttpStatus.FORBIDDEN);
+
         if (req.getName() != null && !req.getName().isBlank())  user.setName(req.getName());
         if (req.getTel() != null && !req.getTel().isBlank())    user.setTel(req.getTel());
         if (req.getEmail() != null && !req.getEmail().isBlank()) {
@@ -354,5 +374,148 @@ public class UserService {
             return null;
         }
         return email.trim();
+    }
+
+    @Transactional(readOnly = true)
+    public UserSigninRes getMe(Long userNo) {
+        User user = findActiveUser(userNo, HttpStatus.FORBIDDEN);
+        return new UserSigninRes(user.getUserNo(), user.getName(), user.getRole(), 0L, null);
+    }
+
+    // 탈퇴
+    @Transactional
+    public void withdraw(Long userNo, UserWithdrawReq req, HttpServletResponse res) {
+        User user = userRepository.findById(userNo)
+                .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        if (STATUS_WITHDRAWN.equals(user.getStatus())) {
+            throw new BusinessException("이미 탈퇴한 계정입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        if (!STATUS_ACTIVE.equals(user.getStatus())) {
+            throw inactiveAccountException(user.getStatus(), HttpStatus.FORBIDDEN);
+        }
+
+        if ("ADMIN".equals(user.getRole())) {
+            throw new BusinessException("관리자 계정은 탈퇴할 수 없습니다", HttpStatus.FORBIDDEN);
+        }
+
+        if (req == null || req.getUserPw() == null || req.getUserPw().isBlank()) {
+            throw new BusinessException("비밀번호를 입력해 주세요.", HttpStatus.BAD_REQUEST);
+        }
+
+        if (!passwordEncoder.matches(req.getUserPw(), user.getUserPw())) {
+            throw new BusinessException("비밀번호가 일치하지 않습니다.", HttpStatus.UNAUTHORIZED);
+        }
+
+        if (hasActiveWork(user)) {
+            if ("OWNER".equals(user.getRole())) {
+                throw new BusinessException("운영 중인 가게, 진행 중인 주문 또는 미정산 내역이 있어 탈퇴할 수 없습니다. 정리 후 다시 시도해 주세요.", HttpStatus.BAD_REQUEST);
+            }
+            throw new BusinessException("진행 중인 주문 또는 업무가 있어 탈퇴할 수 없습니다. 완료 또는 취소·환불 처리 후 다시 시도해 주세요.", HttpStatus.BAD_REQUEST);
+        }
+
+        user.setStatus(STATUS_WITHDRAWN);
+        user.setWithdrawnAt(LocalDateTime.now());
+        user.setProcessMemo("회원 본인 탈퇴");
+
+        mainUserCleanupClient.cleanupWithdrawnUser(userNo);
+
+        signout(userNo, res);
+    }
+
+    private boolean hasActiveWork(User user) {
+        try {
+            Boolean result;
+
+            if ("CUSTOMER".equals(user.getRole())) {
+                result = mainUserCleanupClient.hasActiveOrders(user.getUserNo()).getResultData();
+            } else if ("OWNER".equals(user.getRole())) {
+                return hasOwnerWithdrawBlocker(user.getUserNo());
+            } else if ("RIDER".equals(user.getRole())) {
+                result = riderUserClient.hasActiveWork(user.getUserNo()).getResultData();
+            } else {
+                return false;
+            }
+
+            return Boolean.TRUE.equals(result);
+        } catch (Exception e) {
+            log.warn("회원탈퇴 진행 중 업무 확인 실패: userNo={}, role={}, cause={}",
+                    user.getUserNo(), user.getRole(), e.getMessage());
+            throw new BusinessException("진행 중인 업무 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    private boolean hasOwnerWithdrawBlocker(Long ownerNo) {
+        OwnerWithdrawCheckRes mainCheck = mainUserCleanupClient.checkOwnerWithdraw(ownerNo).getResultData();
+        if (mainCheck == null) {
+            throw new BusinessException("사장 탈퇴 가능 여부 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+
+        boolean hasUnpaidSettlement = false;
+        List<Long> storeIds = mainCheck.getStoreIds() == null ? List.of() : mainCheck.getStoreIds();
+        if (!storeIds.isEmpty()) {
+            hasUnpaidSettlement = Boolean.TRUE.equals(
+                    adminSettlementClient.hasUnpaidStoreSettlement(storeIds).getResultData()
+            );
+        }
+
+        return mainCheck.isHasActiveStore() || mainCheck.isHasActiveOrders() || hasUnpaidSettlement;
+    }
+
+    // 계정 복구 (탈퇴 후 14일 이내)
+    @Transactional
+    public UserSigninRes recover(UserRecoverReq req, HttpServletResponse res) {
+        User user = userRepository.findByUserId(req.getUserId())
+                .orElseThrow(() -> new BusinessException("아이디 또는 비밀번호가 틀렸습니다.", HttpStatus.UNAUTHORIZED));
+
+        if (!passwordEncoder.matches(req.getUserPw(), user.getUserPw())) {
+            throw new BusinessException("아이디 또는 비밀번호가 틀렸습니다.", HttpStatus.UNAUTHORIZED);
+        }
+
+        if (!STATUS_WITHDRAWN.equals(user.getStatus())) {
+            throw new BusinessException("탈퇴한 계정이 아닙니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        if (user.getWithdrawnAt() == null || user.getWithdrawnAt().isBefore(LocalDateTime.now().minusDays(14))) {
+            throw new BusinessException("복구 기간(14일)이 지났습니다. 새로 가입해 주세요.", HttpStatus.GONE);
+        }
+
+        user.setStatus(STATUS_ACTIVE);
+        user.setWithdrawnAt(null);
+        user.setProcessMemo("계정 복구");
+
+        JwtUser jwtUser = new JwtUser(user.getUserNo(), user.getRole(), user.getStatus(), user.getName());
+        issueAndStoreTokens(res, jwtUser);
+
+        return new UserSigninRes(user.getUserNo(), user.getName(), user.getRole(),
+                System.currentTimeMillis() + constJwt.getAccessTokenValidityMilliseconds(), null);
+    }
+
+    private User findActiveUser(Long userNo, HttpStatus inactiveStatus) {
+        User user = userRepository.findById(userNo)
+                .orElseThrow(() -> new BusinessException("회원 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+
+        if (!STATUS_ACTIVE.equals(user.getStatus())) {
+            throw inactiveAccountException(user.getStatus(), inactiveStatus);
+        }
+
+        return user;
+    }
+
+    private BusinessException inactiveAccountException(String status, HttpStatus httpStatus) {
+        if (STATUS_PENDING.equals(status)) {
+            return new BusinessException("관리자 승인 후 이용 가능합니다.", httpStatus);
+        }
+        if (STATUS_REJECTED.equals(status)) {
+            return new BusinessException("가입 신청이 반려되었습니다.", httpStatus);
+        }
+        if (STATUS_SUSPENDED.equals(status)) {
+            return new BusinessException("정지된 계정입니다.", httpStatus);
+        }
+        if (STATUS_WITHDRAWN.equals(status)) {
+            return new BusinessException("탈퇴한 계정입니다.", httpStatus);
+        }
+        return new BusinessException("이용할 수 없는 계정 상태입니다.", httpStatus);
     }
 }

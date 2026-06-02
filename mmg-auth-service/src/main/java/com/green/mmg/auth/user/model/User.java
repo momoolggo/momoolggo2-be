@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 
 /**
@@ -40,7 +41,7 @@ public class User {
     @Column(name = "name", length = 10)
     private String name;
 
-    @Column(name = "status", columnDefinition = "ENUM('PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED')",
+    @Column(name = "status", columnDefinition = "ENUM('PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED', 'WITHDRAWN')",
     nullable = false)
     private String status = "ACTIVE";
 
@@ -74,10 +75,14 @@ public class User {
     @Column(name = "process_memo", length = 255)
     private String processMemo;
 
+    @Column(name = "withdrawn_at")
+    private LocalDateTime withdrawnAt;
+
     @Column(name = "suspension_until")
     private Date suspensionUntil;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Date createdAt;
+
 }

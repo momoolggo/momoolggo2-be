@@ -499,6 +499,12 @@ public class OwnerService {
         return res.getResultData() != null ? res.getResultData() : new ArrayList<>();
     }
 
+    public Object getMySettlementOrders(Long userNo, Long storeId, Long settlementId) {
+        verifyStoreOwner(userNo, storeId);
+        ResultResponse<Object> res = adminFeignClient.getSettlementOrders(settlementId);
+        return res.getResultData();
+    }
+
     public void submitSettlementInquiry(Long userNo, String content) {
         adminFeignClient.createInquiry(Map.of(
                 "userNo", userNo,

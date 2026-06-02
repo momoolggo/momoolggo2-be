@@ -17,7 +17,8 @@ public record RiderProfileRes(
         String accountBank,
         String accountNo,
         String accountHolder,
-        String phone           // 정산 시연 UX 트랙 #9 (2026-05-21, 옵션 A) — admin 배달관리 연결 박제
+        String phone,           // 정산 시연 UX 트랙 #9 (2026-05-21, 옵션 A) — admin 배달관리 연결 박제
+        String licenseImageUrl  // 2026-05-28 트랙 — 가입 시 업로드한 면허증 사진 URL (프로필 이미지 겸용)
 ) {
     public static RiderProfileRes from(Rider rider) {
         return new RiderProfileRes(
@@ -30,7 +31,8 @@ public record RiderProfileRes(
                 rider.getAccountBank(),
                 rider.getAccountNo(),
                 rider.getAccountHolder(),
-                rider.getPhone()
+                rider.getPhone(),
+                rider.getLicenseImageUrl()
         );
     }
 }

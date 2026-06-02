@@ -1,5 +1,7 @@
 package com.green.mmg.rider.internal;
 
+import com.green.mmg.common.dto.ResultResponse;
+import com.green.mmg.rider.delivery.DeliveryRepository;
 import com.green.mmg.rider.delivery.DeliveryService;
 import com.green.mmg.rider.delivery.model.DeliveryStatus;
 import com.green.mmg.rider.feign.MainInternalClient;
@@ -14,12 +16,14 @@ import com.green.mmg.rider.internal.dto.RiderInternalStatusRes;
 import com.green.mmg.rider.location.LocationService;
 import com.green.mmg.rider.notice.NoticeService;
 import com.green.mmg.rider.notice.model.Notice;
+import com.green.mmg.rider.rider.RiderRepository;
 import com.green.mmg.rider.rider.RiderService;
 import com.green.mmg.rider.rider.model.RiderProfileRes;
 import com.green.mmg.rider.rider.model.RiderStatus;
 import com.green.mmg.rider.settlement.SettlementService;
 import com.green.mmg.rider.settlement.dto.ConfirmReq;
 import com.green.mmg.rider.settlement.dto.SettlementRowRes;
+import com.green.mmg.rider.work.WorkSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -46,6 +50,10 @@ public class RiderInternalController {
     private final MainInternalClient mainInternalClient;
     private final SettlementService settlementService;
     private final RiderService riderService;  // Group 8.5 §3.1/§3.2 신설
+
+    private final RiderRepository riderRepository;
+    private final DeliveryRepository deliveryRepository;
+    private final WorkSessionRepository workSessionRepository;
 
     /**
      * 배차 요청 — interfaces.md §1.1 (case-#33-후속 정정, Q-A9.a (β+δ)).
@@ -156,12 +164,21 @@ public class RiderInternalController {
     // ─── §3.1/§3.2 라이더 관리 (Group 8.5 신설, Q-A1 (라+)) ──────
 
     /**
-     * 라이더 승인 — interfaces.md §3.1. PENDING → ACTIVE 전이 (Q-A20 (가) entity 검증).
-     * {@code req.approvedByAdminNo}는 audit log 별 영역 (Q-A18 (b) Phase 6+ outbox 위임) — 본 단계 미사용.
-     * Phase 6+ audit log 도입 시 req 인자 service 메서드로 전달 연결.
+     * 라이더 승인 — PENDING → ACTIVE (2026-05-28 트랙 복원).
+     * Q-A20 (가) entity 메서드 위임. NOT_FOUND / CONFLICT 분기는 RiderService.approveByUserNo 박제.
+     * (이전: SSE 자동화 트랙(2026-05-21)에서 endpoint 영구 폐기 박제 — 2026-05-28 트랙에서 사용자 명시 요청으로 복원.)
+     * audit log(승인자 admin_no 기록)는 Phase 6+ outbox 위임 — 본 endpoint는 단순 상태 전환만.
      */
-    // SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 endpoint 영구 폐기.
-    // 가입 즉시 ACTIVE 박제 (Rider 생성자) + 회원 정지는 user 도메인으로 단일화.
+    /** admin 라이더 프로필 단건 조회 (userNo 기준) — 승인 모달 면허증 사진 노출용. */
+    @GetMapping("/by-user/{userNo}/profile")
+    public RiderProfileRes getProfileByUserNo(@PathVariable Long userNo) {
+        return riderService.getProfileByUserNo(userNo);
+    }
+
+    @PostMapping("/{userNo}/approve")
+    public RiderProfileRes approve(@PathVariable Long userNo) {
+        return riderService.approveByUserNo(userNo);
+    }
 
     /**
      * 라이더 목록 조회 — interfaces.md §3.5 (Q-A1 (라++) Group 8 신설 2026-05-17).
@@ -180,5 +197,31 @@ public class RiderInternalController {
     @DeleteMapping("/by-user/{userNo}")
     public Long deleteByUserNo(@PathVariable Long userNo) {
         return riderService.deleteByUserNoIfExists(userNo);
+    }
+
+
+    @GetMapping("/users/{userNo}/active-work/exists")
+    public ResultResponse<Boolean> hasActiveWorkByUserNo(@PathVariable Long userNo) {
+        boolean exists = riderRepository.findByUserNo(userNo)
+                .map(rider -> {
+                    List<DeliveryStatus> activeStatuses = List.of(
+                            DeliveryStatus.ASSIGNED,
+                            DeliveryStatus.ARRIVED_AT_STORE,
+                            DeliveryStatus.AWAITING_PICKUP,
+                            DeliveryStatus.PICKED_UP,
+                            DeliveryStatus.DELIVERING
+                    );
+
+                    boolean hasActiveDelivery =
+                            deliveryRepository.countByRiderNoAndStatusIn(rider.getRiderNo(), activeStatuses) > 0;
+
+                    boolean hasOpenWorkSession =
+                            workSessionRepository.findByRiderNoAndEndedAtIsNull(rider.getRiderNo()).isPresent();
+
+                    return hasActiveDelivery || hasOpenWorkSession;
+                })
+                .orElse(false);
+
+        return new ResultResponse<>("라이더 진행 중 업무 확인 완료", exists);
     }
 }

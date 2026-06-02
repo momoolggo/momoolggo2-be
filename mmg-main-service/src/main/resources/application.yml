@@ -38,16 +38,31 @@ spring.jpa:
 # 이미지 업로드 (main-service 단독 책임 — CLAUDE.md §5)
 file:
   upload:
-    menu-path:     C:/uploads/menu/
-    store-path:    C:/uploads/store/
-    review-path:   C:/uploads/review/
-    pet-path:      C:/uploads/pet/
-    delivery-path: C:/uploads/delivery/  # 자잘 에러 트랙 #9 (2026-05-23) 라이더 배달 완료 사진
+    menu-path:           C:/uploads/menu/
+    store-path:          C:/uploads/store/
+    review-path:         C:/uploads/review/
+    pet-path:            C:/uploads/pet/
+    delivery-path:       C:/uploads/delivery/        # 자잘 에러 트랙 #9 (2026-05-23) 라이더 배달 완료 사진
+    rider-license-path:  C:/uploads/rider-license/   # 2026-05-28 트랙 라이더 가입 면허증 사진
 
 # Phase 4-A 백필: Feign client timeout 명시 (60s 기본값 → connect 3s / read 5s)
 spring.cloud.openfeign.client.config.default:
   connectTimeout: 3000
   readTimeout: 5000
+
+spring.cloud.openfeign.circuitbreaker.enabled: true
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 3s
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
 
 # 토스페이먼츠 — secret_key만 시크릿 (.env)
 toss:

@@ -24,6 +24,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${file.upload.review-path:}")  private String reviewPath;
     @Value("${file.upload.pet-path:}")     private String petPath;
     @Value("${file.upload.delivery-path:}") private String deliveryPath;
+    @Value("${file.upload.rider-license-path:}") private String riderLicensePath;
 
     private static final CacheControl UPLOADS_CACHE_CONTROL =
             CacheControl.maxAge(365, TimeUnit.DAYS).cachePublic();
@@ -50,6 +51,12 @@ public class WebConfig implements WebMvcConfigurer {
         if (!deliveryPath.isBlank()) {
             registry.addResourceHandler("/uploads/delivery/**")
                     .addResourceLocations("file:" + deliveryPath)
+                    .setCacheControl(UPLOADS_CACHE_CONTROL);
+        }
+        // 2026-05-28 트랙 — 라이더 가입 면허증 사진 정적 서빙
+        if (!riderLicensePath.isBlank()) {
+            registry.addResourceHandler("/uploads/rider-license/**")
+                    .addResourceLocations("file:" + riderLicensePath)
                     .setCacheControl(UPLOADS_CACHE_CONTROL);
         }
     }

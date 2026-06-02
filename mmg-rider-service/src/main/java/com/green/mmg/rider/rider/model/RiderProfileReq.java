@@ -15,6 +15,7 @@ public record RiderProfileReq(
         String accountBank,
         String accountNo,
         String accountHolder,
-        String phone
+        String phone,
+        String licenseImageUrl   // 2026-05-28 트랙 — 가입 시 면허증 사진 URL (필수, FE에서 /api/rider-license/upload 호출 후 전달)
 ) {
 }

@@ -10,7 +10,9 @@ dependencies {
     implementation 'net.coobird:thumbnailator:0.4.20'
     implementation 'com.googlecode.json-simple:json-simple:1.1.1'
     implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+    implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j'
     implementation 'com.fasterxml.jackson.core:jackson-databind'  // Phase 5 P-3 GeminiClient
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     runtimeOnly  'com.mysql:mysql-connector-j'
 
     testImplementation 'org.skyscreamer:jsonassert:1.5.3'

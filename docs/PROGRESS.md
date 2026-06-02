@@ -1,5 +1,25 @@
 # MOMOOLGGO_MSA — 진행 스냅샷
 
+## Admin report dedupe and blind concurrency review (2026-05-29)
+
+- Added duplicate report protection for owner review reports.
+- Main now forwards `reviewContent` to admin report intake for AI review judgement.
+- Admin report intake converts duplicate unique races to HTTP 409 conflict.
+- AI auto-blind processing now locks the first report row for the same review and skips blind creation when an active blind already exists.
+- DDL record: `docs/ddl/admin-report-dedupe-blind-2026-05-29.sql`.
+- Review note: `docs/admin-report-count-review-2026-05-29.md`.
+- Tests added: `ReportServiceTest` 3 cases, `ReviewReportAiProcessorTest` 1 case.
+
+---
+
+## Main order lookup indexes (2026-05-29)
+
+- Added DB indexes for orders lookup performance: `idx_orders_user_time`, `idx_orders_store_pay_state_time`, `idx_orders_store_time`.
+- DDL record: `docs/ddl/main-order-index-2026-05-29.sql`.
+- Scope: DB index only. Java logic, Mapper SQL, API response shape, and frontend contract unchanged.
+
+---
+
 > 작성: 2026-04-28 / 최종 갱신: **2026-05-06 Phase 5-R1-A 종결 + R2-a/b 적용 (rider 10건 PASS + DeliveryLog 3건, 학원 DB my_mmg_rider 3 테이블 적용 / Q-DB (다) → (가) 전환)**
 > 한 페이지로 Phase 0~4-B 전체 상태 + 다음 단계 정리.
 > 상세 체크리스트는 [migration-plan.md](migration-plan.md), 결정 근거는 [decisions.md](decisions.md), 자료 인덱스는 [INDEX.md](INDEX.md).

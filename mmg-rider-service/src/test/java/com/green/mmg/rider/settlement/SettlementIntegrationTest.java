@@ -56,6 +56,8 @@ class SettlementIntegrationTest {
                 "12-34-" + UUID.randomUUID().toString().substring(0, 6) + "-12",
                 "2종보통", VehicleType.MOTORBIKE,
                 "국민", "110-987-654321", "홍길동");
+        // 2026-05-28 트랙 — 생성자 status=PENDING 복원. 본 테스트는 ACTIVE 라이더 시나리오 박제.
+        rider.approve();
         return riderRepository.saveAndFlush(rider);
     }
 

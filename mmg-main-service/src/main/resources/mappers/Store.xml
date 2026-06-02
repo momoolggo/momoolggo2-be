@@ -267,6 +267,19 @@
         LIMIT 1
     </select>
 
+    <select id="findStoreIdsByOwnerNo" resultType="long">
+        SELECT s.store_id
+        FROM store s
+        WHERE s.owner_id = #{ownerNo}
+    </select>
+
+    <select id="countOpenStoresByOwnerNo" resultType="long">
+        SELECT COUNT(1)
+        FROM store s
+        WHERE s.owner_id = #{ownerNo}
+          AND s.state = 1
+    </select>
+
     <select id="countInternalStoreList" resultType="long">
         SELECT COUNT(DISTINCT s.store_id)
         FROM store s

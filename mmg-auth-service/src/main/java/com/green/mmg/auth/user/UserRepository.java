@@ -30,7 +30,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** Internal API 단건 — UserBriefDto.address는 항상 "" (main이 자체 채움) */
     @Query("""
-            SELECT new com.green.mmg.common.dto.feign.UserBriefDto(u.userNo, u.name, u.tel, '')
+            SELECT new com.green.mmg.common.dto.feign.UserBriefDto(
+                u.userNo,
+                CASE WHEN u.status = 'WITHDRAWN' THEN '탈퇴한 회원' ELSE u.name END,
+                CASE WHEN u.status = 'WITHDRAWN' THEN '' ELSE u.tel END,
+                ''
+            )
             FROM User u
             WHERE u.userNo = :userNo
             """)
@@ -38,7 +43,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** Internal API batch — N+1 회피 */
     @Query("""
-            SELECT new com.green.mmg.common.dto.feign.UserBriefDto(u.userNo, u.name, u.tel, '')
+            SELECT new com.green.mmg.common.dto.feign.UserBriefDto(
+                u.userNo,
+                CASE WHEN u.status = 'WITHDRAWN' THEN '탈퇴한 회원' ELSE u.name END,
+                CASE WHEN u.status = 'WITHDRAWN' THEN '' ELSE u.tel END,
+                ''
+            )
             FROM User u
             WHERE u.userNo IN :ids
             """)

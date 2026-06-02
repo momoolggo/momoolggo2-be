@@ -31,6 +31,9 @@ public class MainSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/address/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/map/**").permitAll()
 
+                        // 라이더 가입 면허증 사진 업로드 (2026-05-28 트랙) — owner signup-doc 박제 일관, 가입 이전 permitAll
+                        .requestMatchers(HttpMethod.POST, "/api/rider-license/upload").permitAll()
+
                         // OWNER 전용 (사장 관리)
                         .requestMatchers(HttpMethod.POST, "/api/owner/signup-doc/upload").permitAll()
                         .requestMatchers("/api/owner/**").access((authentication, context) -> {

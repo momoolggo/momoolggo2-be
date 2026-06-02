@@ -17,6 +17,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @Slf4j
 @Service
@@ -109,8 +110,16 @@ public class PetService {
     public PetRes updatePet(Long userNo, PetUpdateReq req) {
         Pet pet = petRepository.findByUserNo(userNo)
                 .orElseThrow(() -> new BusinessException("펫이 없습니다.", HttpStatus.NOT_FOUND));
+
         pet.rename(req.getName());
         pet.changeSpecies(req.getSpecies());
+
+        try {
+            petRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException("지원하지 않는 펫입니다.", HttpStatus.BAD_REQUEST);
+        }
+
         return new PetRes(pet);
     }
 

@@ -4,20 +4,21 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Rider entity 단위 테스트 (R8-1 신설).
  *
  * <p>R2 entity 단위 테스트 패턴 일관 (DeliveryTest/WorkSessionTest) — Mockito 의존 0, DB 의존 0.
- * SSE 자동화 트랙(2026-05-21) — 라이더 신원 승인/제재 흐름 영구 폐기로 approve/suspend 메서드 테스트 삭제.
- * 생성자 시점 status=ACTIVE 박제 + EATING 토글 메서드 보존.</p>
+ * 2026-05-28 트랙 — 가입 신원 승인 흐름 복원. 생성자 시점 status=PENDING 박제 + approve() 메서드 추가.
+ * (이전: SSE 자동화 트랙(2026-05-21)에서 status=ACTIVE 박제 + approve 폐기 — 2026-05-28 트랙 복원.)</p>
  */
 @DisplayName("Rider entity 단위")
 class RiderTest {
 
     @Test
-    @DisplayName("생성자(7): 필수 필드 + status ACTIVE 직접 박제 + phone NULL (위임 생성자)")
-    void constructor_setsRequiredFields_andStatusActive() {
+    @DisplayName("생성자(7): 필수 필드 + status PENDING 직접 박제 + phone NULL (위임 생성자)")
+    void constructor_setsRequiredFields_andStatusPending() {
         Rider rider = new Rider(1L, "12-34-567890-12", "1종보통",
                 VehicleType.MOTORBIKE, "국민", "123456-78-901234", "홍길동");
 
@@ -28,26 +29,49 @@ class RiderTest {
         assertThat(rider.getAccountBank()).isEqualTo("국민");
         assertThat(rider.getAccountNo()).isEqualTo("123456-78-901234");
         assertThat(rider.getAccountHolder()).isEqualTo("홍길동");
-        assertThat(rider.getStatus()).isEqualTo(RiderStatus.ACTIVE);
+        assertThat(rider.getStatus()).isEqualTo(RiderStatus.PENDING);
         assertThat(rider.getPhone()).isNull();
     }
 
     @Test
-    @DisplayName("생성자(8): phone 박제 (정산 시연 UX 트랙 #9, 2026-05-21 옵션 A) + status ACTIVE")
+    @DisplayName("생성자(8): phone 박제 (정산 시연 UX 트랙 #9, 2026-05-21 옵션 A) + status PENDING")
     void constructor_8params_setsPhone() {
         Rider rider = new Rider(1L, "12-34-567890-12", "1종보통",
                 VehicleType.MOTORBIKE, "국민", "123456-78-901234", "홍길동",
                 "010-9999-8888");
 
         assertThat(rider.getPhone()).isEqualTo("010-9999-8888");
-        assertThat(rider.getStatus()).isEqualTo(RiderStatus.ACTIVE);
+        assertThat(rider.getStatus()).isEqualTo(RiderStatus.PENDING);
         assertThat(rider.getUserNo()).isEqualTo(1L);
     }
 
     @Test
-    @DisplayName("toggleEating(): ACTIVE → EATING")
+    @DisplayName("approve(): PENDING → ACTIVE (2026-05-28 트랙 가입 승인 흐름 복원)")
+    void approve_pendingToActive() {
+        Rider rider = newRider();
+        assertThat(rider.getStatus()).isEqualTo(RiderStatus.PENDING);
+
+        rider.approve();
+
+        assertThat(rider.getStatus()).isEqualTo(RiderStatus.ACTIVE);
+    }
+
+    @Test
+    @DisplayName("approve(): ACTIVE 재호출 → IllegalStateException (화이트리스트)")
+    void approve_alreadyActive_throws() {
+        Rider rider = newRider();
+        rider.approve();
+
+        assertThatThrownBy(rider::approve)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("PENDING 상태가 아닌");
+    }
+
+    @Test
+    @DisplayName("toggleEating(): ACTIVE → EATING (approve 후 토글)")
     void toggleEating_activeToEating() {
         Rider rider = newRider();
+        rider.approve();
 
         rider.toggleEating();
 
@@ -58,6 +82,7 @@ class RiderTest {
     @DisplayName("resumeActive(): EATING → ACTIVE")
     void resumeActive_eatingToActive() {
         Rider rider = newRider();
+        rider.approve();
         rider.toggleEating();
 
         rider.resumeActive();

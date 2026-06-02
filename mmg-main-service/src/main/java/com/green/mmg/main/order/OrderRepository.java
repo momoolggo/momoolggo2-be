@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 
@@ -34,4 +35,25 @@ public interface OrderRepository extends JpaRepository<Orders, Long> {
             LocalDateTime cutoff,
             Pageable pageable
     );
+
+    @Query("""
+        SELECT COUNT(o)
+        FROM Orders o
+        WHERE o.userNo = :userNo
+          AND o.payState = 2
+          AND o.orderState NOT IN :orderStates
+        """)
+    long countPaidActiveOrdersByUserNo(@Param("userNo") Long userNo,
+                                       @Param("orderStates") Collection<Integer> orderStates);
+
+    @Query("""
+        SELECT COUNT(o)
+        FROM Orders o
+        WHERE o.storeId IN :storeIds
+          AND o.payState = 2
+          AND o.orderState NOT IN :orderStates
+        """)
+    long countPaidActiveOrdersByStoreIdIn(@Param("storeIds") Collection<Long> storeIds,
+                                          @Param("orderStates") Collection<Integer> orderStates);
+
 }
