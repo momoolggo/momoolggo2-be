@@ -73,7 +73,7 @@ public class MainSecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/user/review/**").authenticated()
 
                         // 헬스/임시
-                        .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // 서버간 통신 internal API
                         .requestMatchers("/internal/**").permitAll()
 
