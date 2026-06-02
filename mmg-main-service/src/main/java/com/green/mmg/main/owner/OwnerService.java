@@ -7,6 +7,7 @@ import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.feign.RiderFeignClient;
+import com.green.mmg.main.feign.model.AdminSettlementRes;
 import com.green.mmg.main.feign.model.RiderAssignReq;
 import com.green.mmg.main.notification.NotificationService;
 import com.green.mmg.main.notification.model.NotificationCreateReq;
@@ -493,9 +494,9 @@ public class OwnerService {
         ownerMapper.deleteCategory(categoryId);
     }
     // 사장님 정산 내역 조회
-    public List<Object> getMySettlements(Long userNo, Long storeId) {
+    public List<AdminSettlementRes> getMySettlements(Long userNo, Long storeId) {
         verifyStoreOwner(userNo, storeId);
-        ResultResponse<List<Object>> res = adminFeignClient.getSettlementsByStore(storeId);
+        ResultResponse<List<AdminSettlementRes>> res = adminFeignClient.getSettlementsByStore(storeId);
         return res.getResultData() != null ? res.getResultData() : new ArrayList<>();
     }
 
@@ -503,6 +504,42 @@ public class OwnerService {
         verifyStoreOwner(userNo, storeId);
         ResultResponse<Object> res = adminFeignClient.getSettlementOrders(settlementId);
         return res.getResultData();
+    }
+
+    public void updateMySettlementBankAccount(Long userNo, Long settlementId, String bankAccount) {
+        if (bankAccount == null || bankAccount.isBlank()) {
+            throw new BusinessException("계좌 정보가 비어있습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        AdminSettlementRes settlement = findMyStoreSettlement(userNo, settlementId);
+        if (!"PENDING".equals(settlement.getStatus()) && !"HELD".equals(settlement.getStatus())) {
+            throw new BusinessException("정산 완료된 건은 계좌 변경이 불가합니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        adminFeignClient.updateSettlementBankAccount(settlementId, bankAccount);
+    }
+
+    private AdminSettlementRes findMyStoreSettlement(Long userNo, Long settlementId) {
+        List<OwnerStoreRes> stores = ownerMapper.getMyStores(userNo);
+        if (stores == null || stores.isEmpty()) {
+            throw new BusinessException("가게를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+
+        for (OwnerStoreRes store : stores) {
+            ResultResponse<List<AdminSettlementRes>> res =
+                    adminFeignClient.getSettlementsByStore(store.getStoreId());
+            List<AdminSettlementRes> settlements =
+                    res.getResultData() != null ? res.getResultData() : List.of();
+            for (AdminSettlementRes settlement : settlements) {
+                if (Objects.equals(settlement.getSettlementId(), settlementId)
+                        && "STORE".equals(settlement.getTargetType())
+                        && Objects.equals(settlement.getTargetNo(), store.getStoreId())) {
+                    return settlement;
+                }
+            }
+        }
+
+        throw new BusinessException("정산 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
     }
 
     public void submitSettlementInquiry(Long userNo, String content) {
