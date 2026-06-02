@@ -1,6 +1,7 @@
 package com.green.mmg.main.feign;
 
 import com.green.mmg.common.dto.ResultResponse;
+import com.green.mmg.main.feign.model.AdminSettlementRes;
 import com.green.mmg.main.feign.model.ReportReviewReq;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
@@ -19,10 +20,14 @@ public interface AdminFeignClient {
     ResultResponse<Void> reportReview(@RequestBody ReportReviewReq req);
 
     @GetMapping("/internal/settlement/store/{storeId}")
-    ResultResponse<List<Object>> getSettlementsByStore(@PathVariable("storeId") Long storeId);
+    ResultResponse<List<AdminSettlementRes>> getSettlementsByStore(@PathVariable("storeId") Long storeId);
 
     @GetMapping("/internal/settlement/{settlementId}/orders")
     ResultResponse<Object> getSettlementOrders(@PathVariable("settlementId") Long settlementId);
+
+    @PatchMapping("/internal/settlement/{settlementId}/bank-account")
+    ResultResponse<Void> updateSettlementBankAccount(@PathVariable("settlementId") Long settlementId,
+                                                     @RequestParam("bankAccount") String bankAccount);
 
     @PostMapping("/api/admin/cs/internal/inquiry")
     ResultResponse<Void> createInquiry(@RequestBody Map<String, Object> req);

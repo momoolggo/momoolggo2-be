@@ -279,6 +279,16 @@ public class OwnerController {
                 ownerService.getMySettlementOrders(principal.getSignedUserNo(), storeId, settlementId));
     }
 
+    @PatchMapping("/settlement/{settlementId}/bank-account")
+    public ResultResponse<?> updateMySettlementBankAccount(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long settlementId,
+            @RequestParam String bankAccount) {
+        ownerService.updateMySettlementBankAccount(
+                principal.getSignedUserNo(), settlementId, bankAccount);
+        return new ResultResponse<>("계좌 정보 변경 완료", null);
+    }
+
     @PostMapping("/settlement/inquiry")
     public ResultResponse<?> submitInquiry(
             @AuthenticationPrincipal UserPrincipal principal,
