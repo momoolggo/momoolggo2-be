@@ -128,6 +128,8 @@ public class PaymentService {
         requestBody.put("amount",     req.getAmount());
         log.info("토스 요청 바디: {}", requestBody.toJSONString());
 
+        log.info("TOSS_SECRET_KEY: {}", secretKey);
+
         String encoded = Base64.getEncoder()
                 .encodeToString((secretKey + ":").getBytes(StandardCharsets.UTF_8));
 

@@ -15,7 +15,7 @@ spring:
             - id: user-coupon-route
               uri: http://localhost:8080
               predicates:
-                - Path=/api/user/coupon/**
+                - Path=/api/user/coupon,/api/user/coupon/**
 
             # ---------- auth-service (8081) ----------
             - id: auth-user-route        # /api/user/login | join | check-id | me | reissue | logout 등
