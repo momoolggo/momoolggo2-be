@@ -22,6 +22,7 @@ public class SecurityConfiguration {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/actuator/health",
+                                "/actuator/health/**",
                                 "/internal/**"          // Gateway가 외부 차단 (InternalBlockController)
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/admin/policy").permitAll()  // 회원가입 약관 조회 공개
