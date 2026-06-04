@@ -3,13 +3,36 @@ spring:
     name: mmg-auth-service
   config:
     import:
+      - optional:application-redis-prod.yml
+      - optional:application-kafka-prod.yml
       - optional:file:.env.prod[.properties]
-      - classpath:application-redis-prod.yml
-      - classpath:application-kafka-prod.yml
   datasource:
     url: ${AUTH_DB_URL}
     username: ${DATASOURCE_USERNAME}
     password: ${DATASOURCE_PASSWORD}
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+  # JPA + MyBatis 하이브리드 (Phase 3-A) — 단순 CRUD는 JPA, 복잡 쿼리는 MyBatis 영구 공존
+  jpa:
+    hibernate:
+      ddl-auto: none          # ⚠️ validate 외 값 절대 금지 (스키마 변경 X)
+      naming.physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+    open-in-view: false           # Lazy proxy 트랜잭션 밖 사용 차단
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MariaDBDialect
+        format_sql: false
+    show-sql: false
+
 
 server:
   port: 8080
@@ -22,17 +45,7 @@ mybatis:
     map-underscore-to-camel-case: true
   mapper-locations: classpath:mappers/*.xml
 
-# JPA + MyBatis 하이브리드 (Phase 3-A) — 단순 CRUD는 JPA, 복잡 쿼리는 MyBatis 영구 공존
-spring.jpa:
-  hibernate:
-    ddl-auto: none          # ⚠️ validate 외 값 절대 금지 (스키마 변경 X)
-    naming.physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
-  open-in-view: false           # Lazy proxy 트랜잭션 밖 사용 차단
-  properties:
-    hibernate:
-      dialect: org.hibernate.dialect.MariaDBDialect
-      format_sql: false
-  show-sql: false
+
 
 # mmg-common ConstJwt 바인딩용 — 시크릿/만료는 .env에서 주입
 constants:
@@ -68,3 +81,4 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+

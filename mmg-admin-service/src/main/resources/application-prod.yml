@@ -4,7 +4,7 @@ spring:
   config:
     import:
       - optional:file:.env.prod[.properties]
-      - classpath:application-kafka-prod.yml
+      - optional:application-kafka-prod.yml
   datasource:
     url: ${ADMIN_DB_URL}
     username: ${DATASOURCE_USERNAME}
