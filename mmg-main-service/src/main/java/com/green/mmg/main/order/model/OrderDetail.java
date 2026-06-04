@@ -36,4 +36,7 @@ public class OrderDetail {
 
     @Column(name = "menu_price")
     private Integer menuPrice;
+
+    @Column(name = "option_summary", length = 500)
+    private String optionSummary;
 }

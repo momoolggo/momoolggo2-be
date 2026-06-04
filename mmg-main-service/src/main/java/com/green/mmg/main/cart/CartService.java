@@ -2,14 +2,24 @@ package com.green.mmg.main.cart;
 
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.cart.model.*;
+import com.green.mmg.main.owner.MenuOptionCategoryRepository;
+import com.green.mmg.main.owner.MenuOptionRepository;
+import com.green.mmg.main.owner.entity.MenuOption;
+import com.green.mmg.main.owner.entity.MenuOptionCategory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Phase 3-B-3: 하이브리드 영구 공존 핵심 검증 도메인.
@@ -27,6 +37,8 @@ public class CartService {
     private final CartMapper cartMapper;                  // MyBatis (JOIN 잔존)
     private final CartRepository cartRepository;          // JPA
     private final CartDetailRepository cartDetailRepository;  // JPA
+    private final MenuOptionCategoryRepository menuOptionCategoryRepository;
+    private final MenuOptionRepository menuOptionRepository;
 
     @Transactional(readOnly = true)
     public CartListRes getCart(long callerUserNo, Long userNo) {
@@ -57,6 +69,7 @@ public class CartService {
         verifyOwner(callerUserNo, dto.getUserNo());
         Long storeId = cartMapper.findStoreIdByMenuId(dto.getMenuId());  // MyBatis JOIN
         if (storeId == null) throw new RuntimeException("존재하지 않는 메뉴입니다.");
+        CartOptionSnapshot optionSnapshot = buildOptionSnapshot(dto);
 
         Cart existCart = cartRepository.findByUserNo(dto.getUserNo()).orElse(null);
 
@@ -67,12 +80,16 @@ public class CartService {
             newCart.setStoreId(storeId);
             cartRepository.saveAndFlush(newCart);
 
-            CartDetail detail = newDetail(newCart.getCartId(), dto.getMenuId(), dto.getQuantity());
+            CartDetail detail = newDetail(newCart.getCartId(), dto.getMenuId(), dto.getQuantity(), optionSnapshot);
             cartDetailRepository.saveAndFlush(detail);
 
         } else if (existCart.getStoreId().equals(storeId)) {
             Optional<CartDetail> existItem =
-                    cartDetailRepository.findByCartIdAndMenuId(existCart.getCartId(), dto.getMenuId());
+                    cartDetailRepository.findByCartIdAndMenuIdAndOptionSignature(
+                            existCart.getCartId(),
+                            dto.getMenuId(),
+                            optionSnapshot.signature()
+                    );
 
             if (existItem.isPresent()) {
                 // 같은 메뉴 — 수량 합산 (dirty checking)
@@ -80,7 +97,7 @@ public class CartService {
                 item.setQuantity(item.getQuantity() + dto.getQuantity());
                 cartDetailRepository.saveAndFlush(item);
             } else {
-                CartDetail detail = newDetail(existCart.getCartId(), dto.getMenuId(), dto.getQuantity());
+                CartDetail detail = newDetail(existCart.getCartId(), dto.getMenuId(), dto.getQuantity(), optionSnapshot);
                 cartDetailRepository.saveAndFlush(detail);
             }
 
@@ -93,6 +110,8 @@ public class CartService {
     public void clearAndAddToCart(long callerUserNo, CartAddRequestDto dto) {
         verifyOwner(callerUserNo, dto.getUserNo());
         Long storeId = cartMapper.findStoreIdByMenuId(dto.getMenuId());
+        if (storeId == null) throw new RuntimeException("존재하지 않는 메뉴입니다.");
+        CartOptionSnapshot optionSnapshot = buildOptionSnapshot(dto);
 
         cartRepository.findByUserNo(dto.getUserNo()).ifPresent(cart -> {
             cartDetailRepository.deleteByCartId(cart.getCartId());
@@ -105,7 +124,7 @@ public class CartService {
         newCart.setStoreId(storeId);
         cartRepository.saveAndFlush(newCart);
 
-        CartDetail detail = newDetail(newCart.getCartId(), dto.getMenuId(), dto.getQuantity());
+        CartDetail detail = newDetail(newCart.getCartId(), dto.getMenuId(), dto.getQuantity(), optionSnapshot);
         cartDetailRepository.saveAndFlush(detail);
     }
 
@@ -115,6 +134,22 @@ public class CartService {
                 .orElseThrow(() -> new RuntimeException("장바구니 아이템 없음"));
         verifyCartItemOwner(callerUserNo, item.getCartId());
         item.setQuantity(quantity);  // dirty checking
+    }
+
+    @Transactional
+    public void updateCartItemOptions(long callerUserNo, Long cartItemId, CartAddRequestDto dto) {
+        CartDetail item = cartDetailRepository.findById(cartItemId)
+                .orElseThrow(() -> new RuntimeException("장바구니 아이템 없음"));
+        verifyCartItemOwner(callerUserNo, item.getCartId());
+
+        dto.setMenuId(item.getMenuId());
+        CartOptionSnapshot optionSnapshot = buildOptionSnapshot(dto);
+        if (dto.getQuantity() > 0) {
+            item.setQuantity(dto.getQuantity());
+        }
+        item.setOptionSignature(optionSnapshot.signature());
+        item.setOptionSummary(optionSnapshot.summary());
+        item.setOptionPrice(optionSnapshot.optionPrice());
     }
 
     @Transactional
@@ -157,11 +192,95 @@ public class CartService {
         }
     }
 
-    private static CartDetail newDetail(Long cartId, Long menuId, int quantity) {
+    private CartOptionSnapshot buildOptionSnapshot(CartAddRequestDto dto) {
+        List<MenuOptionCategory> categories = menuOptionCategoryRepository.findByMenuId(dto.getMenuId());
+        if (categories == null) {
+            categories = List.of();
+        }
+        List<CartAddRequestDto.CartOptionRequestDto> selectedOptions =
+                dto.getSelectedOptions() == null ? List.of() : dto.getSelectedOptions();
+
+        Map<Long, List<Long>> selectedOptionIdsByCategory = selectedOptions.stream()
+                .filter(option -> option.getOptionCategoryNo() != null && option.getOptionId() != null)
+                .collect(Collectors.groupingBy(
+                        CartAddRequestDto.CartOptionRequestDto::getOptionCategoryNo,
+                        Collectors.mapping(CartAddRequestDto.CartOptionRequestDto::getOptionId, Collectors.toList())
+                ));
+
+        List<MenuOption> selectedOptionsForSnapshot = new ArrayList<>();
+
+        for (MenuOptionCategory category : categories) {
+            List<Long> selectedOptionIds = selectedOptionIdsByCategory.getOrDefault(
+                    category.getOptionCategoryNo(),
+                    List.of()
+            );
+
+            if (Boolean.TRUE.equals(category.getIsRequired()) && selectedOptionIds.isEmpty()) {
+                throw new BusinessException(
+                        category.getOptionCategoryName() + " 옵션을 선택해 주세요.",
+                        HttpStatus.BAD_REQUEST
+                );
+            }
+
+            int maxSelect = category.getMaxSelect() == null ? 1 : category.getMaxSelect();
+            if (selectedOptionIds.size() > maxSelect) {
+                throw new BusinessException(
+                        category.getOptionCategoryName() + " 옵션은 최대 " + maxSelect + "개까지 선택할 수 있습니다.",
+                        HttpStatus.BAD_REQUEST
+                );
+            }
+
+            List<MenuOption> categoryOptions = menuOptionRepository.findByOptionCategoryNo(category.getOptionCategoryNo());
+            Map<Long, MenuOption> optionMap = categoryOptions.stream()
+                    .collect(Collectors.toMap(MenuOption::getOptionId, Function.identity()));
+
+            for (Long optionId : selectedOptionIds) {
+                MenuOption option = optionMap.get(optionId);
+                if (option == null) {
+                    throw new BusinessException("선택할 수 없는 옵션입니다.", HttpStatus.BAD_REQUEST);
+                }
+                if ("Y".equalsIgnoreCase(option.getSoldOut())) {
+                    throw new BusinessException(option.getName() + " 옵션은 품절입니다.", HttpStatus.BAD_REQUEST);
+                }
+                selectedOptionsForSnapshot.add(option);
+            }
+        }
+
+        Set<Long> validCategoryNos = categories.stream()
+                .map(MenuOptionCategory::getOptionCategoryNo)
+                .collect(Collectors.toSet());
+        if (!selectedOptionIdsByCategory.keySet().stream().allMatch(validCategoryNos::contains)) {
+            throw new BusinessException("선택할 수 없는 옵션입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        selectedOptionsForSnapshot.sort(Comparator.comparing(MenuOption::getOptionId));
+
+        String signature = selectedOptionsForSnapshot.stream()
+                .map(option -> String.valueOf(option.getOptionId()))
+                .collect(Collectors.joining(","));
+        String summary = selectedOptionsForSnapshot.stream()
+                .map(option -> option.getPrice() == null || option.getPrice() == 0
+                        ? option.getName()
+                        : option.getName() + "(+" + option.getPrice() + "원)")
+                .collect(Collectors.joining(", "));
+        int optionPrice = selectedOptionsForSnapshot.stream()
+                .mapToInt(option -> option.getPrice() == null ? 0 : option.getPrice())
+                .sum();
+
+        return new CartOptionSnapshot(signature, summary, optionPrice);
+    }
+
+    private static CartDetail newDetail(Long cartId, Long menuId, int quantity, CartOptionSnapshot optionSnapshot) {
         CartDetail d = new CartDetail();
         d.setCartId(cartId);
         d.setMenuId(menuId);
         d.setQuantity(quantity);
+        d.setOptionSignature(optionSnapshot.signature());
+        d.setOptionSummary(optionSnapshot.summary());
+        d.setOptionPrice(optionSnapshot.optionPrice());
         return d;
+    }
+
+    private record CartOptionSnapshot(String signature, String summary, int optionPrice) {
     }
 }

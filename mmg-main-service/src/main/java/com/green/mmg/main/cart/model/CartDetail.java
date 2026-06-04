@@ -31,4 +31,13 @@ public class CartDetail {
 
     @Column(name = "quantity", nullable = false)
     private int quantity;
+
+    @Column(name = "option_price", nullable = false)
+    private int optionPrice;
+
+    @Column(name = "option_summary", length = 500)
+    private String optionSummary;
+
+    @Column(name = "option_signature", length = 255, nullable = false)
+    private String optionSignature = "";
 }

@@ -2,6 +2,9 @@ package com.green.mmg.main.cart;
 
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.cart.model.*;
+import com.green.mmg.main.owner.MenuOptionCategoryRepository;
+import com.green.mmg.main.owner.MenuOptionRepository;
+import com.green.mmg.main.owner.entity.MenuOptionCategory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -35,6 +38,8 @@ class CartServiceTest {
     @Mock private CartMapper cartMapper;
     @Mock private CartRepository cartRepository;
     @Mock private CartDetailRepository cartDetailRepository;
+    @Mock private MenuOptionCategoryRepository menuOptionCategoryRepository;
+    @Mock private MenuOptionRepository menuOptionRepository;
 
     @InjectMocks
     private CartService cartService;
@@ -46,6 +51,7 @@ class CartServiceTest {
     private static final Long MENU_ID = 17L;
     private static final Long CART_ID = 700L;
     private static final Long CART_ITEM_ID = 9001L;
+    private static final Long OPTION_CATEGORY_NO = 301L;
 
     // ─────────────────────────────────────────────────────────────────
     @Nested
@@ -144,7 +150,7 @@ class CartServiceTest {
 
             when(cartMapper.findStoreIdByMenuId(MENU_ID)).thenReturn(STORE_ID_21);
             when(cartRepository.findByUserNo(USER_NO)).thenReturn(Optional.of(existing));
-            when(cartDetailRepository.findByCartIdAndMenuId(CART_ID, MENU_ID))
+            when(cartDetailRepository.findByCartIdAndMenuIdAndOptionSignature(CART_ID, MENU_ID, ""))
                     .thenReturn(Optional.of(existingItem));
 
             cartService.addToCart(USER_NO, dto);
@@ -162,7 +168,7 @@ class CartServiceTest {
 
             when(cartMapper.findStoreIdByMenuId(MENU_ID)).thenReturn(STORE_ID_21);
             when(cartRepository.findByUserNo(USER_NO)).thenReturn(Optional.of(existing));
-            when(cartDetailRepository.findByCartIdAndMenuId(CART_ID, MENU_ID))
+            when(cartDetailRepository.findByCartIdAndMenuIdAndOptionSignature(CART_ID, MENU_ID, ""))
                     .thenReturn(Optional.empty());
 
             cartService.addToCart(USER_NO, dto);
@@ -202,6 +208,27 @@ class CartServiceTest {
 
             verifyNoInteractions(cartDetailRepository);
             verify(cartRepository, never()).saveAndFlush(any(Cart.class));
+        }
+
+        @Test
+        @DisplayName("예외: 필수 옵션 미선택 → BAD_REQUEST + 저장 미발생")
+        void requiredOptionMissing_throwsBadRequest() {
+            CartAddRequestDto dto = addReq(USER_NO, MENU_ID, 1);
+            MenuOptionCategory requiredCategory =
+                    new MenuOptionCategory(MENU_ID, "맵기", true, 1);
+
+            when(cartMapper.findStoreIdByMenuId(MENU_ID)).thenReturn(STORE_ID_21);
+            when(menuOptionCategoryRepository.findByMenuId(MENU_ID))
+                    .thenReturn(List.of(requiredCategory));
+
+            assertThatThrownBy(() -> cartService.addToCart(USER_NO, dto))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("맵기 옵션을 선택해 주세요.")
+                    .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
+
+            verify(cartRepository, never()).findByUserNo(any());
+            verify(cartRepository, never()).saveAndFlush(any(Cart.class));
+            verify(cartDetailRepository, never()).saveAndFlush(any(CartDetail.class));
         }
     }
 

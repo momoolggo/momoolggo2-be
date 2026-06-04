@@ -144,7 +144,7 @@ public class OrderService {
         OrderAddressInfo addr = userAddressRepository.findFirstDefaultByUserNo(userNo).orElse(null);
 
         int menuTotal = items.stream()
-                .mapToInt(i -> i.getPrice() * i.getQuantity())
+                .mapToInt(i -> i.getUnitPrice() * i.getQuantity())
                 .sum();
 
         OrderInfoRes res = new OrderInfoRes();
@@ -172,7 +172,7 @@ public class OrderService {
         OrderAddressInfo addr = userAddressRepository.findFirstDefaultByUserNo(userNo).orElse(null);
 
         int menuTotal = items.stream()
-                .mapToInt(i -> i.getPrice() * i.getQuantity())
+                .mapToInt(i -> i.getUnitPrice() * i.getQuantity())
                 .sum();
         // 2026-05-25 9건 트랙 — 거리 기반 동적 배달팁
         int deliveryFee = calcDeliveryFee(cart.getStoreId(), addr);
@@ -211,7 +211,8 @@ public class OrderService {
             detail.setMenuId(item.getMenuId());
             detail.setQuantity(item.getQuantity());
             detail.setMenuName(item.getMenuName());
-            detail.setMenuPrice(item.getPrice());
+            detail.setMenuPrice(item.getUnitPrice());
+            detail.setOptionSummary(item.getOptionSummary());
             orderDetailRepository.save(detail);
         }
 
@@ -365,6 +366,9 @@ public class OrderService {
             cartDetail.setCartId(newCart.getCartId());
             cartDetail.setMenuId(orderDetail.getMenuId());
             cartDetail.setQuantity(orderDetail.getQuantity());
+            cartDetail.setOptionSummary(orderDetail.getOptionSummary());
+            cartDetail.setOptionSignature("");
+            cartDetail.setOptionPrice(0);
             cartDetailRepository.save(cartDetail);
         }
     }
