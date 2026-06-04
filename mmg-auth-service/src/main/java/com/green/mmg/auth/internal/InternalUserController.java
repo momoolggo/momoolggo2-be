@@ -186,12 +186,16 @@ public class InternalUserController {
         log.info("반려 메일 발송 시도: userNo={}, role={}, email={}, reason={}",
                 user.getUserNo(), user.getRole(), user.getEmail(), req.getReason());
 
-        emailService.sendApprovalRejected(
-                user.getEmail(),
-                user.getName(),
-                user.getRole(),
-                req.getReason()
-        );
+        try {
+            emailService.sendApprovalRejected(
+                    user.getEmail(),
+                    user.getName(),
+                    user.getRole(),
+                    req.getReason()
+            );
+        } catch (Exception e) {
+            log.warn("반려 메일 발송 실패 (반려 처리는 유지): userNo={}, error={}", user.getUserNo(), e.getMessage());
+        }
     }
 
     /**
