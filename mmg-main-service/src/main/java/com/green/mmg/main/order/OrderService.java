@@ -127,7 +127,7 @@ public class OrderService {
     // 주문 화면 초기 데이터 조회
     @Transactional(readOnly = true)
     public OrderInfoRes getOrderInfo(Long userNo) {
-        Cart cart = cartRepository.findByUserNo(userNo)
+        Cart cart = cartRepository.findFirstByUserNoOrderByCartIdDesc(userNo)
                 .orElseThrow(() -> new RuntimeException("장바구니가 비어있습니다."));
 
         List<CartItemRes> items = cartMapper.findCartItems(cart.getCartId());
@@ -163,7 +163,7 @@ public class OrderService {
 
     @Transactional
     public OrderCreateRes placeOrder(Long userNo, OrderReqDto dto) {
-        Cart cart = cartRepository.findByUserNo(userNo)
+        Cart cart = cartRepository.findFirstByUserNoOrderByCartIdDesc(userNo)
                 .orElseThrow(() -> new RuntimeException("장바구니가 비어있습니다."));
 
         List<CartItemRes> items = cartMapper.findCartItems(cart.getCartId());
@@ -350,7 +350,7 @@ public class OrderService {
         if(orderDetails.isEmpty()) {
             throw new BusinessException("재주문할 수 없습니다.", HttpStatus.NOT_FOUND);
         }
-        cartRepository.findByUserNo(callUserNo).ifPresent(cart -> {
+        cartRepository.findFirstByUserNoOrderByCartIdDesc(callUserNo).ifPresent(cart -> {
             cartDetailRepository.deleteByCartId(cart.getCartId());
             cartRepository.delete(cart);
             cartRepository.flush();

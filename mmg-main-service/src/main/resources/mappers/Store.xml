@@ -256,7 +256,7 @@
         s.store_tel,
         s.created_at,
         s.state
-        ORDER BY s.created_at DESC
+        ORDER BY s.state DESC, s.created_at DESC
         LIMIT #{startIdx}, #{size}
     </select>
 

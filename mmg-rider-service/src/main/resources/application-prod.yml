@@ -4,8 +4,8 @@ spring:
   config:
     import:
       - optional:file:.env.prod[.properties]
-      - classpath:application-redis-prod.yml
-      - classpath:application-kafka-prod.yml
+      - optional:application-redis-prod.yml
+      - optional:application-kafka-prod.yml
   datasource:
     url: ${RIDER_DB_URL}
     username: ${DATASOURCE_USERNAME}

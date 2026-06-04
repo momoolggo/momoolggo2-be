@@ -16,7 +16,7 @@ public class OwnerOrderSseService {
     private final Map<Long, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
     public SseEmitter subscribe(Long storeId) {
-        SseEmitter emitter = new SseEmitter(60L * 60 * 1000); // 1시간
+        SseEmitter emitter = new SseEmitter(30_000L); // 30초 — 게이트웨이 스레드 점유 방지, 클라이언트 자동 재연결
 
         emitters.computeIfAbsent(storeId, key -> new CopyOnWriteArrayList<>())
                 .add(emitter);

@@ -8,7 +8,9 @@ import com.green.mmg.main.feign.model.ReportReviewReq;
 import com.green.mmg.main.owner.entity.ReviewReply;
 import com.green.mmg.main.owner.model.*;
 import com.green.mmg.main.review.model.Review;
+import feign.FeignException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OwnerReviewService {
@@ -109,15 +112,28 @@ public class OwnerReviewService {
             throw new BusinessException("본인 가게의 리뷰만 신고할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
 
-        adminFeignClient.reportReview(
-                new ReportReviewReq(
-                        reviewId,
-                        ownerNo,
-                        req.getReason(),
-                        null,
-                        review.getContents()
-                )
-        );
+        try {
+            adminFeignClient.reportReview(
+                    new ReportReviewReq(
+                            reviewId,
+                            ownerNo,
+                            req.getReason(),
+                            null,
+                            review.getContents()
+                    )
+            );
+        } catch (FeignException e) {
+            if (e.status() >= 400 && e.status() < 500) {
+                HttpStatus status = HttpStatus.resolve(e.status());
+                String msg = extractFeignMessage(e);
+                throw new BusinessException(msg, status != null ? status : HttpStatus.BAD_REQUEST);
+            }
+            log.warn("신고 처리 중 admin-service 호출 실패 (reviewId={}): {}", reviewId, e.getMessage());
+            throw new BusinessException("신고 접수 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.SERVICE_UNAVAILABLE);
+        } catch (Exception e) {
+            log.warn("신고 처리 중 예외 발생 (reviewId={}): {}", reviewId, e.getMessage());
+            throw new BusinessException("신고 접수 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.SERVICE_UNAVAILABLE);
+        }
 
     }
 
@@ -167,6 +183,16 @@ public class OwnerReviewService {
         reviewReplyRepository.delete(reviewReply);
     }
 
-
-
+    private String extractFeignMessage(FeignException e) {
+        try {
+            String body = e.contentUTF8();
+            if (body != null && body.contains("resultMessage")) {
+                com.fasterxml.jackson.databind.JsonNode node =
+                        new com.fasterxml.jackson.databind.ObjectMapper().readTree(body);
+                String msg = node.path("resultMessage").asText();
+                if (!msg.isBlank()) return msg;
+            }
+        } catch (Exception ignored) {}
+        return "요청을 처리할 수 없습니다.";
+    }
 }
