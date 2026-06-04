@@ -40,10 +40,10 @@ public class CartService {
     private final MenuOptionCategoryRepository menuOptionCategoryRepository;
     private final MenuOptionRepository menuOptionRepository;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public CartListRes getCart(long callerUserNo, Long userNo) {
         verifyOwner(callerUserNo, userNo);
-        Cart cart = cartRepository.findByUserNo(userNo).orElse(null);
+        Cart cart = findActiveCart(userNo);
         if (cart == null) return null;
 
         // 가게명 + 아이템 목록은 MyBatis JOIN 잔존
@@ -71,7 +71,7 @@ public class CartService {
         if (storeId == null) throw new RuntimeException("존재하지 않는 메뉴입니다.");
         CartOptionSnapshot optionSnapshot = buildOptionSnapshot(dto);
 
-        Cart existCart = cartRepository.findByUserNo(dto.getUserNo()).orElse(null);
+        Cart existCart = findActiveCart(dto.getUserNo());
 
         if (existCart == null) {
             // 새 카트 생성: save 후 MyBatis 후속 호출 가시화 위해 saveAndFlush
@@ -113,11 +113,12 @@ public class CartService {
         if (storeId == null) throw new RuntimeException("존재하지 않는 메뉴입니다.");
         CartOptionSnapshot optionSnapshot = buildOptionSnapshot(dto);
 
-        cartRepository.findByUserNo(dto.getUserNo()).ifPresent(cart -> {
-            cartDetailRepository.deleteByCartId(cart.getCartId());
-            cartRepository.delete(cart);
+        Cart existingCart = findActiveCart(dto.getUserNo());
+        if (existingCart != null) {
+            cartDetailRepository.deleteByCartId(existingCart.getCartId());
+            cartRepository.delete(existingCart);
             cartRepository.flush();
-        });
+        }
 
         Cart newCart = new Cart();
         newCart.setUserNo(dto.getUserNo());
@@ -170,10 +171,11 @@ public class CartService {
     @Transactional
     public void clearCart(long callerUserNo, Long userNo) {
         verifyOwner(callerUserNo, userNo);
-        cartRepository.findByUserNo(userNo).ifPresent(cart -> {
+        Cart cart = findActiveCart(userNo);
+        if (cart != null) {
             cartDetailRepository.deleteByCartId(cart.getCartId());
             cartRepository.delete(cart);
-        });
+        }
     }
 
     /** URL/dto의 targetUserNo가 호출자와 일치하는지 동결 검증 (자기 카트만) */
@@ -181,6 +183,21 @@ public class CartService {
         if (!Objects.equals(targetUserNo, callerUserNo)) {
             throw new BusinessException("본인 장바구니만 접근 가능합니다.", HttpStatus.FORBIDDEN);
         }
+    }
+
+    private Cart findActiveCart(Long userNo) {
+        List<Cart> carts = cartRepository.findAllByUserNoOrderByCartIdDesc(userNo);
+        if (carts.isEmpty()) {
+            return null;
+        }
+
+        Cart activeCart = carts.get(0);
+        for (int i = 1; i < carts.size(); i++) {
+            Cart duplicateCart = carts.get(i);
+            cartDetailRepository.deleteByCartId(duplicateCart.getCartId());
+            cartRepository.delete(duplicateCart);
+        }
+        return activeCart;
     }
 
     /** cartItemId의 cart 소유자가 호출자인지 동결 검증 (cartId → Cart.userNo 조회) */
