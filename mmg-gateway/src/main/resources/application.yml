@@ -31,37 +31,37 @@ spring:
             - id: main-store-route
               uri: http://localhost:8080
               predicates:
-                - Path=/api/store/**
+                - Path=/api/store,/api/store/**
             - id: main-cart-route
               uri: http://localhost:8080
               predicates:
-                - Path=/api/cart/**
+                - Path=/api/cart,/api/cart/**
             - id: main-order-route
               uri: http://localhost:8080
               predicates:
-                - Path=/api/order/**
+                - Path=/api/order,/api/order/**
             - id: main-payment-route
               uri: http://localhost:8080
               predicates:
-                - Path=/api/payment/**
+                - Path=/api/payment,/api/payment/**
             - id: main-notification-route
               uri: http://localhost:8080
               predicates:
-                - Path=/api/notification/**
+                - Path=/api/notification,/api/notification/**
               filters:
                 - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin, RETAIN_FIRST
             - id: main-address-route
               uri: http://localhost:8080
               predicates:
-                - Path=/api/address/**
+                - Path=/api/address,/api/address/**
             - id: main-map-route          # 회원가입 화면 지도 SDK key 노출 (MapConfigController.getMapKey)
               uri: http://localhost:8080
               predicates:
-                - Path=/api/map/**
+                - Path=/api/map,/api/map/**
             - id: main-owner-route
               uri: http://localhost:8080
               predicates:
-                - Path=/api/owner/**
+                - Path=/api/owner,/api/owner/**
             - id: main-uploads-route     # 이미지 정적 (CLAUDE.md §5 main 단독 책임)
               uri: http://localhost:8080
               predicates:
@@ -69,39 +69,39 @@ spring:
             - id: main-delivery-photo-route  # 자잘 에러 트랙 #9 (2026-05-23) 라이더 배달 완료 사진 업로드
               uri: http://localhost:8080
               predicates:
-                - Path=/api/delivery-photo/**
+                - Path=/api/delivery-photo,/api/delivery-photo/**
             - id: main-rider-license-route   # 2026-05-28 트랙 라이더 가입 면허증 사진 업로드
               uri: http://localhost:8080
               predicates:
-                - Path=/api/rider-license/**
+                - Path=/api/rider-license,/api/rider-license/**
             - id: main-chatbot-route          # 2026-05-25 9건 트랙 #5/#6 — 사장/라이더 챗봇 호출 라우트 누락 정정
               uri: http://localhost:8080
               predicates:
-                - Path=/api/chatbot/**
+                - Path=/api/chatbot,/api/chatbot/**
             - id: main-attendance-route       # 2026-05-25 9건 트랙 #8 부채 Step B — 출석 시스템
               uri: http://localhost:8080
               predicates:
-                - Path=/api/attendance/**
+                - Path=/api/attendance,/api/attendance/**
             - id: main-pet-route              # 2026-05-25 9건 트랙 #8 — 펫 도메인 (이전 트랙에서 누락)
               uri: http://localhost:8080
               predicates:
-                - Path=/api/pet/**
+                - Path=/api/pet,/api/pet/**
             - id: main-mypage-route
               uri: http://localhost:8080
               predicates:
-                - Path=/api/mypage/**
+                - Path=/api/mypage,/api/mypage/**
 
             # ---------- rider-service (8082) — Phase 5 본격 진행 시 ----------
             - id: rider-route
               uri: http://localhost:8082
               predicates:
-                - Path=/api/rider/**
+                - Path=/api/rider,/api/rider/**
 
             # ---------- admin-service (8083) — Phase 5 본격 진행 시 ----------
             - id: admin-route
               uri: http://localhost:8083
               predicates:
-                - Path=/api/admin/**
+                - Path=/api/admin,/api/admin/**
 
             # /internal/** 라우팅 의도적 부재: InternalBlockController가 403 응답 (외부 노출 0)
 

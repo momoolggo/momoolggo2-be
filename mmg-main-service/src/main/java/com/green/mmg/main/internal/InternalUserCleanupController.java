@@ -31,7 +31,7 @@ public class InternalUserCleanupController {
     @Transactional
     @PostMapping("/{userNo}/withdraw-cleanup")
     public ResultResponse<Void> cleanupWithdrawUser(@PathVariable Long userNo) {
-        cartRepository.findByUserNo(userNo).ifPresent(cart -> {
+        cartRepository.findFirstByUserNoOrderByCartIdDesc(userNo).ifPresent(cart -> {
             cartDetailRepository.deleteByCartId(cart.getCartId());
             cartRepository.delete(cart);
         });

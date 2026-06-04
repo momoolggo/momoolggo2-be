@@ -12,6 +12,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.HashMap;
 import java.util.List;
@@ -50,12 +52,7 @@ public class ReviewService {
                 reviewMapper.updateStoreRating(storeId);
 
                 // 리뷰 작성 시 AI 자동 감지 요청
-                try {
-                    adminFeignClient.autoDetect(review.getReviewId(),
-                            Map.of("content", req.getText() != null ? req.getText() : ""));
-                } catch (Exception e) {
-                    log.warn("AI 자동 감지 요청 실패 reviewId={} error={}", review.getReviewId(), e.getMessage());
-                }
+                requestAutoDetectAfterCommit(review.getReviewId(), req.getText());
             } else {
                 throw new BusinessException("주문한 사용자가 아닙니다.", HttpStatus.FORBIDDEN);
             }
@@ -118,5 +115,30 @@ public class ReviewService {
         } catch (Exception e) {
             log.warn("AI 재판정 요청 실패 reviewId={} error={}", reviewId, e.getMessage());
         }
+    }
+
+    private void requestAutoDetectAfterCommit(long reviewId, String contents) {
+        Runnable task = () -> {
+            try {
+                adminFeignClient.autoDetect(
+                        reviewId,
+                        Map.of("content", contents != null ? contents : "")
+                );
+            } catch (Exception e) {
+                log.warn("AI 자동 감지 요청 실패 reviewId={} error={}", reviewId, e.getMessage());
+            }
+        };
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            task.run();
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                task.run();
+            }
+        });
     }
 }

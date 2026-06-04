@@ -16,7 +16,7 @@ import java.util.List;
 public class ReviewReportAiRetryScheduler {
 
     private final ReportRepository reportRepository;
-    private final ReviewReportAiProcessor aiProcessor;
+    private final ReviewReportAiProcessService processService;
 
     // 10분마다 실패한 AI 처리 재시도 (최대 3회)
     @Scheduled(fixedDelay = 600_000)
@@ -27,7 +27,7 @@ public class ReviewReportAiRetryScheduler {
         log.info("AI 재시도 대상 {}건", failed.size());
         failed.forEach(r -> {
             try {
-                aiProcessor.process(r.getReportId());
+                processService.process(r.getReportId());
             } catch (Exception e) {
                 log.error("AI 재시도 실패 reportId={} error={}", r.getReportId(), e.getMessage());
             }

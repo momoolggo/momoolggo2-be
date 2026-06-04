@@ -32,21 +32,21 @@ spring:
             - id: auth-user-route        # /api/user/login | join | check-id | me | reissue | logout 등
               uri: ${AUTH_SERVICE_URL}
               predicates:
-                - Path=/api/user/**
+                - Path=/api/user,/api/user/**
             - id: auth-policy-route      # /api/policy/**
               uri: ${AUTH_SERVICE_URL}
               predicates:
-                - Path=/api/policy/**
+                - Path=/api/policy,/api/policy/**
 
             # ---------- main-service (8080) ----------
             - id: main-store-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/store/**
+                - Path=/api/store,/api/store/**
             - id: main-cart-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/cart/**
+                - Path=/api/cart,/api/cart/**
             - id: main-order-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
@@ -54,49 +54,49 @@ spring:
             - id: main-payment-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/payment/**
+                - Path=/api/payment,/api/payment/**
             - id: main-notification-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/notification/**
+                - Path=/api/notification,/api/notification/**
               filters:
                 - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin, RETAIN_FIRST
             - id: main-address-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/address/**
+                - Path=/api/address,/api/address/**
             - id: main-owner-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/owner/**
+                - Path=/api/owner,/api/owner/**
             - id: main-chatbot-route          # 2026-05-25 9건 트랙 #5/#6 — 사장/라이더 챗봇 호출 라우트
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/chatbot/**
+                - Path=/api/chatbot,/api/chatbot/**
             - id: main-attendance-route       # 2026-05-25 9건 트랙 #8 부채 Step B — 출석 시스템
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/attendance/**
+                - Path=/api/attendance,/api/attendance/**
             - id: main-pet-route              # 2026-05-25 9건 트랙 #8 — 펫 도메인
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/pet/**
+                - Path=/api/pet,/api/pet/**
             - id: main-map-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/map/**
+                - Path=/api/map,/api/map/**
             - id: main-delivery-photo-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/delivery-photo/**
+                - Path=/api/delivery-photo,/api/delivery-photo/**
             - id: main-rider-license-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/rider-license/**
+                - Path=/api/rider-license,/api/rider-license/**
             - id: main-mypage-route
               uri: ${MAIN_SERVICE_URL}
               predicates:
-                - Path=/api/mypage/**
+                - Path=/api/mypage,/api/mypage/**
             - id: main-uploads-route     # 이미지 정적 (CLAUDE.md §5 main 단독 책임)
               uri: ${MAIN_SERVICE_URL}
               predicates:
@@ -106,13 +106,13 @@ spring:
             - id: rider-route
               uri: ${RIDER_SERVICE_URL}
               predicates:
-                - Path=/api/rider/**
+                - Path=/api/rider,/api/rider/**
 
             # ---------- admin-service (8083) — Phase 5 본격 진행 시 ----------
             - id: admin-route
               uri: ${ADMIN_SERVICE_URL}
               predicates:
-                - Path=/api/admin/**
+                - Path=/api/admin,/api/admin/**
 
             # /internal/** 라우팅 의도적 부재: InternalBlockController가 403 응답 (외부 노출 0)
 
