@@ -51,6 +51,7 @@ spring.cloud.openfeign.client.config.default:
   readTimeout: 5000
 
 spring.cloud.openfeign.circuitbreaker.enabled: true
+spring.cloud.openfeign.httpclient.hc5.enabled: true
 
 resilience4j:
   timelimiter:

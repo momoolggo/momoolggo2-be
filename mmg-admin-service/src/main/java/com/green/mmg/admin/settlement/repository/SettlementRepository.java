@@ -67,7 +67,10 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
                    "AND s.status IN :statuses " +
                    "AND s.periodStart >= :startDate " +
                    "AND s.periodEnd <= :endDate " +
-                   "ORDER BY s.periodEnd DESC, s.settlementId DESC",
+                   "ORDER BY CASE s.status " +
+                   "WHEN com.green.mmg.admin.common.enums.SettlementsStatus.PENDING THEN 0 " +
+                   "WHEN com.green.mmg.admin.common.enums.SettlementsStatus.HELD THEN 1 " +
+                   "ELSE 2 END ASC, s.periodEnd DESC, s.settlementId DESC",
            countQuery = "SELECT COUNT(s) FROM Settlement s WHERE s.targetType = :targetType " +
                         "AND s.status IN :statuses " +
                         "AND s.periodStart >= :startDate " +
@@ -85,7 +88,10 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
                    "AND s.periodStart >= :startDate " +
                    "AND s.periodEnd <= :endDate " +
                    "AND s.targetNo IN :targetNos " +
-                   "ORDER BY s.periodEnd DESC, s.settlementId DESC",
+                   "ORDER BY CASE s.status " +
+                   "WHEN com.green.mmg.admin.common.enums.SettlementsStatus.PENDING THEN 0 " +
+                   "WHEN com.green.mmg.admin.common.enums.SettlementsStatus.HELD THEN 1 " +
+                   "ELSE 2 END ASC, s.periodEnd DESC, s.settlementId DESC",
            countQuery = "SELECT COUNT(s) FROM Settlement s WHERE s.targetType = :targetType " +
                         "AND s.status IN :statuses " +
                         "AND s.periodStart >= :startDate " +
