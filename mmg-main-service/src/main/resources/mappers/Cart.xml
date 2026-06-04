@@ -30,6 +30,9 @@
             cd.menu_id      AS menuId,
             m.name          AS menuName,
             m.price         AS price,
+            cd.option_price AS optionPrice,
+            cd.option_summary AS optionSummary,
+            cd.option_signature AS optionSignature,
             cd.quantity     AS quantity,
             m.menu_pic      AS menuPic
         FROM cart_detail cd
