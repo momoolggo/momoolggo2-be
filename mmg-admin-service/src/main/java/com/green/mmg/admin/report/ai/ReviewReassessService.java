@@ -61,6 +61,7 @@ public class ReviewReassessService {
             try {
                 reviewBlindClient.unblind(reviewId, new ReviewBlindClient.UnblindRequest(null, "소명 완료 - AI 재판정 통과"));
                 blind.release();
+                blindRepository.save(blind);
                 log.info("소명 완료 - 블라인드 해제 reviewId={}", reviewId);
             } catch (Exception e) {
                 log.error("블라인드 해제 실패 reviewId={} error={}", reviewId, e.getMessage());
