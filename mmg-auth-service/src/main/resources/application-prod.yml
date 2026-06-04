@@ -6,17 +6,6 @@ spring:
       - optional:file:.env.prod[.properties]
       - classpath:application-redis-prod.yml
       - classpath:application-kafka-prod.yml
-  mail:
-    host: smtp.gmail.com
-    port: 587
-    username: mommolggo.team@gmail.com
-    password: tnzfecmsdsitbabc
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
   datasource:
     url: ${AUTH_DB_URL}
     username: ${DATASOURCE_USERNAME}
