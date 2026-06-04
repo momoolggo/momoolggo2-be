@@ -12,6 +12,12 @@ public interface CartDetailRepository extends JpaRepository<CartDetail, Long> {
 
     Optional<CartDetail> findByCartIdAndMenuId(Long cartId, Long menuId);
 
+    Optional<CartDetail> findByCartIdAndMenuIdAndOptionSignature(
+            Long cartId,
+            Long menuId,
+            String optionSignature
+    );
+
     long countByCartId(Long cartId);
 
     @Modifying

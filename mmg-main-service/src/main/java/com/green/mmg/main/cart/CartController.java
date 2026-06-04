@@ -59,6 +59,16 @@ public class CartController {
         return ResponseEntity.ok(Map.of("result", "success"));
     }
 
+    // 옵션 변경
+    @PutMapping("/items/{cartItemId}/options")
+    public ResponseEntity<?> updateCartItemOptions(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long cartItemId,
+            @RequestBody CartAddRequestDto dto) {
+        cartService.updateCartItemOptions(principal.getSignedUserNo(), cartItemId, dto);
+        return ResponseEntity.ok(Map.of("result", "success"));
+    }
+
     // 단일 아이템 삭제
     @DeleteMapping("/items/{cartItemId}")
     public ResponseEntity<?> deleteCartItem(@AuthenticationPrincipal UserPrincipal principal,
