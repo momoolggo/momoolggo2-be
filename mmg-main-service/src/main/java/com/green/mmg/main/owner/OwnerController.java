@@ -114,11 +114,18 @@ public class OwnerController {
         return new ResultResponse<>("주문 삭제 성공", null);
     }
 
-    @GetMapping("/order/subscribe")
+    @GetMapping(value = "/order/subscribe", produces = "text/event-stream")
     public SseEmitter subscribeOrder(@AuthenticationPrincipal UserPrincipal principal,
                                      @RequestParam Long storeId) {
-        ownerService.validateStoreOwner(principal.getSignedUserNo(), storeId);
-        return ownerOrderSseService.subscribe(storeId);
+        try {
+            ownerService.validateStoreOwner(principal.getSignedUserNo(), storeId);
+            return ownerOrderSseService.subscribe(storeId);
+        } catch (Exception e) {
+            log.warn("사장 SSE 구독 실패 storeId={} error={}", storeId, e.getMessage());
+            SseEmitter errorEmitter = new SseEmitter(0L);
+            errorEmitter.completeWithError(e);
+            return errorEmitter;
+        }
     }
 
 

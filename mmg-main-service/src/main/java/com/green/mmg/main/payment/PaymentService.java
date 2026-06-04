@@ -37,7 +37,7 @@ import java.util.Map;
  *   <li>orderMapper.findByOrderId → orderRepository.findById</li>
  *   <li>orderMapper.findUserNoByOrderId → order.getUserNo()</li>
  *   <li>orderMapper.updateState → dirty checking (영속 entity setter)</li>
- *   <li>cartMapper.findCartEntityByUserNo → cartRepository.findByUserNo</li>
+ *   <li>cartMapper.findCartEntityByUserNo → cartRepository.findFirstByUserNoOrderByCartIdDesc</li>
  *   <li>cartMapper.deleteAllCartItems → cartDetailRepository.deleteByCartId</li>
  *   <li>cartMapper.deleteCart → cartRepository.delete</li>
  * </ul>
@@ -106,7 +106,7 @@ public class PaymentService {
         // 5) 장바구니 정리 — 결제 완료 후 비움 (앞 단계 모두 성공한 뒤에만 도달)
         Long userNo = order.getUserNo();
         if (userNo != null) {
-            cartRepository.findByUserNo(userNo).ifPresent(cart -> {
+            cartRepository.findFirstByUserNoOrderByCartIdDesc(userNo).ifPresent(cart -> {
                 cartDetailRepository.deleteByCartId(cart.getCartId());
                 cartRepository.delete(cart);
             });

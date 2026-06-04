@@ -63,7 +63,7 @@ constants:
     refresh-token-cookie-validity-seconds: 1209600
     refresh-token-validity-milliseconds: ${JWT_REFRESH_TOKEN_VALIDITY_MS}
     cookie-secure: true
-    cookie-same-site: STRICT
+    cookie-same-site: Lax
 
 management:
   endpoints:

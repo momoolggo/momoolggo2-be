@@ -14,7 +14,7 @@ public class NotificationSseService {
     private final Map<Long, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
     public SseEmitter subscribe(Long userNo) {
-        SseEmitter emitter = new SseEmitter(60L * 60 * 1000);
+        SseEmitter emitter = new SseEmitter(30_000L); // 30초 — 게이트웨이 스레드 점유 방지, 클라이언트 자동 재연결
 
         emitters.computeIfAbsent(userNo, key -> new CopyOnWriteArrayList<>())
                 .add(emitter);

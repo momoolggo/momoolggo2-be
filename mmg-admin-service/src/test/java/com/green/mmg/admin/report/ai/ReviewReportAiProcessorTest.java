@@ -44,7 +44,7 @@ class ReviewReportAiProcessorTest {
     private MainFeignClient mainFeignClient;
 
     @InjectMocks
-    private ReviewReportAiProcessor processor;
+    private ReviewReportAiProcessService processor;
 
     @Test
     @DisplayName("active blind suppresses duplicate blind creation")
