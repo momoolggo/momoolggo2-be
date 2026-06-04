@@ -5,7 +5,7 @@
 <mapper namespace="com.green.mmg.main.store.StoreMapper">
 
     <select id="findAll">
-        SELECT s.store_id id, s.store_name name, s.min_price min,
+        SELECT DISTINCT s.store_id id, s.store_name name, s.min_price min,
         s.rating_avg avg, s.rating_count sum, s.order_count count,
         s.store_pic pic, s.state, s.created_at createdAt
         FROM store s join store_category c on s.store_id=c.store_id
@@ -84,7 +84,9 @@
     </select>
 
     <select id="getMaxPage">
-        select count(1) from store s join store_category c on c.store_id=s.store_id
+        SELECT COUNT(DISTINCT s.store_id)
+        FROM store s
+        JOIN store_category c ON c.store_id = s.store_id
         <where>
         <if test="searchText != null and searchText != ''">
         AND s.store_name LIKE CONCAT('%', #{searchText}, '%')
