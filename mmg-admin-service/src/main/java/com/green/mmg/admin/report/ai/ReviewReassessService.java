@@ -21,6 +21,8 @@ import java.util.List;
 @Slf4j
 public class ReviewReassessService {
 
+    private static final int BLIND_CONTENT_MAX_LENGTH = 255;
+
     private final GeminiReviewClassifier classifier;
     private final ReviewBlindClient reviewBlindClient;
     private final BlindRepository blindRepository;
@@ -112,7 +114,8 @@ public class ReviewReassessService {
                 }
 
                 BlindReason blindReason = parseBlindReason(judgement.violations());
-                Blind blind = new Blind(reviewId, userNo, blindReason, storeName, content, rating, writer);
+                Blind blind = new Blind(reviewId, userNo, blindReason, storeName,
+                        truncate(content, BLIND_CONTENT_MAX_LENGTH), rating, writer);
                 blindRepository.save(blind);
                 log.info("자동 감지 블라인드 완료 reviewId={}", reviewId);
             } catch (Exception e) {
@@ -128,5 +131,12 @@ public class ReviewReassessService {
         if (v.contains("광고")) return BlindReason.ADVERTISEMENT;
         if (v.contains("허위")) return BlindReason.FALSE_FACT;
         return BlindReason.ETC;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 }
