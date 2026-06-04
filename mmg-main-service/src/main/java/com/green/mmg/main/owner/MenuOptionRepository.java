@@ -14,4 +14,6 @@ public interface MenuOptionRepository extends JpaRepository<MenuOption, Long> {
     Long findOptionCategoryNoByOptionId(@Param("optionId") Long optionId);
 
     List<MenuOption> findByOptionCategoryNo(long optionCategoryNo);
+
+    List<MenuOption> findByOptionCategoryNoIn(List<Long> optionCategoryNos);
 }

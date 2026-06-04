@@ -31,8 +31,8 @@ spring.jpa:
   properties:
     hibernate:
       dialect: org.hibernate.dialect.MariaDBDialect
-      format_sql: true
-  show-sql: true
+      format_sql: false
+  show-sql: false
 
 # mmg-common ConstJwt 바인딩용 — 시크릿/만료는 .env에서 주입
 constants:

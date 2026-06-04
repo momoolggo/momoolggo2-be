@@ -9,6 +9,12 @@ spring:
     url: ${MAIN_DB_URL}
     username: ${DATASOURCE_USERNAME}
     password: ${DATASOURCE_PASSWORD}
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 15
+      connection-timeout: 3000
+      idle-timeout: 300000
+      max-lifetime: 1200000
   servlet:
     multipart:
       max-file-size: 10MB
@@ -34,8 +40,8 @@ spring.jpa:
   properties:
     hibernate:
       dialect: org.hibernate.dialect.MariaDBDialect   # 자동감지 시 학원 MariaDB INFORMATION_SCHEMA의 'RESERVED' 컬럼 부재로 실패 → 명시
-      format_sql: true
-  show-sql: true
+      format_sql: false
+  show-sql: false
 
 # 이미지 업로드 (main-service 단독 책임 — CLAUDE.md §5)
 file:

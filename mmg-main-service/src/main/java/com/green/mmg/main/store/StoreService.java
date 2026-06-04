@@ -62,12 +62,19 @@ public class StoreService {
     @Transactional(readOnly = true)
     public List<MenuOptionCategoryRes> menuOption(long menuId) {
         List<MenuOptionCategory> categories = menuOptionCategoryRepository.findByMenuId(menuId);
+        List<Long> categoryNos = categories.stream()
+                .map(MenuOptionCategory::getOptionCategoryNo)
+                .toList();
+        Map<Long, List<MenuOption>> optionsByCategoryNo = categoryNos.isEmpty()
+                ? Map.of()
+                : menuOptionRepository.findByOptionCategoryNoIn(categoryNos).stream()
+                .collect(Collectors.groupingBy(MenuOption::getOptionCategoryNo));
+
         return categories.stream()
-                .map(category -> {
-                    List<MenuOption> options =
-                            menuOptionRepository.findByOptionCategoryNo(category.getOptionCategoryNo());
-                    return MenuOptionCategoryRes.from(category, options);
-                })
+                .map(category -> MenuOptionCategoryRes.from(
+                        category,
+                        optionsByCategoryNo.getOrDefault(category.getOptionCategoryNo(), List.of())
+                ))
                 .toList();
     }
 
