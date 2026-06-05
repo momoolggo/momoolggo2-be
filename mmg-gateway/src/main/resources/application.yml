@@ -70,6 +70,10 @@ spring:
               uri: http://localhost:8080
               predicates:
                 - Path=/api/delivery-photo,/api/delivery-photo/**
+            - id: main-review-photo-route
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/review-photo,/api/review-photo/**
             - id: main-rider-license-route   # 2026-05-28 트랙 라이더 가입 면허증 사진 업로드
               uri: http://localhost:8080
               predicates:

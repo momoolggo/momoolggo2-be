@@ -50,6 +50,7 @@ public class MainSecurityConfig {
 
                         // 자잘 에러 트랙 #9 (2026-05-23) — 라이더 배달 완료 사진 업로드
                         .requestMatchers("/api/delivery-photo/**").hasRole("RIDER")
+                        .requestMatchers("/api/review-photo/**").hasRole("CUSTOMER")
 
                         // CUSTOMER 전용 (Phase 2-C에서 cart/order 코드 추가 시 활성화 예정)
                         .requestMatchers("/api/cart/**").hasRole("CUSTOMER")
