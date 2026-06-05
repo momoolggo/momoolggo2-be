@@ -50,6 +50,8 @@ file:
     store-path:  ${STORE_UPLOAD_PATH}
     review-path: ${REVIEW_UPLOAD_PATH}
     pet-path:    ${PET_UPLOAD_PATH}
+    delivery-path: ${DELIVERY_UPLOAD_PATH}        # 자잘 에러 트랙 #9 (2026-05-23) 라이더 배달 완료 사진
+    rider-license-path: ${RIDER_LICENSE_UPLOAD_PATH}
 
 # Phase 4-A 백필: Feign client timeout 명시 (60s 기본값 → connect 3s / read 5s)
 # RestTemplate(AddressSearchService)도 동일 기준 — RestTemplateConfig.java에서 빈으로 명시.

@@ -41,4 +41,13 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
 
         filterChain.doFilter(request, response);
     }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        String path = request.getRequestURI();
+
+        // 내부 에러 포워딩 경로(/error)와 스프링 쿠버네티스 프로브 헬스체크 주소(/actuator)는
+        // 토큰 검증 연산 및 로그 출력을 생략하고 하이패스로 즉시 통과시킵니다.
+        return path.startsWith("/error") || path.startsWith("/actuator");
+    }
 }
