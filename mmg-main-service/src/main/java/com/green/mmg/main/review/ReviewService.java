@@ -39,6 +39,8 @@ public class ReviewService {
     @Transactional
     public void postReview(long user, ReviewReq req) {
         try {
+            validateReviewPhotoUrl(req.getImage());
+
             long userId = reviewMapper.checkReviewWriter(req);
             if (userId == user) {
                 Review review = new Review();
@@ -59,6 +61,25 @@ public class ReviewService {
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException("이미 리뷰가 등록되었습니다.", HttpStatus.CONFLICT);
         }
+    }
+
+    private void validateReviewPhotoUrl(String image) {
+        if (image == null || image.isBlank()) {
+            return;
+        }
+
+        if (image.startsWith("/uploads/review/") && image.length() <= 1000) {
+            return;
+        }
+
+        if (image.startsWith("http://") || image.startsWith("https://")) {
+            if (image.length() <= 1000) {
+                return;
+            }
+            throw new BusinessException("리뷰 사진 URL이 너무 깁니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        throw new BusinessException("리뷰 사진은 업로드 후 반환된 URL로 등록해 주세요.", HttpStatus.BAD_REQUEST);
     }
 
     @Transactional(readOnly = true)
