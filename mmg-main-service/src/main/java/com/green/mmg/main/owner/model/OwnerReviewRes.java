@@ -25,4 +25,12 @@ public class OwnerReviewRes {
     private String replyContent;
     private LocalDateTime replyWrittenAt;
 
+    public String getReviewPhotoUrl() {
+        return photo;
+    }
+
+    public String getImageUrl() {
+        return photo;
+    }
+
 }
