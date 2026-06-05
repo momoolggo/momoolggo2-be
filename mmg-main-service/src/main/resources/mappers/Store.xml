@@ -197,6 +197,8 @@
             r.rating,
             r.contents,
             r.photo,
+            r.photo AS reviewPhotoUrl,
+            r.photo AS imageUrl,
             o.user_no    AS userNo,
             DATE_FORMAT(r.written_at, '%Y.%m.%d') AS date,
             rr.reply_id AS replyId,
