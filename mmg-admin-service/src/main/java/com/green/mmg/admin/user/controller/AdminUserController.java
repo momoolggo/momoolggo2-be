@@ -6,13 +6,16 @@ import com.green.mmg.admin.feign.AuthFeignClient;
 import com.green.mmg.admin.feign.MainFeignClient;
 import com.green.mmg.admin.feign.RiderFeignClient;
 import com.green.mmg.common.dto.ResultResponse;
+import feign.FeignException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/admin/user")
 @RequiredArgsConstructor
@@ -112,17 +115,23 @@ public class AdminUserController {
         return mainFeignClient.getOwnerProfile(userNo);
     }
 
-    //라이더 회원가입 프로필 (면허증 사진 등 승인 모달용) — 기존 list 엔드포인트 활용
+    /**
+     * 라이더 회원가입 프로필 (면허증 사진 등 승인 모달용).
+     *
+     * <p>rider-service 단건 endpoint 사용 — rider 행 부재(가입 흐름 부분 실패) 시 NOT_FOUND 명시.
+     * 이전: getRiderList(null) 전체 받아 인메모리 filter + null 케이스를 "조회 성공"으로 가림 → 가입 미완료 사용자 진단 불가.</p>
+     */
     @GetMapping("/{userNo}/rider-profile")
-    public ResultResponse<?> getRiderProfile(@PathVariable Long userNo) {
+    public ResultResponse<RiderProfileRes> getRiderProfile(@PathVariable Long userNo) {
         try {
-            return new ResultResponse<>("조회 성공",
-                riderFeignClient.getRiderList(null).stream()
-                    .filter(r -> userNo.equals(r.userNo()))
-                    .findFirst()
-                    .orElse(null));
+            RiderProfileRes profile = riderFeignClient.getRiderProfileByUserNo(userNo);
+            return new ResultResponse<>("조회 성공", profile);
+        } catch (FeignException.NotFound e) {
+            log.warn("라이더 프로필 미등록 userNo={} — 가입 흐름 부분 실패 의심 (auth.user는 존재, rider.rider 행 부재)", userNo);
+            return new ResultResponse<>("라이더 프로필이 등록되지 않은 가입 미완료 사용자입니다.", null);
         } catch (Exception e) {
-            return new ResultResponse<>("라이더 프로필 미등록", null);
+            log.error("라이더 프로필 조회 실패 userNo={}: {}", userNo, e.getMessage(), e);
+            return new ResultResponse<>("라이더 프로필 조회 중 오류가 발생했습니다.", null);
         }
     }
 }

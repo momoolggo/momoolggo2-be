@@ -4,6 +4,8 @@ package com.green.mmg.main.owner;
 import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.common.dto.feign.UserBriefDto;
 import com.green.mmg.common.exception.BusinessException;
+import com.green.mmg.main.address.AddressSearchService;
+import com.green.mmg.main.address.model.AddressSearchRes;
 import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.feign.AuthFeignClient;
 import com.green.mmg.main.feign.RiderFeignClient;
@@ -47,6 +49,7 @@ public class OwnerService {
     private final OwnerOrderSseService ownerOrderSseService;
     private final OrderRepository orderRepository;
     private final NotificationService notificationService;
+    private final AddressSearchService addressSearchService;  // 좌표 NULL fallback geocoding (2026-06-05 정정)
 
     private static final int IMAGE_MAX_WIDTH = 1200;
     private static final int IMAGE_MAX_HEIGHT = 1200;
@@ -240,9 +243,42 @@ public class OwnerService {
                 log.warn("배차 트리거 skip: orderId={} — store/orders 조회 결과 부재", orderId);
                 return;
             }
+            // 좌표 NULL fallback (2026-06-05 정정) — address 테이블의 default_ad=1 행 좌표 미입력 케이스.
+            // 라이더 지도/네비게이션 동작 보장 위해 Naver Geocoding으로 채우기. 실패 시 NULL 유지(기존 동작).
+            req = fillDeliveryCoordinatesIfNull(req, orderId);
             riderFeignClient.assignRider(req);
         } catch (Exception e) {
             log.warn("배차 트리거 실패 (order_state=3 전환은 성공): orderId={}, ex={}", orderId, e.getMessage());
+        }
+    }
+
+    /**
+     * 배달지 좌표 NULL일 때 Naver Geocoding으로 채우기 — 2026-06-05 좌표 NULL 트랙.
+     * 라이더 측 RiderDeliveryMap / nmap://navigation은 좌표 필수.
+     * geocoding 결과 부재/실패 시 원본 그대로 반환 (best-effort, 배차 흐름 차단 X).
+     */
+    private RiderAssignReq fillDeliveryCoordinatesIfNull(RiderAssignReq req, long orderId) {
+        if (req.deliveryLat() != null && req.deliveryLng() != null) return req;
+        if (req.deliveryAddress() == null || req.deliveryAddress().isBlank()) return req;
+        try {
+            List<AddressSearchRes> hits = addressSearchService.search(req.deliveryAddress());
+            if (hits.isEmpty()) {
+                log.warn("배차 좌표 fallback 결과 부재 orderId={} addr={}", orderId, req.deliveryAddress());
+                return req;
+            }
+            AddressSearchRes hit = hits.get(0);
+            log.info("배차 좌표 fallback 성공 orderId={} addr={} -> ({}, {})",
+                    orderId, req.deliveryAddress(), hit.getLat(), hit.getLng());
+            return new RiderAssignReq(
+                    req.orderId(), req.riderNo(), req.storeNo(),
+                    req.storeName(), req.storeAddress(), req.storeLat(), req.storeLng(), req.storePhone(),
+                    req.deliveryAddress(), hit.getLat(), hit.getLng(),
+                    req.customerPhone(), req.baseFee(), req.extraFee(),
+                    req.orderRequest(), req.riderRequest()
+            );
+        } catch (Exception e) {
+            log.warn("배차 좌표 fallback 실패 orderId={}: {}", orderId, e.getMessage());
+            return req;
         }
     }
 

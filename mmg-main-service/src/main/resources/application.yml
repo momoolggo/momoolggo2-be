@@ -75,7 +75,7 @@ app:
     api-key: ${GEMINI_API_KEY:}
     base-url: https://generativelanguage.googleapis.com
     default-model: ${GEMINI_MODEL:gemini-2.5-flash}
-    lite-model: gemini-2.0-flash
+    lite-model: gemini-2.5-flash-lite
 
 # 네이버 API (지도/검색 — main-service만 사용, CLAUDE.md §2) — prod와 일관 패턴, 5키 모두 .env
 naver:
