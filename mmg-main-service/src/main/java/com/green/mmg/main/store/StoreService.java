@@ -158,8 +158,11 @@ public class StoreService {
         Map<Long, String> nameMap = (users == null ? List.<UserBriefDto>of() : users).stream()
                 .collect(Collectors.toMap(UserBriefDto::getUserNo, UserBriefDto::getName));
 
-        rows.forEach(r -> r.put("userName",
-                nameMap.getOrDefault(((Number) r.get("userNo")).longValue(), "")));
+        rows.forEach(r -> {
+            r.put("userName", nameMap.getOrDefault(((Number) r.get("userNo")).longValue(), ""));
+            r.putIfAbsent("reviewPhotoUrl", r.get("photo"));
+            r.putIfAbsent("imageUrl", r.get("photo"));
+        });
         return rows;
     }
 
