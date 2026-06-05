@@ -405,7 +405,7 @@ public class UserService {
         }
 
         if (!passwordEncoder.matches(req.getUserPw(), user.getUserPw())) {
-            throw new BusinessException("비밀번호가 일치하지 않습니다.", HttpStatus.UNAUTHORIZED);
+            throw new BusinessException("비밀번호가 일치하지 않습니다.", HttpStatus.BAD_REQUEST);
         }
 
         if (hasActiveWork(user)) {
