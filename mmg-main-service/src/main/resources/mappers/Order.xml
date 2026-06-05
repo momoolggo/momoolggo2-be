@@ -24,6 +24,7 @@
     o.amount        AS totalPrice,
     o.delivery_fee  AS deliveryFee,
     o.order_state   AS orderState,
+    o.delivered_photo_url AS deliveredPhotoUrl,
     (SELECT COUNT(1) FROM review r WHERE r.order_id = o.order_id) AS hasReview
         FROM orders o
             JOIN store s ON s.store_id = o.store_id
