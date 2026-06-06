@@ -219,4 +219,42 @@ class ChatbotPromptBuilderTest {
         // 거짓 약속 회귀 방지: 프롬프트에 날씨 단어 미출현 (2026-06-06 제거)
         assertThat(result).doesNotContain("날씨");
     }
+
+    // ── 2026-06-06 의도 분류 강화 (정보 조회 vs 추천) ────────────────
+
+    @Test
+    @DisplayName("[의도 분류] 정보 조회 키워드 명시 (주문내역/배달조회/환불/쿠폰/포인트/내 정보) + 빈 배열 강제")
+    void info_intent_keywords_listed_and_force_empty() {
+        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(5), null, null);
+        assertThat(result)
+                .contains("정보 조회 의도")
+                .contains("주문내역")
+                .contains("배달")
+                .contains("환불")
+                .contains("쿠폰")
+                .contains("포인트")
+                .contains("내 정보");
+        // 정보 조회면 빈 배열 강제
+        assertThat(result).contains("반드시 빈 배열");
+    }
+
+    @Test
+    @DisplayName("[의도 분류] 메뉴 추천 의도 / 일상 대화 / 보안 거부 4가지 분류 모두 명시")
+    void four_intent_categories_all_listed() {
+        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(5), null, null);
+        assertThat(result)
+                .contains("정보 조회 의도")
+                .contains("메뉴 추천 의도")
+                .contains("일상 대화")
+                .contains("보안");
+    }
+
+    @Test
+    @DisplayName("[의도 분류] 헷갈릴 때 (1) 정보 조회로 분류해서 빈 배열 안전 fallback 지침")
+    void ambiguous_falls_back_to_info_safe() {
+        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(5), null, null);
+        assertThat(result)
+                .contains("헷갈리면")
+                .contains("안전");
+    }
 }
