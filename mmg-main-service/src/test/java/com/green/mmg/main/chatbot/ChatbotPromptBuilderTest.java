@@ -33,11 +33,11 @@ class ChatbotPromptBuilderTest {
     }
 
     @Test
-    @DisplayName("MYPET Lv.1 PLAYFUL (2026-06-06 강화) → 가벼운 추천 힌트 + 발랄 톤 + 펫 이름")
+    @DisplayName("MYPET Lv.1 PLAYFUL → 단순 안내 힌트 + 발랄 톤 + 펫 이름 (발표 자료 박제)")
     void lv1_playful() {
         String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(1), null);
         assertThat(result).contains("발랄");
-        assertThat(result).contains("가벼운 추천");
+        assertThat(result).contains("단순 안내");
         assertThat(result).contains("테스트");
     }
 
@@ -135,18 +135,18 @@ class ChatbotPromptBuilderTest {
     // ── 2026-06-06 메뉴 추천 핵심 기능 강화 ──────────────────────────────
 
     @Test
-    @DisplayName("[강화] 펫 페르소나에 '가장 중요한 역할 — 메뉴 추천' 명시")
-    void pet_persona_emphasizes_recommendation_core_role() {
-        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(1), null, null);
+    @DisplayName("[Lv.5+] 펫 페르소나에 '핵심 역할 — 메뉴 추천' 섹션 명시")
+    void pet_persona_emphasizes_recommendation_core_role_for_canRecommend() {
+        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(5), null, null);
         assertThat(result)
-                .contains("가장 중요한 역할")
+                .contains("핵심 역할")
                 .contains("메뉴 추천");
     }
 
     @Test
-    @DisplayName("[강화] 추천 신호 키워드 감지 지침 (배고파/뭐 먹지/추천/야식/브런치 등) 명시")
-    void pet_persona_lists_intent_keywords() {
-        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(1), null, null);
+    @DisplayName("[Lv.5+] 추천 신호 키워드 감지 지침 (배고파/뭐 먹지/추천/야식/브런치) 명시")
+    void pet_persona_lists_intent_keywords_for_canRecommend() {
+        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(5), null, null);
         assertThat(result)
                 .contains("배고파")
                 .contains("뭐 먹지")
@@ -156,35 +156,44 @@ class ChatbotPromptBuilderTest {
     }
 
     @Test
-    @DisplayName("[강화] 인사/잡담만 와도 메뉴 화제로 유도 + menuKeywords 1~2개 채우라는 지침")
-    void pet_persona_routes_smalltalk_to_recommendation() {
-        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(1), null, null);
+    @DisplayName("[Lv.5+] 인사/잡담만 와도 메뉴 화제로 유도 + menuKeywords 1~2개 채우라는 지침")
+    void pet_persona_routes_smalltalk_to_recommendation_for_canRecommend() {
+        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(5), null, null);
         assertThat(result)
                 .contains("인사")
                 .contains("메뉴 화제");
     }
 
     @Test
-    @DisplayName("[강화] MYPET Lv.1 — menuKeywords 1~5개 허용 + 강제 빈 배열 지침 제거")
-    void lv1_allows_menuKeywords_after_buff() {
+    @DisplayName("[Lv.1~4 발표 자료 박제] menuKeywords 빈 배열 강제 + 추천 차단 안내")
+    void lv1_forces_empty_keywords_and_blocks_recommendation() {
         String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(1), null, null);
-        assertThat(result).contains("menuKeywords");
-        assertThat(result).contains("1~5개");
-        // 이전 정책 ("menuKeywords는 항상 빈 배열")이 더 이상 Lv.1에 적용 안 됨
-        assertThat(result).doesNotContain("항상 빈 배열로 두세요");
+        assertThat(result)
+                .contains("menuKeywords")
+                .contains("항상 빈 배열")
+                .contains("추천 기능 미해금");
+        // 신호 키워드 감지 섹션은 미해금 펫에 없어야 함
+        assertThat(result).doesNotContain("핵심 역할 — 메뉴 추천");
     }
 
     @Test
-    @DisplayName("[강화] CS 모드에서는 menuKeywords 빈 배열 강제 유지 (잘못된 카드 노출 차단)")
-    void cs_mode_still_forces_empty_keywords() {
+    @DisplayName("[Lv.1~4 발표 자료 박제] Lv.3 추천 거부 응답 가이드 ('좀 더 자라면') 포함")
+    void lv1_includes_canned_refusal_phrase() {
+        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(1), null, null);
+        assertThat(result).contains("좀 더 자라면");
+    }
+
+    @Test
+    @DisplayName("[CS] CS 모드에서는 menuKeywords 빈 배열 강제")
+    void cs_mode_forces_empty_keywords() {
         String result = builder.buildSystemInstruction(EntryPoint.CS, ToneMode.SERIOUS, null, "CUSTOMER", null);
         assertThat(result).contains("menuKeywords");
         assertThat(result).contains("항상 빈 배열");
     }
 
     @Test
-    @DisplayName("[강화] menuKeywords 비어있지 않을 때 카드 안내 문구 강제 지침")
-    void responseFormat_includes_card_guidance() {
+    @DisplayName("[Lv.5+] menuKeywords 비어있지 않을 때 카드 안내 문구 강제 지침")
+    void responseFormat_includes_card_guidance_for_canRecommend() {
         String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(5), null, null);
         assertThat(result)
                 .contains("아래에서")
@@ -192,16 +201,7 @@ class ChatbotPromptBuilderTest {
     }
 
     @Test
-    @DisplayName("[강화] Lv.1~4 buildLevelHint도 '가벼운 추천' 활성 (단순 안내 only X)")
-    void lv1_levelHint_now_recommends() {
-        String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.PLAYFUL, pet(1), null, null);
-        assertThat(result).contains("가벼운 추천");
-        // 기존 strict 정책 ("레벨이 올라가면 추천 기능을 사용할 수 있어요") 제거 검증
-        assertThat(result).doesNotContain("레벨이 올라가면 추천 기능");
-    }
-
-    @Test
-    @DisplayName("[강화] Lv.5~9 컨텍스트(트렌드) 적극 활용 지침")
+    @DisplayName("[Lv.5~9] 트렌드 정보 적극 활용 지침")
     void lv5_levelHint_emphasizes_context() {
         String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.GOURMET, pet(5), null, null);
         assertThat(result)
@@ -210,7 +210,7 @@ class ChatbotPromptBuilderTest {
     }
 
     @Test
-    @DisplayName("[강화] Lv.10+ — 주문 이력/계절/시간대 종합 + 3~5개 채우기 지침")
+    @DisplayName("[Lv.10+] 주문 이력/계절/시간대 종합 + 3~5개 채우기 지침")
     void lv10_levelHint_full_personalization() {
         String result = builder.buildSystemInstruction(EntryPoint.MYPET, ToneMode.EMPATHY, pet(10), null, null);
         assertThat(result)
