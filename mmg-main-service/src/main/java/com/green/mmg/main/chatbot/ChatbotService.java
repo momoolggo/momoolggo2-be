@@ -1,13 +1,18 @@
 package com.green.mmg.main.chatbot;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.green.mmg.common.exception.BusinessException;
 import com.green.mmg.main.chatbot.dto.ChatMessageRes;
+import com.green.mmg.main.chatbot.dto.ChatRecommendation;
 import com.green.mmg.main.chatbot.dto.ChatSendRes;
 import com.green.mmg.main.chatbot.dto.ChatSessionRes;
+import com.green.mmg.main.chatbot.dto.MenuCardDto;
 import com.green.mmg.main.chatbot.entity.*;
 import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.pet.PetService;
 import com.green.mmg.main.pet.entity.Pet;
+import com.green.mmg.main.store.StoreMapper;
+import com.green.mmg.main.store.model.StoreGetRes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +20,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,14 +39,36 @@ public class ChatbotService {
     private final GeminiClient geminiClient;
     private final ChatbotPromptBuilder promptBuilder;
     private final AdminFeignClient adminFeignClient;  // P-7 에스컬레이션
+    private final StoreMapper storeMapper;  // #1+#2 메뉴 추천 키워드 검색 (2026-06-06)
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** 옵션 주입 — P-4/P-5 컨텍스트 확장 시 별 @Component 등록되면 자동 주입. */
     @Autowired(required = false)
     private ChatbotContextProvider contextProvider;
 
-    private static final int DEFAULT_MAX_OUTPUT_TOKENS = 512;
+    private static final int DEFAULT_MAX_OUTPUT_TOKENS = 800;
+    // 2026-06-06 메뉴 추천 강화 — 키워드 5개 / 카드 8개 / 키워드당 2개씩 분산
+    private static final int MAX_CARDS = 8;
+    private static final int MAX_STORES_PER_KEYWORD = 2;
     private static final String GEMINI_FALLBACK_MESSAGE =
             "지금은 답변을 드리기 어려워요. 잠시 후 다시 시도해주세요.";
+
+    /** Gemini responseSchema — {message, menuKeywords[]}. maxItems 3→5 (2026-06-06). */
+    private static final String RECOMMEND_SCHEMA = """
+            {
+              "type": "object",
+              "properties": {
+                "message": { "type": "string" },
+                "menuKeywords": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "maxItems": 5
+                }
+              },
+              "required": ["message"],
+              "propertyOrdering": ["message", "menuKeywords"]
+            }
+            """;
 
     @Transactional
     public ChatSessionRes startSession(Long userNo, String callerRole, EntryPoint entryPoint, ToneMode toneMode) {
@@ -68,7 +97,7 @@ public class ChatbotService {
     }
 
     @Transactional
-    public ChatSendRes sendMessage(Long callerUserNo, Long sessionId, String content) {
+    public ChatSendRes sendMessage(Long callerUserNo, String callerRole, Long sessionId, String content) {
         if (content == null || content.isBlank()) {
             throw new BusinessException("메시지 내용이 비어있습니다.", HttpStatus.BAD_REQUEST);
         }
@@ -81,10 +110,15 @@ public class ChatbotService {
                 new ChatMessage(sessionId, MessageRole.USER, content));
 
         String assistantText;
+        List<MenuCardDto> menuCards = List.of();
         if (session.getStatus() == SessionStatus.ESCALATED) {
             assistantText = "상담원 연결 대기 중입니다. 잠시만 기다려주세요.";
         } else {
-            assistantText = callGemini(session, content);
+            ChatRecommendation rec = callGemini(session, callerRole, content);
+            assistantText = rec.getMessage();
+            if (!rec.getMenuKeywords().isEmpty()) {
+                menuCards = searchMenuCards(rec.getMenuKeywords());
+            }
         }
         ChatMessage assistantMsg = messageRepository.save(
                 new ChatMessage(sessionId, MessageRole.ASSISTANT, assistantText));
@@ -92,7 +126,8 @@ public class ChatbotService {
         return new ChatSendRes(
                 new ChatMessageRes(userMsg),
                 new ChatMessageRes(assistantMsg),
-                session.getStatus());
+                session.getStatus(),
+                menuCards);
     }
 
     @Transactional(readOnly = true)
@@ -105,9 +140,8 @@ public class ChatbotService {
     @Transactional
     public ChatSessionRes escalate(Long callerUserNo, Long sessionId) {
         ChatSession session = loadOwnedSession(callerUserNo, sessionId);
-        if (session.getEntryPoint() != EntryPoint.CS) {
-            throw new BusinessException("CS 세션만 상담원 연결이 가능합니다.", HttpStatus.BAD_REQUEST);
-        }
+        // 멘토 피드백 정정(2026-06-06): 펫 챗봇에서도 상담원 연결 허용.
+        // (이전: EntryPoint.CS만 허용 → 펫에서 "상담원 연결" 텍스트 입력 시 펫이 "저한테 말씀하세요" 응답하던 문제)
         session.escalate();
         notifyAdminEscalation(session);
         return new ChatSessionRes(session);
@@ -152,7 +186,7 @@ public class ChatbotService {
         return session;
     }
 
-    private String callGemini(ChatSession session, String userContent) {
+    private ChatRecommendation callGemini(ChatSession session, String callerRole, String userContent) {
         try {
             Pet pet = (session.getPetNo() != null)
                     ? petService.getOrCreatePet(session.getUserNo())
@@ -161,11 +195,42 @@ public class ChatbotService {
                     .map(p -> p.buildContext(pet))
                     .orElse(null);
             String systemInstruction = promptBuilder.buildSystemInstruction(
-                    session.getEntryPoint(), session.getToneMode(), pet, extraContext);
-            return geminiClient.generateText(systemInstruction, userContent, DEFAULT_MAX_OUTPUT_TOKENS);
+                    session.getEntryPoint(), session.getToneMode(), pet, callerRole, extraContext);
+            String json = geminiClient.generateJson(
+                    systemInstruction, userContent, DEFAULT_MAX_OUTPUT_TOKENS, RECOMMEND_SCHEMA);
+            return objectMapper.readValue(json, ChatRecommendation.class);
         } catch (GeminiException e) {
             log.warn("Gemini 호출 실패 — sessionId={}, cause={}", session.getSessionId(), e.getMessage());
-            return GEMINI_FALLBACK_MESSAGE;
+            return new ChatRecommendation(GEMINI_FALLBACK_MESSAGE, List.of());
+        } catch (Exception e) {
+            log.warn("Gemini 응답 파싱 실패 — sessionId={}, cause={}", session.getSessionId(), e.getMessage());
+            return new ChatRecommendation(GEMINI_FALLBACK_MESSAGE, List.of());
         }
+    }
+
+    /**
+     * #1+#2 메뉴 추천 카드 검색 — 키워드 1~3개로 storeMapper.searchStore 후 dedupe + 최대 MAX_CARDS개.
+     * storeMapper.searchStore는 가게/메뉴/카테고리 LIKE 통합 검색이라 키워드를 그대로 전달.
+     */
+    private List<MenuCardDto> searchMenuCards(List<String> keywords) {
+        List<MenuCardDto> cards = new ArrayList<>();
+        java.util.Set<Long> seenStoreIds = new HashSet<>();
+        for (String keyword : keywords) {
+            if (cards.size() >= MAX_CARDS) break;
+            if (keyword == null || keyword.isBlank()) continue;
+            try {
+                List<StoreGetRes> stores = storeMapper.searchStore(keyword.trim());
+                int taken = 0;
+                for (StoreGetRes s : stores) {
+                    if (taken >= MAX_STORES_PER_KEYWORD || cards.size() >= MAX_CARDS) break;
+                    if (s.getId() <= 0 || !seenStoreIds.add((long) s.getId())) continue;
+                    cards.add(new MenuCardDto(s, keyword));
+                    taken++;
+                }
+            } catch (Exception e) {
+                log.warn("메뉴 카드 검색 실패 — keyword={}, cause={}", keyword, e.getMessage());
+            }
+        }
+        return cards;
     }
 }
