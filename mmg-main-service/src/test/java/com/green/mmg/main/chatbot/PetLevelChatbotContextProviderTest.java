@@ -20,7 +20,7 @@ import static org.mockito.Mockito.*;
 class PetLevelChatbotContextProviderTest {
 
     @Mock private ChatbotStatsService statsService;
-    @Mock private WeatherContextSource weatherContextSource;
+    @Mock private AmbientContextSource ambientContextSource;
 
     @InjectMocks
     private PetLevelChatbotContextProvider provider;
@@ -42,11 +42,27 @@ class PetLevelChatbotContextProviderTest {
     }
 
     @Test
-    @DisplayName("Lv.1~4 → null (단순 챗봇)")
-    void lowLevel_returnsNull() {
-        assertThat(provider.buildContext(petAtLevel(1))).isNull();
-        assertThat(provider.buildContext(petAtLevel(4))).isNull();
-        verifyNoInteractions(statsService);
+    @DisplayName("Lv.1~4 (2026-06-06 강화) → trend 주입 시 trend 반환, history는 호출 X")
+    void lowLevel_trendInjected_noHistory() {
+        when(statsService.getTodayTrendText()).thenReturn("오늘 인기: 치킨");
+
+        String result1 = provider.buildContext(petAtLevel(1));
+        String result4 = provider.buildContext(petAtLevel(4));
+
+        assertThat(result1).contains("오늘 인기: 치킨");
+        assertThat(result4).contains("오늘 인기: 치킨");
+        verify(statsService, never()).getUserHistoryText(any());
+    }
+
+    @Test
+    @DisplayName("Lv.1 + trend null → null (빈 컨텍스트 미주입)")
+    void lowLevel_allNull_returnsNull() {
+        when(statsService.getTodayTrendText()).thenReturn(null);
+
+        String result = provider.buildContext(petAtLevel(1));
+
+        assertThat(result).isNull();
+        verify(statsService, never()).getUserHistoryText(any());
     }
 
     @Test
@@ -72,24 +88,26 @@ class PetLevelChatbotContextProviderTest {
     }
 
     @Test
-    @DisplayName("Lv.10 → 트렌드 + 사용자 이력 + 날씨 (WeatherContextSource 주입 시)")
+    @DisplayName("Lv.10 → 트렌드 + 사용자 이력 + 시간대/계절 (AmbientContextSource 주입 시)")
     void lv10_allLayers() {
-        ReflectionTestUtils.setField(provider, "weatherContextSource", weatherContextSource);
+        ReflectionTestUtils.setField(provider, "ambientContextSource", ambientContextSource);
         when(statsService.getTodayTrendText()).thenReturn("오늘 인기: 치킨");
         when(statsService.getUserHistoryText(42L)).thenReturn("최근 자주: 떡볶이");
-        when(weatherContextSource.buildLv10Context(42L)).thenReturn("현재 날씨: 비 / 봄");
+        when(ambientContextSource.buildAmbientContext(42L)).thenReturn("현재 시즌: 봄 / 시간대: 점심");
 
         String result = provider.buildContext(petAtLevel(10));
 
         assertThat(result)
                 .contains("오늘 인기: 치킨")
                 .contains("최근 자주: 떡볶이")
-                .contains("현재 날씨: 비 / 봄");
+                .contains("현재 시즌: 봄 / 시간대: 점심");
+        // 거짓 약속 회귀 방지: 날씨 단어 미출현 (2026-06-06 제거 박제)
+        assertThat(result).doesNotContain("날씨").doesNotContain("맑음");
     }
 
     @Test
-    @DisplayName("Lv.10 + WeatherContextSource 미주입 → 트렌드 + 이력만")
-    void lv10_noWeather() {
+    @DisplayName("Lv.10 + AmbientContextSource 미주입 → 트렌드 + 이력만")
+    void lv10_noAmbient() {
         when(statsService.getTodayTrendText()).thenReturn("오늘 인기: 치킨");
         when(statsService.getUserHistoryText(42L)).thenReturn("최근 자주: 떡볶이");
 
