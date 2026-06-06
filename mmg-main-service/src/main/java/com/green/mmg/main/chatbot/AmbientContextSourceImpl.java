@@ -6,37 +6,36 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 
 /**
- * Lv.10+ 날씨/계절/시간대 컨텍스트 — 학원 발표 시연용 단순화.
+ * 시간대 + 계절 컨텍스트 — 2026-06-06 메뉴 추천 강화.
  *
- * <p>현재 박제:
+ * <p>구현:
  * <ul>
  *     <li>계절: 월별 분기 (3-5=봄 / 6-8=여름 / 9-11=가을 / 12-2=겨울)</li>
  *     <li>시간대: 시간별 분기 (5-10=아침 / 11-13=점심 / 14-17=오후 / 18-21=저녁 / 그 외=심야)</li>
- *     <li>날씨: 시연용 placeholder "맑음" (기상청 실 API 호출은 tech-debt Phase 6+)</li>
  * </ul></p>
  *
- * <p>tech-debt: 기상청 단기예보 API + nx/ny 사용자별 좌표 변환 + Redis 캐시는 Phase 6+ 위임.</p>
+ * <p>이전 WeatherContextSourceImpl의 lookupWeather placeholder("맑음")는 거짓 약속이라
+ * 2026-06-06 제거. 기상청 단기예보 API + nx/ny 좌표 변환 + Redis 캐시는 tech-debt Phase 6+.</p>
  */
 @Component
-public class WeatherContextSourceImpl implements WeatherContextSource {
+public class AmbientContextSourceImpl implements AmbientContextSource {
 
     private final Clock clock;
 
-    public WeatherContextSourceImpl() {
+    public AmbientContextSourceImpl() {
         this(Clock.systemDefaultZone());
     }
 
-    public WeatherContextSourceImpl(Clock clock) {
+    public AmbientContextSourceImpl(Clock clock) {
         this.clock = clock;
     }
 
     @Override
-    public String buildLv10Context(Long userNo) {
+    public String buildAmbientContext(Long userNo) {
         LocalDateTime now = LocalDateTime.now(clock);
         String season = season(now.getMonthValue());
         String timeSlot = timeSlot(now.getHour());
-        String weather = lookupWeather(userNo);  // placeholder "맑음"
-        return String.format("현재 시즌: %s / 시간대: %s / 날씨: %s", season, timeSlot, weather);
+        return String.format("현재 시즌: %s / 시간대: %s", season, timeSlot);
     }
 
     private String season(int month) {
@@ -52,10 +51,5 @@ public class WeatherContextSourceImpl implements WeatherContextSource {
         if (hour >= 14 && hour <= 17) return "오후";
         if (hour >= 18 && hour <= 21) return "저녁";
         return "심야";
-    }
-
-    /** tech-debt: 기상청 API + Redis 캐시 Phase 6+. 현재 시연용 placeholder. */
-    private String lookupWeather(Long userNo) {
-        return "맑음";
     }
 }

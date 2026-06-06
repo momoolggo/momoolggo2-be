@@ -5,11 +5,14 @@ import com.green.mmg.common.dto.ResultResponse;
 import com.green.mmg.main.chatbot.dto.ChatMessageRes;
 import com.green.mmg.main.chatbot.dto.ChatSendRes;
 import com.green.mmg.main.chatbot.dto.ChatSessionRes;
+import com.green.mmg.main.chatbot.dto.MenuCardDto;
 import com.green.mmg.main.chatbot.entity.*;
 import com.green.mmg.main.feign.AdminFeignClient;
 import com.green.mmg.main.pet.PetService;
 import com.green.mmg.main.pet.entity.Pet;
 import com.green.mmg.main.pet.entity.PetSpecies;
+import com.green.mmg.main.store.StoreMapper;
+import com.green.mmg.main.store.model.StoreGetRes;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -40,6 +43,7 @@ class ChatbotServiceTest {
     @Mock private GeminiClient geminiClient;
     @Mock private ChatbotPromptBuilder promptBuilder;
     @Mock private AdminFeignClient adminFeignClient;
+    @Mock private StoreMapper storeMapper;
 
     @InjectMocks
     private ChatbotService chatbotService;
@@ -161,14 +165,14 @@ class ChatbotServiceTest {
             ChatSession session = activeMypet();
             when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
             when(petService.getOrCreatePet(USER_NO)).thenReturn(sampleLv1Pet());
-            when(promptBuilder.buildSystemInstruction(any(), any(), any(), any()))
+            when(promptBuilder.buildSystemInstruction(any(), any(), any(), any(), any()))
                     .thenReturn("system-prompt");
-            when(geminiClient.generateText(anyString(), anyString(), anyInt()))
-                    .thenReturn("안녕하세요! 멍멍!");
+            when(geminiClient.generateJson(anyString(), anyString(), anyInt(), anyString()))
+                    .thenReturn("{\"message\":\"안녕하세요! 멍멍!\",\"menuKeywords\":[]}");
             when(messageRepository.save(any(ChatMessage.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
 
-            ChatSendRes res = chatbotService.sendMessage(USER_NO, SESSION_ID, "안녕");
+            ChatSendRes res = chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "안녕");
 
             assertThat(res.getUserMessage().getRole()).isEqualTo(MessageRole.USER);
             assertThat(res.getUserMessage().getContent()).isEqualTo("안녕");
@@ -183,15 +187,16 @@ class ChatbotServiceTest {
             ChatSession session = activeMypet();
             when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
             when(petService.getOrCreatePet(USER_NO)).thenReturn(sampleLv1Pet());
-            when(promptBuilder.buildSystemInstruction(any(), any(), any(), any()))
+            when(promptBuilder.buildSystemInstruction(any(), any(), any(), any(), any()))
                     .thenReturn("system-prompt");
-            when(geminiClient.generateText(anyString(), anyString(), anyInt()))
+            when(geminiClient.generateJson(anyString(), anyString(), anyInt(), anyString()))
                     .thenThrow(new GeminiException("503 Service Unavailable"));
+            // searchMenuCards 폴백 시 호출 안 함
             ArgumentCaptor<ChatMessage> msgCaptor = ArgumentCaptor.forClass(ChatMessage.class);
             when(messageRepository.save(msgCaptor.capture()))
                     .thenAnswer(inv -> inv.getArgument(0));
 
-            ChatSendRes res = chatbotService.sendMessage(USER_NO, SESSION_ID, "테스트");
+            ChatSendRes res = chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "테스트");
 
             List<ChatMessage> saved = msgCaptor.getAllValues();
             assertThat(saved).hasSize(2);
@@ -209,7 +214,7 @@ class ChatbotServiceTest {
             when(messageRepository.save(any(ChatMessage.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
 
-            ChatSendRes res = chatbotService.sendMessage(USER_NO, SESSION_ID, "여보세요");
+            ChatSendRes res = chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "여보세요");
 
             assertThat(res.getAssistantMessage().getContent()).contains("상담원 연결 대기");
             verifyNoInteractions(geminiClient);
@@ -218,7 +223,7 @@ class ChatbotServiceTest {
         @Test
         @DisplayName("blank content → BAD_REQUEST")
         void blank_throws() {
-            assertThatThrownBy(() -> chatbotService.sendMessage(USER_NO, SESSION_ID, "   "))
+            assertThatThrownBy(() -> chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "   "))
                     .isInstanceOf(BusinessException.class)
                     .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
             verifyNoInteractions(sessionRepository);
@@ -231,7 +236,7 @@ class ChatbotServiceTest {
             session.close();
             when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
 
-            assertThatThrownBy(() -> chatbotService.sendMessage(USER_NO, SESSION_ID, "hi"))
+            assertThatThrownBy(() -> chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "hi"))
                     .isInstanceOf(BusinessException.class)
                     .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
             verify(messageRepository, never()).save(any());
@@ -243,7 +248,7 @@ class ChatbotServiceTest {
             ChatSession session = activeMypet();
             when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
 
-            assertThatThrownBy(() -> chatbotService.sendMessage(OTHER_USER, SESSION_ID, "hi"))
+            assertThatThrownBy(() -> chatbotService.sendMessage(OTHER_USER, "CUSTOMER", SESSION_ID, "hi"))
                     .isInstanceOf(BusinessException.class)
                     .extracting("status").isEqualTo(HttpStatus.FORBIDDEN);
             verify(messageRepository, never()).save(any());
@@ -254,9 +259,155 @@ class ChatbotServiceTest {
         void notFound() {
             when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> chatbotService.sendMessage(USER_NO, SESSION_ID, "hi"))
+            assertThatThrownBy(() -> chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "hi"))
                     .isInstanceOf(BusinessException.class)
                     .extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("OWNER callerRole → promptBuilder에 OWNER 그대로 전파")
+        void owner_role_propagated_to_prompt() {
+            ChatSession session = new ChatSession(USER_NO, null, EntryPoint.CS, ToneMode.SERIOUS);
+            when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+            when(promptBuilder.buildSystemInstruction(any(), any(), any(), any(), any()))
+                    .thenReturn("sys");
+            when(geminiClient.generateJson(anyString(), anyString(), anyInt(), anyString()))
+                    .thenReturn("{\"message\":\"정산은...\",\"menuKeywords\":[]}");
+            when(messageRepository.save(any(ChatMessage.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            chatbotService.sendMessage(USER_NO, "OWNER", SESSION_ID, "정산 어디서 봐요?");
+
+            ArgumentCaptor<String> roleCap = ArgumentCaptor.forClass(String.class);
+            verify(promptBuilder).buildSystemInstruction(any(), any(), any(), roleCap.capture(), any());
+            assertThat(roleCap.getValue()).isEqualTo("OWNER");
+        }
+
+        // ── #1+#2 메뉴 추천 카드 (2026-06-06) ────────────────────────
+
+        @Test
+        @DisplayName("#1+#2 menuKeywords 있으면 storeMapper.searchStore로 카드 검색 + ChatSendRes.menuCards에 첨부")
+        void menuKeywords_triggerStoreSearch_andAttachCards() {
+            ChatSession session = activeMypet();
+            when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+            when(petService.getOrCreatePet(USER_NO)).thenReturn(sampleLv1Pet());
+            when(promptBuilder.buildSystemInstruction(any(), any(), any(), any(), any()))
+                    .thenReturn("sys");
+            when(geminiClient.generateJson(anyString(), anyString(), anyInt(), anyString()))
+                    .thenReturn("{\"message\":\"치킨 어때요?\",\"menuKeywords\":[\"치킨\",\"피자\"]}");
+            when(messageRepository.save(any(ChatMessage.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            StoreGetRes s1 = new StoreGetRes(); s1.setId(101); s1.setName("황금올리브치킨"); s1.setPic("/u/c1.jpg");
+            StoreGetRes s2 = new StoreGetRes(); s2.setId(102); s2.setName("BHC 강남점"); s2.setPic("/u/c2.jpg");
+            StoreGetRes s3 = new StoreGetRes(); s3.setId(201); s3.setName("도미노 강남"); s3.setPic("/u/p1.jpg");
+            when(storeMapper.searchStore("치킨")).thenReturn(java.util.List.of(s1, s2));
+            when(storeMapper.searchStore("피자")).thenReturn(java.util.List.of(s3));
+
+            ChatSendRes res = chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "야식 추천");
+
+            assertThat(res.getMenuCards()).hasSize(3);
+            assertThat(res.getMenuCards()).extracting(MenuCardDto::getStoreId)
+                    .containsExactly(101L, 102L, 201L);
+            assertThat(res.getMenuCards().get(0).getMatchedKeyword()).isEqualTo("치킨");
+            assertThat(res.getMenuCards().get(2).getMatchedKeyword()).isEqualTo("피자");
+            verify(storeMapper).searchStore("치킨");
+            verify(storeMapper).searchStore("피자");
+        }
+
+        @Test
+        @DisplayName("#1+#2 menuKeywords 비어있으면 storeMapper 호출 X + menuCards 빈 리스트")
+        void empty_menuKeywords_skipsStoreSearch() {
+            ChatSession session = new ChatSession(USER_NO, null, EntryPoint.CS, ToneMode.SERIOUS);
+            when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+            when(promptBuilder.buildSystemInstruction(any(), any(), any(), any(), any())).thenReturn("sys");
+            when(geminiClient.generateJson(anyString(), anyString(), anyInt(), anyString()))
+                    .thenReturn("{\"message\":\"환불은 마이페이지에서...\",\"menuKeywords\":[]}");
+            when(messageRepository.save(any(ChatMessage.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            ChatSendRes res = chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "환불 어디서 해요?");
+
+            assertThat(res.getMenuCards()).isEmpty();
+            verifyNoInteractions(storeMapper);
+        }
+
+        @Test
+        @DisplayName("#1+#2 같은 가게가 여러 키워드에 매칭되면 dedupe + 키워드당 2개 제한 (2026-06-06 정책 변경)")
+        void dedupe_andPerKeywordLimit() {
+            ChatSession session = activeMypet();
+            when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+            when(petService.getOrCreatePet(USER_NO)).thenReturn(sampleLv1Pet());
+            when(promptBuilder.buildSystemInstruction(any(), any(), any(), any(), any())).thenReturn("sys");
+            when(geminiClient.generateJson(anyString(), anyString(), anyInt(), anyString()))
+                    .thenReturn("{\"message\":\"오케이\",\"menuKeywords\":[\"치킨\",\"양념\"]}");
+            when(messageRepository.save(any(ChatMessage.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            StoreGetRes a = new StoreGetRes(); a.setId(1); a.setName("A");
+            StoreGetRes b = new StoreGetRes(); b.setId(2); b.setName("B");
+            StoreGetRes c = new StoreGetRes(); c.setId(3); c.setName("C");
+            StoreGetRes d = new StoreGetRes(); d.setId(4); d.setName("D");
+            when(storeMapper.searchStore("치킨")).thenReturn(java.util.List.of(a, b, c, d)); // 4건이지만 2개만 채택 (MAX_STORES_PER_KEYWORD=2)
+            when(storeMapper.searchStore("양념")).thenReturn(java.util.List.of(a, b)); // 모두 중복 → 0건
+
+            ChatSendRes res = chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "추천");
+
+            assertThat(res.getMenuCards()).extracting(MenuCardDto::getStoreId)
+                    .containsExactly(1L, 2L);
+        }
+
+        @Test
+        @DisplayName("[강화] menuKeywords 5개 → 최대 8 카드 (키워드당 2개씩 분산)")
+        void five_keywords_eight_cards_max() {
+            ChatSession session = activeMypet();
+            when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+            when(petService.getOrCreatePet(USER_NO)).thenReturn(sampleLv1Pet());
+            when(promptBuilder.buildSystemInstruction(any(), any(), any(), any(), any())).thenReturn("sys");
+            when(geminiClient.generateJson(anyString(), anyString(), anyInt(), anyString()))
+                    .thenReturn("{\"message\":\"메뉴 5종 추천\",\"menuKeywords\":[\"치킨\",\"피자\",\"파스타\",\"초밥\",\"떡볶이\"]}");
+            when(messageRepository.save(any(ChatMessage.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            StoreGetRes s1 = new StoreGetRes(); s1.setId(1); s1.setName("치킨1");
+            StoreGetRes s2 = new StoreGetRes(); s2.setId(2); s2.setName("치킨2");
+            StoreGetRes s3 = new StoreGetRes(); s3.setId(3); s3.setName("피자1");
+            StoreGetRes s4 = new StoreGetRes(); s4.setId(4); s4.setName("피자2");
+            StoreGetRes s5 = new StoreGetRes(); s5.setId(5); s5.setName("파스타1");
+            StoreGetRes s6 = new StoreGetRes(); s6.setId(6); s6.setName("파스타2");
+            StoreGetRes s7 = new StoreGetRes(); s7.setId(7); s7.setName("초밥1");
+            StoreGetRes s8 = new StoreGetRes(); s8.setId(8); s8.setName("초밥2");
+            when(storeMapper.searchStore("치킨")).thenReturn(java.util.List.of(s1, s2));
+            when(storeMapper.searchStore("피자")).thenReturn(java.util.List.of(s3, s4));
+            when(storeMapper.searchStore("파스타")).thenReturn(java.util.List.of(s5, s6));
+            when(storeMapper.searchStore("초밥")).thenReturn(java.util.List.of(s7, s8));
+            // 5번째 키워드(떡볶이)는 MAX_CARDS=8 도달로 호출 X — stub 생략
+
+            ChatSendRes res = chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "추천 5개");
+
+            assertThat(res.getMenuCards()).hasSize(8); // MAX_CARDS=8 상한
+            assertThat(res.getMenuCards()).extracting(MenuCardDto::getStoreId)
+                    .containsExactly(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L);
+            verify(storeMapper, never()).searchStore("떡볶이");
+        }
+
+        @Test
+        @DisplayName("#1+#2 Gemini 응답 JSON 파싱 실패 → fallback 메시지 + 빈 카드")
+        void invalid_json_fallback() {
+            ChatSession session = activeMypet();
+            when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+            when(petService.getOrCreatePet(USER_NO)).thenReturn(sampleLv1Pet());
+            when(promptBuilder.buildSystemInstruction(any(), any(), any(), any(), any())).thenReturn("sys");
+            when(geminiClient.generateJson(anyString(), anyString(), anyInt(), anyString()))
+                    .thenReturn("이건 JSON이 아님");
+            when(messageRepository.save(any(ChatMessage.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            ChatSendRes res = chatbotService.sendMessage(USER_NO, "CUSTOMER", SESSION_ID, "테스트");
+
+            assertThat(res.getAssistantMessage().getContent()).contains("답변을 드리기 어려워요");
+            assertThat(res.getMenuCards()).isEmpty();
+            verifyNoInteractions(storeMapper);
         }
     }
 
@@ -330,15 +481,19 @@ class ChatbotServiceTest {
         }
 
         @Test
-        @DisplayName("MYPET escalate → BAD_REQUEST (CS만 가능)")
-        void mypet_escalate_blocked() {
+        @DisplayName("MYPET escalate happy (2026-06-06 정정) → status=ESCALATED + admin Feign 호출")
+        void mypet_escalate_now_allowed() {
             ChatSession session = new ChatSession(USER_NO, PET_NO, EntryPoint.MYPET, ToneMode.PLAYFUL);
             when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+            when(messageRepository.findBySessionIdOrderByMessageIdAsc(any()))
+                    .thenReturn(java.util.List.of());
+            when(adminFeignClient.escalateChatbot(any())).thenReturn(new ResultResponse<>("ok", null));
 
-            assertThatThrownBy(() -> chatbotService.escalate(USER_NO, SESSION_ID))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
-            assertThat(session.getStatus()).isEqualTo(SessionStatus.ACTIVE);
+            ChatSessionRes res = chatbotService.escalate(USER_NO, SESSION_ID);
+
+            assertThat(res.getStatus()).isEqualTo(SessionStatus.ESCALATED);
+            assertThat(session.getEscalatedAt()).isNotNull();
+            verify(adminFeignClient, times(1)).escalateChatbot(any());
         }
 
         @Test

@@ -36,7 +36,7 @@ public class ChatbotController {
                                                    @PathVariable Long sessionId,
                                                    @RequestBody ChatSendReq req) {
         return new ResultResponse<>("메시지 전송",
-                chatbotService.sendMessage(principal.getSignedUserNo(), sessionId, req.getContent()));
+                chatbotService.sendMessage(principal.getSignedUserNo(), principal.getRole(), sessionId, req.getContent()));
     }
 
     @GetMapping("/sessions/{sessionId}/messages")

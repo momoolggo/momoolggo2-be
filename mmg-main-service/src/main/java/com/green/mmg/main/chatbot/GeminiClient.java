@@ -41,26 +41,38 @@ public class GeminiClient {
     public String getDefaultModel() { return defaultModel; }
 
     public String generateText(String systemInstruction, String userContent, int maxOutputTokens) {
+        return generateInternal(systemInstruction, userContent, maxOutputTokens, null);
+    }
+
+    /**
+     * #1+#2 메뉴 추천 카드용 — responseSchema(JSON) 강제 호출.
+     * 반환 = candidates[0].text (JSON 문자열, caller가 파싱).
+     */
+    public String generateJson(String systemInstruction, String userContent, int maxOutputTokens, String responseSchemaJson) {
+        return generateInternal(systemInstruction, userContent, maxOutputTokens, responseSchemaJson);
+    }
+
+    private String generateInternal(String systemInstruction, String userContent, int maxOutputTokens, String responseSchemaJson) {
         if (!isConfigured()) throw new GeminiException("Gemini API 키가 설정되지 않음");
         try {
-            return callOnce(defaultModel, systemInstruction, userContent, maxOutputTokens);
+            return callOnce(defaultModel, systemInstruction, userContent, maxOutputTokens, responseSchemaJson);
         } catch (GeminiException e1) {
             if (!isTransient(e1)) throw e1;
             try { Thread.sleep(1500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
             try {
                 log.info("Gemini 재시도 model={}", defaultModel);
-                return callOnce(defaultModel, systemInstruction, userContent, maxOutputTokens);
+                return callOnce(defaultModel, systemInstruction, userContent, maxOutputTokens, responseSchemaJson);
             } catch (GeminiException e2) {
                 if (!isTransient(e2) || defaultModel.equalsIgnoreCase(liteModel)) throw e2;
                 log.info("Gemini lite 폴백 from={} to={}", defaultModel, liteModel);
-                return callOnce(liteModel, systemInstruction, userContent, maxOutputTokens);
+                return callOnce(liteModel, systemInstruction, userContent, maxOutputTokens, responseSchemaJson);
             }
         }
     }
 
-    private String callOnce(String useModel, String systemInstruction, String userContent, int maxOutputTokens) {
+    private String callOnce(String useModel, String systemInstruction, String userContent, int maxOutputTokens, String responseSchemaJson) {
         try {
-            String bodyJson = buildRequestBodyJson(systemInstruction, userContent, maxOutputTokens);
+            String bodyJson = buildRequestBodyJson(systemInstruction, userContent, maxOutputTokens, responseSchemaJson);
             String path = "/v1beta/models/" + useModel + ":generateContent?key=" + apiKey;
             String respStr = client().post()
                     .uri(path)
@@ -78,7 +90,7 @@ public class GeminiClient {
         }
     }
 
-    private String buildRequestBodyJson(String systemInstruction, String userContent, int maxOutputTokens) {
+    private String buildRequestBodyJson(String systemInstruction, String userContent, int maxOutputTokens, String responseSchemaJson) {
         try {
             ObjectNode body = objectMapper.createObjectNode();
             if (systemInstruction != null && !systemInstruction.isBlank()) {
@@ -103,6 +115,10 @@ public class GeminiClient {
 
             ObjectNode genConfig = objectMapper.createObjectNode();
             genConfig.put("maxOutputTokens", maxOutputTokens);
+            if (responseSchemaJson != null && !responseSchemaJson.isBlank()) {
+                genConfig.put("responseMimeType", "application/json");
+                genConfig.set("responseSchema", objectMapper.readTree(responseSchemaJson));
+            }
             body.set("generationConfig", genConfig);
 
             return objectMapper.writeValueAsString(body);
