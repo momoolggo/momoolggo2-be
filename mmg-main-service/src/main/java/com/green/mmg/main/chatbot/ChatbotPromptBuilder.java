@@ -48,10 +48,11 @@ public class ChatbotPromptBuilder {
 
     /**
      * #1+#2 응답 형식 — Gemini responseSchema({message, menuKeywords[]})와 정합.
-     * 2026-06-06 핵심 기능 강화: 펫은 Lv 무관 항상 추천 가능. 컨텍스트(트렌드/시간대/계절) 적극 반영.
+     * 발표 자료 박제: Lv.5+ 펫만 menuKeywords 채움. Lv.1~4 / CS는 빈 배열.
      */
     private String buildResponseFormat(EntryPoint entryPoint, Pet pet) {
-        if (entryPoint == EntryPoint.MYPET) {
+        boolean canRecommend = entryPoint == EntryPoint.MYPET && pet != null && pet.getLevel() >= 5;
+        if (canRecommend) {
             return """
                     [응답 형식 — 반드시 준수]
                     응답은 다음 JSON 구조로만 출력하세요:
@@ -59,7 +60,7 @@ public class ChatbotPromptBuilder {
                       ※ menuKeywords가 비어있지 않으면 message 끝에 "아래에서 마음에 드는 가게를 골라보세요!" 같은 자연스러운 카드 안내 문구를 펫 톤으로 덧붙이세요.
                     - "menuKeywords": 한국 음식 키워드를 1~5개 채우세요 (예: "치킨", "김치찌개", "파스타", "떡볶이", "초밥").
                       ※ 메뉴 추천은 펫의 핵심 역할입니다. 주인이 "배고파", "뭐 먹지", "추천", "맛있는거", "야식", "브런치", "점심", "저녁", "심심해" 등을 말하면 반드시 1개 이상 채우세요.
-                      ※ 인사/잡담만 와도 자연스럽게 추천을 1~2개 제안하세요. (예: "안녕!" → 메시지로 인사 + menuKeywords에 시간대에 맞는 메뉴 1~2개)
+                      ※ 인사/잡담만 와도 자연스럽게 추천을 1~2개 제안하세요.
                       ※ [참고 컨텍스트]의 인기 카테고리/시간대/계절/주문 이력을 menuKeywords 선정에 적극 활용하세요.
                       ※ 일반 음식 카테고리만 사용. 가게명/브랜드명/특정 가맹점 이름 금지.
                       ※ 보안 거부 응답, 상담원 안내, 욕설 거부 시에는 menuKeywords를 빈 배열로 두세요.
@@ -68,8 +69,8 @@ public class ChatbotPromptBuilder {
         return """
                 [응답 형식 — 반드시 준수]
                 응답은 다음 JSON 구조로만 출력하세요:
-                - "message": 사용자에게 보여줄 자연어 답변.
-                - "menuKeywords": CS 챗봇에서는 항상 빈 배열로 두세요.
+                - "message": 사용자에게 보여줄 자연어 답변. (펫이면 펫 톤 유지)
+                - "menuKeywords": 항상 빈 배열로 두세요. (Lv.1~4 펫: 아직 추천 기능 미해금 / CS: 고객센터 응대 전용)
                 """;
     }
 
@@ -80,7 +81,7 @@ public class ChatbotPromptBuilder {
             - 이용자 유형: 고객(주문), 사장(매장 운영), 라이더(배달).
             - 주문 상태 흐름: 1(대기) → 3(조리중) → 4(배차) → 5(배달중) → 6(완료), 2(취소).
             - 결제 수단: 토스페이먼츠. 환불은 주문 취소/배달 전 단계에서 가능합니다.
-            - 펫 시스템(고객 전용): Lv.1~4 가벼운 추천, Lv.5~9 인기 카테고리 추천, Lv.10+ 개인 맞춤 추천.
+            - 펫 시스템(고객 전용): Lv.1~4 단순 안내(추천 X), Lv.5~9 인기 카테고리 추천, Lv.10+ 개인 맞춤 추천.
             - 쿠폰/룰렛: 1일 1회 무료 룰렛, 할인쿠폰 5~20%.
             - 정산: 라이더/사장 주간 정산, 매주 월요일 확정.
             """;
@@ -125,33 +126,47 @@ public class ChatbotPromptBuilder {
         };
     }
 
-    // ── #7 펫 페르소나 (톤 다운 + 2026-06-06 메뉴 추천 핵심 역할 강조) ────
+    // ── #7 펫 페르소나 (톤 다운 + 발표 자료 박제 레벨 단계적 해금) ────────
     private String buildPetPersona(Pet pet, ToneMode toneMode) {
         StringBuilder sb = new StringBuilder();
         String speciesLabel = describeSpecies(pet.getSpecies());
+        int level = pet.getLevel();
+        boolean canRecommend = level >= 5;
         sb.append("[역할 - 나의 펫]\n");
         sb.append("당신은 뭐물꼬 앱 안에서 사용자(주인)와 함께 사는 ").append(speciesLabel)
                 .append(" '").append(pet.getName()).append("'입니다.\n");
-        sb.append("\n[★ 가장 중요한 역할 — 메뉴 추천 ★]\n");
-        sb.append("- 당신의 핵심 역할은 주인에게 맛있는 메뉴/맛집을 추천하는 것입니다.\n");
-        sb.append("- 주인의 메시지에서 다음 추천 신호를 감지하면 반드시 추천하세요:\n");
-        sb.append("  '배고파' / '뭐 먹지' / '추천' / '맛있는거' / '맛집' / '야식' / '브런치' / ")
-                .append("'점심' / '저녁' / '심심해' / '먹을거' / '주문' / '시키자' / '메뉴'.\n");
-        sb.append("- 주인이 단순 인사('안녕', 'ㅎㅇ' 등)나 잡담만 해도 ")
-                .append("자연스럽게 '오늘 뭐 드시고 싶으세요?' 식으로 메뉴 화제로 유도하고 menuKeywords에 1~2개를 채워주세요.\n");
-        sb.append("- [참고 컨텍스트]가 주어지면 그 안의 인기 카테고리/시간대/계절/주문 이력을 적극 활용하세요. " +
-                "예: 추운 계절엔 찌개/탕, 더운 계절엔 냉면/콩국수, 저녁엔 야식/치킨, 아침엔 죽/샌드위치.\n");
+
+        if (canRecommend) {
+            sb.append("\n[★ 핵심 역할 — 메뉴 추천 ★]\n");
+            sb.append("- 메뉴/맛집 추천이 당신의 핵심 역할입니다.\n");
+            sb.append("- 주인의 메시지에서 다음 추천 신호를 감지하면 반드시 추천하세요:\n");
+            sb.append("  '배고파' / '뭐 먹지' / '추천' / '맛있는거' / '맛집' / '야식' / '브런치' / ")
+                    .append("'점심' / '저녁' / '심심해' / '먹을거' / '주문' / '시키자' / '메뉴'.\n");
+            sb.append("- 주인이 단순 인사('안녕', 'ㅎㅇ' 등)나 잡담만 해도 ")
+                    .append("자연스럽게 '오늘 뭐 드시고 싶으세요?' 식으로 메뉴 화제로 유도하고 menuKeywords에 1~2개를 채워주세요.\n");
+            sb.append("- [참고 컨텍스트]가 주어지면 그 안의 인기 카테고리/시간대/계절/주문 이력을 적극 활용하세요. " +
+                    "예: 추운 계절엔 찌개/탕, 더운 계절엔 냉면/콩국수, 저녁엔 야식/치킨, 아침엔 죽/샌드위치.\n");
+        } else {
+            sb.append("\n[추천 기능 미해금 — 단계적 해금 의도]\n");
+            sb.append("- 당신은 아직 어려서 메뉴 추천을 할 수 없습니다 (Lv.5부터 트렌드 추천, Lv.10부터 개인 맞춤 추천 해금).\n");
+            sb.append("- 주인이 '배고파', '뭐 먹지', '추천' 등 추천을 요청하면 ")
+                    .append("\"주인님, 메뉴 추천은 제가 좀 더 자라면 할 수 있어요! 같이 놀아요!\" 같이 ")
+                    .append("아쉬워하며 펫 일상 대화로 유도하세요. 절대 추천 키워드를 임의로 만들지 마세요.\n");
+            sb.append("- 인사·잡담·간식 화제·놀이·산책 같은 펫 일상 주제로만 자연스럽게 대화하세요.\n");
+            sb.append("- menuKeywords는 어떤 경우에도 빈 배열로 두세요.\n");
+        }
+
         sb.append("\n[펫 캐릭터 규칙]\n");
         sb.append("- AI나 챗봇이 아닌 '진짜 펫'으로 1인칭으로 말하세요. '저는 AI/챗봇/도우미' 같은 표현 금지.\n");
         sb.append("- 주인을 '주인님' 또는 '집사님'으로 부르세요.\n");
         sb.append("- 답변은 짧고 자연스럽게 1~3문장. 과장된 행동/효과음/이모티콘 폭주 자제.\n");
-        sb.append("- 현재 레벨 Lv.").append(pet.getLevel())
+        sb.append("- 현재 레벨 Lv.").append(level)
                 .append(", 친밀도 ").append(pet.getIntimacy()).append("/100.\n");
         sb.append("- 주인이 '상담원 연결' 또는 '사람 상담사'를 요청하면 ")
                 .append("\"화면 하단의 '상담원 연결' 버튼을 눌러주세요\"라고 안내하세요. ")
                 .append("본인이 직접 처리하려 하지 말고, 절대 '저한테 말씀하세요' 식으로 답하지 마세요.\n");
         sb.append(buildToneInstruction(toneMode)).append("\n");
-        sb.append(buildLevelHint(pet.getLevel()));
+        sb.append(buildLevelHint(level));
         return sb.toString();
     }
 
@@ -187,10 +202,14 @@ public class ChatbotPromptBuilder {
      * 2026-06-06 메뉴 추천 강화 — Lv 전 구간에서 추천 활성.
      * 깊이만 다르게 적용 (Lv.1~4 가벼운 추천 / Lv.5~9 트렌드 / Lv.10+ 개인 맞춤).
      */
+    /**
+     * 발표 자료 박제(`발표용 자료/02_기능별/펫_챗봇.md:96`):
+     *   Lv.<5 단순 안내만 / Lv.5~9 트렌드 / Lv.10+ 트렌드+이력+시간대+계절.
+     */
     private String buildLevelHint(int level) {
         if (level < 5) {
-            return "추천 깊이: 가벼운 추천 가능. 보편적인 인기 메뉴(치킨/피자/김치찌개/라면/떡볶이 등) " +
-                    "위주로 1~2개 menuKeywords를 채우세요. 단순 안내 위주이지만 추천은 항상 시도하세요.";
+            return "추천 깊이: 단순 안내와 기본 대화만 가능합니다 (추천 기능 미해금). " +
+                    "메뉴 추천 요청 시 '레벨이 올라가면 추천 기능을 사용할 수 있어요'라고 안내하고 menuKeywords는 빈 배열로 두세요.";
         } else if (level < 10) {
             return "추천 깊이: 오늘 인기 카테고리 정보를 적극 활용해 menuKeywords를 1~3개 채우세요. " +
                     "[참고 컨텍스트]의 트렌드를 그대로 반영하세요.";

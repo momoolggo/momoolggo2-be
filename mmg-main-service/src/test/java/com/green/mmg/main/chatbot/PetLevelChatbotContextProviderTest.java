@@ -42,27 +42,23 @@ class PetLevelChatbotContextProviderTest {
     }
 
     @Test
-    @DisplayName("Lv.1~4 (2026-06-06 강화) → trend 주입 시 trend 반환, history는 호출 X")
-    void lowLevel_trendInjected_noHistory() {
-        when(statsService.getTodayTrendText()).thenReturn("오늘 인기: 치킨");
-
-        String result1 = provider.buildContext(petAtLevel(1));
-        String result4 = provider.buildContext(petAtLevel(4));
-
-        assertThat(result1).contains("오늘 인기: 치킨");
-        assertThat(result4).contains("오늘 인기: 치킨");
-        verify(statsService, never()).getUserHistoryText(any());
+    @DisplayName("Lv.1~4 → null (발표 자료 박제: 단순 안내만, statsService 호출 X)")
+    void lowLevel_returnsNull() {
+        assertThat(provider.buildContext(petAtLevel(1))).isNull();
+        assertThat(provider.buildContext(petAtLevel(4))).isNull();
+        verifyNoInteractions(statsService);
     }
 
     @Test
-    @DisplayName("Lv.1 + trend null → null (빈 컨텍스트 미주입)")
-    void lowLevel_allNull_returnsNull() {
-        when(statsService.getTodayTrendText()).thenReturn(null);
+    @DisplayName("Lv.5~9 → ambient/history 호출 X (Lv.10+ 한정)")
+    void midLevel_noAmbient_noHistory() {
+        when(statsService.getTodayTrendText()).thenReturn("오늘 인기: 치킨");
 
-        String result = provider.buildContext(petAtLevel(1));
+        String result = provider.buildContext(petAtLevel(7));
 
-        assertThat(result).isNull();
+        assertThat(result).isEqualTo("오늘 인기: 치킨");
         verify(statsService, never()).getUserHistoryText(any());
+        verifyNoInteractions(ambientContextSource);
     }
 
     @Test
