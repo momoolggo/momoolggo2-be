@@ -89,8 +89,8 @@ public class SettlementService {
         Long completedAmount = settlementRepository.sumCompletedAmountThisWeek(List.of(SettlementsStatus.DONE, SettlementsStatus.COMPLETED), weekStart, weekEnd);
         Long completedCount = settlementRepository.countByStatusInAndPeriodEndBetween(
                 List.of(SettlementsStatus.DONE, SettlementsStatus.COMPLETED), weekStart, weekEnd);
-        Long pendingStoreCount = settlementRepository.countByTargetTypeAndStatusAndPeriodStartBetween(
-                SettlementTargetType.STORE, SettlementsStatus.PENDING, weekStart, weekEnd);
+       Long pendingStoreCount = settlementRepository.countByTargetTypeAndStatus(
+                SettlementTargetType.STORE, SettlementsStatus.PENDING);
         return new SettlementSummaryRes(expectedAmount, monthlyExpectedAmount, completedAmount, completedCount,
                 pendingStoreCount, pendingStoreCount, 0L);
     }
