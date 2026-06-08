@@ -35,8 +35,8 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
     @Query("SELECT COALESCE(SUM(s.netAmount), 0) FROM Settlement s WHERE s.status IN :statuses AND s.periodEnd BETWEEN :weekStart AND :weekEnd")
     Long sumCompletedAmountThisWeek(@Param("statuses") List<SettlementsStatus> statuses, @Param("weekStart") LocalDate weekStart, @Param("weekEnd") LocalDate weekEnd);
 
-    // 이번 주 예상 금액 합계 (periodStart 기준 월~일)
-    @Query("SELECT COALESCE(SUM(s.netAmount), 0) FROM Settlement s WHERE s.status = :status AND s.periodStart BETWEEN :weekStart AND :weekEnd")
+    // 이번 주 예상 금액 합계 (periodEnd 기준 월~일 — completedAmount 등 다른 카드와 기준 통일)
+    @Query("SELECT COALESCE(SUM(s.netAmount), 0) FROM Settlement s WHERE s.status = :status AND s.periodEnd BETWEEN :weekStart AND :weekEnd")
     Long sumExpectedAmountThisWeek(@Param("status") SettlementsStatus status, @Param("weekStart") LocalDate weekStart, @Param("weekEnd") LocalDate weekEnd);
 
     // 이번 주 완료 건수
