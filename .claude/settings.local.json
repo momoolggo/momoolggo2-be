@@ -15,7 +15,28 @@
       "Bash(npm list *)",
       "mcp__claude_ai_Notion__notion-update-page",
       "Read(//d/yelim kim/vue\" 2>/dev/**)",
-      "Read(//c/codding/project\" 2>/dev/**)"
+      "Read(//c/codding/project\" 2>/dev/**)",
+      "mcp__ide__getDiagnostics",
+      "Bash(git restore *)",
+      "Bash(rm \"mmg-admin-service/src/main/java/com/green/mmg/admin/settlement/controller/InternalSettlementController.java\")",
+      "Bash(git pull *)",
+      "Bash(mysql *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh pr create --base develop --title 'fix\\(auth/admin/rider\\): 라이더 가입 JWT 발급 및 승인 모달 프로필 조회 추가' --body ' *)",
+      "PowerShell(Get-Command *)",
+      "Bash(git fetch *)",
+      "Bash(git checkout *)",
+      "Bash(git reset *)",
+      "Bash(gh pr create --base develop --head admin --title 'fix\\(auth\\): 반려 이메일 발송 실패 시 500 에러 방지' --body ' *)",
+      "Bash(git commit *)",
+      "Bash(git *)",
+      "Bash(Get-ChildItem *)",
+      "Bash(./gradlew :mmg-auth-service:compileJava)",
+      "Bash(./gradlew :mmg-main-service:compileJava)",
+      "Bash(./gradlew :mmg-gateway:compileJava)",
+      "PowerShell([Environment]::GetFolderPath\\(\"Desktop\"\\))"
     ]
   }
 }

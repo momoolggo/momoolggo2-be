@@ -1,6 +1,3 @@
-apply plugin: 'java-library'
-
-bootJar { enabled = false }
 jar {
     enabled = true
     archiveClassifier = ''
@@ -27,8 +24,4 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-web'
     testImplementation 'org.springframework.boot:spring-boot-starter-security'
     testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
-}
-
-test {
-    useJUnitPlatform()
 }
